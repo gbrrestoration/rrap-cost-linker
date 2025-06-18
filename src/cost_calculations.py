@@ -166,18 +166,18 @@ def update_setupcost_factors(factors_df_dep, factors_df_prod, ID_key):
 
     return factors_df_dep, factors_df_prod
 
-def calculate_costs(ID_key, n_draws, deploy_model_filepath=config["deploy_model_filepath"],
+def calculate_costs(ID_key, nsims, deploy_model_filepath=config["deploy_model_filepath"],
                  prod_model_filepath=config["prod_model_filepath"], cont_p = 0.8):
     """
-    Sample costs for a set of interventions specified in ID_key, sampling n_draws.
+    Sample costs for a set of interventions specified in ID_key, sampling nsims.
 
     Parameters
     ----------
         ID_key : dataframe
             Dataframe created by running create_economics_metric_files connecting economics metric files to
             intervention scenario IDs and parameters.
-        n_draws : int
-            Number of draws to sample cost models.
+        nsims : int
+            Total number of draws to sample cost models, should match ecological metrics sampling.
         deploy_model_filepath : string
             Path to deployment cost model.
         prod_model_filepath : string
@@ -186,50 +186,51 @@ def calculate_costs(ID_key, n_draws, deploy_model_filepath=config["deploy_model_
             Contingency cost proportion.
     """
     for scen_id in np.unique(ID_key.ID):
-        n_reps = int(max(ID_key.rep)) # Number of rme reps (ecological uncertainty)
+        nreps = int(max(ID_key.rep)) # Number of rme reps (ecological uncertainty)
         scen_idx = ID_key.ID==scen_id # Intervention scenario ID to link costs to ecological model outcomes
         int_years = ID_key.intervention_years[scen_idx] # Intervention years
 
-        # Sample cost model factorswith n draws
-        factor_specs_dep, factors_df_dep, factor_specs_prod, factors_df_prod, n_factors = factors_dataframe_update(n_draws)
-        N = get_N(n_draws, n_factors)
-        cost_df = initialise_cost_df(np.unique(int_years), N*n_reps)
+        # Calculate number of draws needed for nsims with nreps
+        # Want a dataframe approx the size of nsims, including nreps
+        ndraws = int(np.ceil(nsims/nreps))
+
+        cost_df = initialise_cost_df(np.unique(int_years), nsims)
+
+        factor_specs_dep, factors_df_dep, factor_specs_prod, factors_df_prod, nfactors, N = factors_dataframe_update(nsims)
 
         for (int_yr_idx, int_yr) in enumerate(int_years):
-            for rep in range(n_reps):
-                # Add key intervention parameters for year to dataframe as constants
-                factors_df_dep, factors_df_prod = update_factors(factors_df_dep.iloc[0:N], factors_df_prod.iloc[0:N], ID_key[["number_of_1YO_corals", "port_id", "distance_to_port_NM", "number_of_species"]].loc[(ID_key.intervention_years==int_yr)&(ID_key.rep==rep+1)])
 
-                # Sample deployment and production costs for dataframe parameters
-                factors_df_dep = sample_deployment_cost(deploy_model_filepath, factors_df_dep, factor_specs_dep, n_draws, n_factors=n_factors)
-                factors_df_prod = sample_production_cost(prod_model_filepath, factors_df_prod, factor_specs_prod, n_draws, n_factors=n_factors)
+            # Add key intervention parameters for year to dataframe as constants
+            factors_df_dep, factors_df_prod = update_factors(factors_df_dep, factors_df_prod, ID_key[["number_of_1YO_corals", "port_id", "distance_to_port_NM", "number_of_species"]].loc[(ID_key.intervention_years==int_yr)&scen_idx], ndraws, nsims)
 
-                if int_yr>int_years.iloc[0]:
-                    # Save calculated operrational costs
-                    save_cost_prod = factors_df_prod["Cost"]
-                    save_cost_dep = factors_df_dep["Cost"]
+            # Sample deployment and production costs for dataframe parameters
+            factors_df_dep = sample_deployment_cost(deploy_model_filepath, factors_df_dep, factor_specs_dep, N, n_factors=nfactors)
+            factors_df_prod = sample_production_cost(prod_model_filepath, factors_df_prod, factor_specs_prod, N, n_factors=nfactors)
 
-                    # Adjust number of corals to "how many more are being deployed this year than last year?" to caculate setup cost correctly
-                    factors_df_dep, factors_df_prod = update_setupcost_factors(factors_df_dep.iloc[0:N], factors_df_prod.iloc[0:N], ID_key[["number_of_1YO_corals", "port_id", "distance_to_port_NM", "number_of_species"]].loc[(ID_key.intervention_years==int_years.iloc[int_yr_idx-1])&(ID_key.rep==rep+1)])
+            if int_yr>int_years.iloc[0]:
+                # Save calculated operrational costs
+                save_cost_prod = factors_df_prod["Cost"]
+                save_cost_dep = factors_df_dep["Cost"]
 
-                    if all(factors_df_dep['num_devices']<=0):
-                        # If deploying no more than previous year, setup cost is zero
-                        factors_df_prod["setupCost"] = 0
-                        factors_df_dep["setupCost"] = 0
-                    else:
-                        # If deploying more than last year, recalculate setup cost for only those additional corals
-                        factors_df_dep = sample_deployment_cost(deploy_model_filepath, factors_df_dep, factor_specs_dep, n_draws, n_factors=n_factors)
-                        factors_df_prod = sample_production_cost(prod_model_filepath, factors_df_prod, factor_specs_prod, n_draws, n_factors=n_factors)
+                # Adjust number of corals to "how many more are being deployed this year than last year?" to caculate setup cost correctly
+                factors_df_dep, factors_df_prod = update_setupcost_factors(factors_df_dep, factors_df_prod, ID_key[["number_of_1YO_corals", "port_id", "distance_to_port_NM", "number_of_species"]].loc[(ID_key.intervention_years==int_years.iloc[int_yr_idx-1])])
 
-                        # Retain originally sampled operational cost for full number of corals, regardless of intervention year
-                        factors_df_prod["Cost"] = save_cost_prod
-                        factors_df_dep["Cost"] = save_cost_dep
+                if all(factors_df_dep['num_devices']<=0):
+                    # If deploying no more than previous year, setup cost is zero
+                    factors_df_prod["setupCost"] = 0
+                    factors_df_dep["setupCost"] = 0
+                else:
+                    # If deploying more than last year, recalculate setup cost for only those additional corals
+                    factors_df_dep = sample_deployment_cost(deploy_model_filepath, factors_df_dep, factor_specs_dep, N, n_factors=nfactors)
+                    factors_df_prod = sample_production_cost(prod_model_filepath, factors_df_prod, factor_specs_prod, N, n_factors=nfactors)
 
-                # Calculate all cost codes and add to dataframe
-                cost_df.loc[cost_df.year==int_yr, cost_df.columns[rep*N+2:rep*N+N+2]] = cost_types(factors_df_dep[["Cost","setupCost"]] + factors_df_prod[["Cost","setupCost"]], cont_p, N)
+                    # Retain originally sampled operational cost for full number of corals, regardless of intervention year
+                    factors_df_prod["Cost"] = save_cost_prod
+                    factors_df_dep["Cost"] = save_cost_dep
 
-                # Drop cost columns
-                factors_df_dep = factors_df_dep.drop(columns=["Cost","setupCost"])
-                factors_df_prod = factors_df_prod.drop(columns=["Cost","setupCost"])
+            # Calculate all cost codes and add to dataframe
+            cost_sum = (factors_df_dep[["Cost","setupCost"]] + factors_df_prod[["Cost","setupCost"]]).values[0:nsims, :]
+            cost_df.loc[cost_df.year==int_yr, cost_df.columns[2:]] = cost_types(cost_sum, cont_p, nsims)
+
 
         cost_df.to_csv('./cost_outputs/intervention'+str(scen_id)+'_mc_cost_data.csv')

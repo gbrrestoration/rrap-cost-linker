@@ -46,16 +46,16 @@ def cost_types(cost, contingency, nsims):
     Parameters
     ----------
         cost : dataframe
-            Dataframe containing 'Cost' and 'setupCost' columns.
+            Dataframe containing 'Cost' and 'setupCost'
         contingency : float
             Contingency proportion.
-        N : int
-            Number of samples
+        nsims : int
+            Total number of simulations (from metrics sampling)
     """
-    cost = np.reshape(np.array(cost), (2,N))
-    return np.vstack((np.vstack((cost[0,:], cost[0,:]*contingency, cost[1,:], np.zeros(N), cost[1,:]*contingency)), np.zeros((6, N))))
+    cost = np.reshape(cost, (2, nsims))
+    return np.vstack((np.vstack((cost[0, :], cost[0, :]*contingency, cost[1, :], np.zeros(nsims), cost[1,:]*contingency)), np.zeros((6, nsims))))
 
-def initialise_cost_df(years, N):
+def initialise_cost_df(years, nsims):
     """
     Initialize dataframe for storing sampled cost data.
 
@@ -63,8 +63,8 @@ def initialise_cost_df(years, N):
     ----------
         years : np.array
             Intervention years
-        N : int
-            Number of cost data samples
+        nsims : int
+            Total number of simulations (from metrics sampling)
 
     Returns
     -------
@@ -72,20 +72,20 @@ def initialise_cost_df(years, N):
     """
     # Dataframe for saving cost data to
     n_years = len(years)
-    cols = ["year", "component"] + ["draw"+str(n) for n in range(1, N+1)]
-    cost_df = pd.DataFrame(np.zeros((n_years*11, 2 + N)), columns=cols)
+    cols = ["year", "component"] + ["draw"+str(n) for n in range(1, nsims+1)]
+    cost_df = pd.DataFrame(np.zeros((n_years*11, 2 + nsims)), columns=cols)
     cost_df["year"] = np.array(np.repeat(years, 11))
-    cost_df["component"] = np.tile(np.array(range(1, 12)),n_years)
+    cost_df["component"] = np.tile(np.array(range(1, 12)), n_years)
     return cost_df
 
-def factors_dataframe_update(n_draws):
+def factors_dataframe_update(nsims):
     """
     Sample cost model parameters.
 
     Parameters
     ----------
-        n_draws : int
-            Number of draws to sample
+        nsims : int
+            Total number of simulations (from metrics sampling)
 
     Returns
     -------
@@ -97,28 +97,33 @@ def factors_dataframe_update(n_draws):
             Factor specification for sampling factors in the production cost model.
         factors_df_prod : dataframe
             Sampled factors dataframe for the production cost model
-        n_factors : int
+        nfactors : int
             Min number of factors in models.
+        N : int
+            Number of simulations to input to Sobol sampling to achieve approx nsims draws
     """
+
     # Sample deployment model factors
     sp_dep, factor_specs_dep = problem_spec("deployment")
-    sp_dep.sample_sobol(n_draws, calc_second_order=True)
+    sp_prod, factor_specs_prod = problem_spec("production")
 
+    nfactors = np.min([factor_specs_dep.shape[0], factor_specs_prod.shape[0]]) - 2
+    N, K = get_NK(nsims, nfactors)
+
+    sp_dep.sample_sobol(N, calc_second_order=True, skip_values=2**N)
     factors_df_dep = pd.DataFrame(data=sp_dep.samples, columns=factor_specs_dep.factor_names)
 
     # Sample production model factors
-    sp_prod, factor_specs_prod = problem_spec("production")
-    sp_prod.sample_sobol(n_draws, calc_second_order=True)
+    sp_prod.sample_sobol(N, calc_second_order=True, skip_values=2**N)
     factors_df_prod = pd.DataFrame(data=sp_prod.samples, columns=factor_specs_prod.factor_names)
 
     # Convert factor types to suitable format for cost model sampling
     factors_df_dep = convert_factor_types(factors_df_dep, factor_specs_dep.is_cat)
     factors_df_prod = convert_factor_types(factors_df_prod, factor_specs_prod.is_cat)
-    n_factors = np.min([factors_df_dep.shape[1], factors_df_prod.shape[1]])
 
-    return factor_specs_dep, factors_df_dep, factor_specs_prod, factors_df_prod, n_factors
+    return factor_specs_dep, factors_df_dep.iloc[0:N*K], factor_specs_prod, factors_df_prod.iloc[0:N*K], nfactors, N
 
-def update_factors(factors_df_dep, factors_df_prod, ID_key):
+def update_factors(factors_df_dep, factors_df_prod, ID_key, ndraws, nsims):
     """
     Update sampled cost model parameter dataframes with intervention specific parameters.
 
@@ -130,9 +135,12 @@ def update_factors(factors_df_dep, factors_df_prod, ID_key):
             Factors dataframe for the production cost model
         ID_key : dataframe
             Intervention specification dataframe containing intervention parameters.
+        ndraws : int
+            Number of draws required for sample size of nsims, including nreps ecological
+            samples in the metrics.
     """
-    factors_df_dep['num_devices'] = ID_key["number_of_1YO_corals"].iloc[0]
-    factors_df_prod['num_devices'] = ID_key["number_of_1YO_corals"].iloc[0]
+    factors_df_dep.loc[0:nsims-1, 'num_devices'] = np.repeat(ID_key["number_of_1YO_corals"].values, ndraws)
+    factors_df_prod.loc[0:nsims-1, 'num_devices'] = np.repeat(ID_key["number_of_1YO_corals"].values, ndraws)
     factors_df_prod['species_no'] = ID_key["number_of_species"].iloc[0]
     factors_df_dep['port'] = int(ID_key["port_id"].iloc[0])
     factors_df_dep['distance_from_port'] = ID_key["distance_to_port_NM"].iloc[0]

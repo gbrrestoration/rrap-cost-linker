@@ -18,13 +18,17 @@ def load_config():
 
 config = load_config()
 
-def get_N(n_draws, n_factors):
+def get_NK(nsims, n_factors):
     """
-    Calculate number of sobol samples given number of draws and number of factors.
+    Calculate number of input Sobol samples, N, given number of total simulations required and number of factors.
+    Want an output number of samples, N*K , as close to the required number of sims as possible, where
+    K = (2*n_factors + 2).
+    See https://salib.readthedocs.io/en/latest/api.html#sobol-sensitivity-analysis
     """
-    return n_draws * ((2 * n_factors) + 2)
+    K = int((2*n_factors) + 2)
+    return int(np.ceil(nsims/K)), K
 
-def cost_types(cost, contingency, N):
+def cost_types(cost, contingency, nsims):
     """
     Calculate key cost codes:
     1 - CAPEX - sum of production and deployment cost

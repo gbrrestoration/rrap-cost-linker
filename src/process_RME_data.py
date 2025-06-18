@@ -282,12 +282,12 @@ def create_economics_metric_files(rme_files_path, nsims, uncertainty_dict=defaul
         # Store furthest and closest reefs in representative clsuters
         id_key_df["furthest_representative_reef"] = rep_reefs_sort[-1]
         id_key_df["closest_representative_reef"] = rep_reefs_sort[0]
-        id_key_df["distance_to_port_NM"] = total_dist
+        id_key_df["distance_to_port_NM"]= total_dist
 
         # Extract metrics for intervention and counterfactual scenarios
         metrics_data_iv = extract_metrics(results_data, iv_scens, nsims, uncertainty_dict=uncertainty_dict)
         metrics_data_cf = extract_metrics(results_data, cf_scens, nsims, uncertainty_dict=uncertainty_dict)
-        breakpoint()
+
         for met_func in metrics:
             data_store[new_cols] = met_func(metrics_data_iv, data_store)
             iv_filename = str(iv_idx)+'_intervention_var_'+met_func.__name__+'_ecol0_intervention.csv'

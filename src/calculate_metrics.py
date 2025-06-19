@@ -78,11 +78,11 @@ def indicator_params(result_set, scen_ids, uncertainty_dict=default_uncertainty_
     else:
         sheltervolume_parameters = np.array([
             [-8.31 + np.random.normal(0,0.514), 1.47], # branching from Urbina-Barretto 2021
-            [-8.32 + np.random.normal(0,0.514), 1.50],  # tabular from Urbina-Barretto 2021
-            [-7.37 + np.random.normal(0,0.514), 1.34], # columnar from Urbina-Barretto 2021, assumed similar for corymbose Acropora
-            [-7.37 + np.random.normal(0,0.514), 1.34], # columnar from Urbina-Barretto 2021, assumed similar for corymbose non-Acropora
-            [-9.69 +  np.random.normal(0,0.514), 1.49], # massive from Urbina-Barretto 2021, assumed similar for encrusting and small massives
-            [-9.69 +  np.random.normal(0,0.514), 1.49]])    # massive from Urbina-Barretto 2021,  assumed similar for large massives
+            [-8.32 + np.random.normal(0,0.388), 1.50],  # tabular from Urbina-Barretto 2021
+            [-7.37 + np.random.normal(0,0.561), 1.34], # columnar from Urbina-Barretto 2021, assumed similar for corymbose Acropora
+            [-7.37 + np.random.normal(0,0.561), 1.34], # columnar from Urbina-Barretto 2021, assumed similar for corymbose non-Acropora
+            [-9.69 +  np.random.normal(0,0.603), 1.49], # massive from Urbina-Barretto 2021, assumed similar for encrusting and small massives
+            [-9.69 +  np.random.normal(0,0.603), 1.49]])    # massive from Urbina-Barretto 2021,  assumed similar for large massives
 
     if uncertainty_dict["expert_uncert"] == 0: # If there is no uncertainty from survey, use median results
         G = pd.read_csv('.//datasets//Heneghan_RCI.csv')
@@ -106,9 +106,9 @@ def indicator_params(result_set, scen_ids, uncertainty_dict=default_uncertainty_
 
     ## RTI LINEAR REGRESSION UNCERTAINTY
     if uncertainty_dict["rti_uncert"] == 0:
-        rti_intercept = -0.498 # Intercept of rci to rti linear equation
+        rti_intercept = -0.871 # Intercept of rci to rti linear equation
     else:
-        rti_intercept = -0.498 + np.random.normal(0, 0.163) # Intercept of rci to rti linear equation
+        rti_intercept = -0.871 + np.random.normal(0, 0.0036) # Intercept of rci to rti linear equation
 
     ## RFI BUILT FROM DIGITISING FIG 4A AND FIG 6B FROM Graham and Nash, 2012 https://doi.org/10.1007/s00338-012-0984-y
 
@@ -260,9 +260,9 @@ def reef_condition_rme(results_data, scen_ids, ecol_uncert, sheltervolume_parame
 def rti_rme(ecol_indicators, rti_intercept):
     # Calculate RTI, which is just the RCI made continuous (coefficients calculated previously,
     # by fitting linear regression of discrete RCI to the 6 ecological indicators underpinning it
-    all_reeftourism = rti_intercept + 0.291*ecol_indicators["total_cover"]
-    + 0.628*ecol_indicators["shelter_volume"] + 1.335*ecol_indicators["coraljuv_relative"]
-    + 0.212*ecol_indicators["COTSrel_complementary"] + 0.250*ecol_indicators["rubble_complementary"]
+    all_reeftourism = rti_intercept + 0.7678 *ecol_indicators["total_cover"]
+    + 0.2945*ecol_indicators["shelter_volume"] + 0.8371*ecol_indicators["coraljuv_relative"]
+    + 0.2822*ecol_indicators["COTSrel_complementary"] + 0.7764*ecol_indicators["rubble_complementary"]
 
     all_reeftourism[all_reeftourism > 0.9] = 0.9
     all_reeftourism[all_reeftourism < 0.1] = 0.1

@@ -166,7 +166,7 @@ def update_setupcost_factors(factors_df_dep, factors_df_prod, ID_key):
 
     return factors_df_dep, factors_df_prod
 
-def calculate_costs(ID_key, nsims, deploy_model_filepath=config["deploy_model_filepath"],
+def calculate_costs(ID_key_fn, nsims, deploy_model_filepath=config["deploy_model_filepath"],
                  prod_model_filepath=config["prod_model_filepath"], cont_p = 0.8):
     """
     Sample costs for a set of interventions specified in ID_key, sampling nsims.

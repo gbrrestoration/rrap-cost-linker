@@ -123,7 +123,7 @@ def factors_dataframe_update(nsims):
 
     return factor_specs_dep, factors_df_dep.iloc[0:N*K], factor_specs_prod, factors_df_prod.iloc[0:N*K], nfactors, N
 
-def update_factors(factors_df_dep, factors_df_prod, ID_key, ndraws, nsims):
+def update_factors(factors_df_dep, factors_df_prod, ID_key, ecol_idx, nsims):
     """
     Update sampled cost model parameter dataframes with intervention specific parameters.
 
@@ -139,8 +139,8 @@ def update_factors(factors_df_dep, factors_df_prod, ID_key, ndraws, nsims):
             Number of draws required for sample size of nsims, including nreps ecological
             samples in the metrics.
     """
-    factors_df_dep.loc[0:nsims-1, 'num_devices'] = np.repeat(ID_key["number_of_1YO_corals"].values, ndraws)
-    factors_df_prod.loc[0:nsims-1, 'num_devices'] = np.repeat(ID_key["number_of_1YO_corals"].values, ndraws)
+    factors_df_dep.loc[0:nsims-1, 'num_devices'] = ID_key["number_of_1YO_corals"].values[ecol_idx]
+    factors_df_prod.loc[0:nsims-1, 'num_devices'] = ID_key["number_of_1YO_corals"].values[ecol_idx]
     factors_df_prod['species_no'] = ID_key["number_of_species"].iloc[0]
     factors_df_dep['port'] = int(ID_key["port_id"].iloc[0])
     factors_df_dep['distance_from_port'] = ID_key["distance_to_port_NM"].iloc[0]
@@ -185,23 +185,24 @@ def calculate_costs(ID_key, nsims, deploy_model_filepath=config["deploy_model_fi
         cont_p : float
             Contingency cost proportion.
     """
+    ID_key = pd.read_csv( ".\\intervention_keys\\intervention_ID_key_"+ID_key_fn+".csv")
+    ecol_ids_df = pd.read_csv( ".\\intervention_keys\\intervention_rep_idx_"+ID_key_fn+".csv")
     for scen_id in np.unique(ID_key.ID):
         nreps = int(max(ID_key.rep)) # Number of rme reps (ecological uncertainty)
         scen_idx = ID_key.ID==scen_id # Intervention scenario ID to link costs to ecological model outcomes
         int_years = ID_key.intervention_years[scen_idx] # Intervention years
 
-        # Calculate number of draws needed for nsims with nreps
-        # Want a dataframe approx the size of nsims, including nreps
-        ndraws = int(np.ceil(nsims/nreps))
+        # Ecological rep sampling indices (- min because the indices should be relative to the vector selected
+        # for the intervention id)
+        ecol_ids = ecol_ids_df[str(scen_id)] - min(ecol_ids_df[str(scen_id)])
 
         cost_df = initialise_cost_df(np.unique(int_years), nsims)
 
         factor_specs_dep, factors_df_dep, factor_specs_prod, factors_df_prod, nfactors, N = factors_dataframe_update(nsims)
 
         for (int_yr_idx, int_yr) in enumerate(int_years):
-
             # Add key intervention parameters for year to dataframe as constants
-            factors_df_dep, factors_df_prod = update_factors(factors_df_dep, factors_df_prod, ID_key[["number_of_1YO_corals", "port_id", "distance_to_port_NM", "number_of_species"]].loc[(ID_key.intervention_years==int_yr)&scen_idx], ndraws, nsims)
+            factors_df_dep, factors_df_prod = update_factors(factors_df_dep, factors_df_prod, ID_key[["number_of_1YO_corals", "port_id", "distance_to_port_NM", "number_of_species"]].loc[(ID_key.intervention_years==int_yr)&scen_idx], ecol_ids, nsims)
 
             # Sample deployment and production costs for dataframe parameters
             factors_df_dep = sample_deployment_cost(deploy_model_filepath, factors_df_dep, factor_specs_dep, N, n_factors=nfactors)

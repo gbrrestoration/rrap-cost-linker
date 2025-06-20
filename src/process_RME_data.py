@@ -236,8 +236,6 @@ def create_economics_metric_files(rme_files_path, nsims, uncertainty_dict=defaul
     start_year = years[0]
     end_year = years[-1]
 
-    data_store = create_base_economics_dataframe(regions_data, reef_spatial_data, years)
-
     # Get unique intervention IDs from result set (unique intervention and climate model)
     intervention_ids = np.unique(scens_df["intervention id"])
 
@@ -245,13 +243,17 @@ def create_economics_metric_files(rme_files_path, nsims, uncertainty_dict=defaul
     unique_iv_scens = np.where(~np.array(iv_dict["counterfactual"]).astype(bool))[0]
     unique_cf_scens = np.where(np.array(iv_dict["counterfactual"]).astype(bool))[0]
 
+    # Setup key storage for metrics datafiles and ecological sample ids
+    data_store = create_base_economics_dataframe(regions_data, reef_spatial_data, years)
+    store_ecol_ids = np.zeros((nsims, len(intervention_ids)), dtype=int)
+
     # Setup key table structure used by economics modelling
     id_key_df_store = pd.DataFrame(columns=['ID', 'results_filename', 'intervention_years', 'number_of_1YO_corals', 'port_id', 'distance_to_port_NM', 'intervention_reef_id', 'number_of_species', 'start_year', 'end_year'])
 
     # Save a csv for each unique intervention, one for cf and one for iv runs
-    for iv_idx in intervention_ids:
+    for (iv_idx, iv_id) in enumerate(intervention_ids):
         # Get scenario table for intervention
-        scens_idx = scens_df["intervention id"]==iv_idx
+        scens_idx = scens_df["intervention id"]==iv_id
         scens_df_iv = scens_df[scens_idx]
         n_reps = max(scens_df_iv["rep"])
 
@@ -262,8 +264,8 @@ def create_economics_metric_files(rme_files_path, nsims, uncertainty_dict=defaul
         data_store["year_relative"] = data_store["year_absolute"] - min(scens_df_iv["year"])
 
         # Scenario ids for CF and counterfactual
-        iv_scens = unique_iv_scens[(iv_idx*n_reps-2):(iv_idx*n_reps-2)+n_reps]
-        cf_scens = unique_cf_scens[(iv_idx*n_reps-2):(iv_idx*n_reps-2)+n_reps]
+        iv_scens = unique_iv_scens[(iv_id*n_reps-2):(iv_id*n_reps-2)+n_reps]
+        cf_scens = unique_cf_scens[(iv_id*n_reps-2):(iv_id*n_reps-2)+n_reps]
 
         new_cols = ["sim_{0}".format(i) for i in range(1,nsims+1)]
         data_store[new_cols] = np.zeros((data_store.shape[0], len(new_cols)))
@@ -285,8 +287,10 @@ def create_economics_metric_files(rme_files_path, nsims, uncertainty_dict=defaul
         id_key_df["distance_to_port_NM"]= total_dist
 
         # Extract metrics for intervention and counterfactual scenarios
-        metrics_data_iv = extract_metrics(results_data, iv_scens, nsims, uncertainty_dict=uncertainty_dict)
-        metrics_data_cf = extract_metrics(results_data, cf_scens, nsims, uncertainty_dict=uncertainty_dict)
+        metrics_data_iv, ecol_ids = extract_metrics(results_data, iv_scens, nsims, uncertainty_dict=uncertainty_dict)
+        metrics_data_cf, _ = extract_metrics(results_data, cf_scens, nsims, uncertainty_dict=uncertainty_dict)
+
+        store_ecol_ids[:, iv_idx] = ecol_ids
 
         for met_func in metrics:
             data_store[new_cols] = met_func(metrics_data_iv, data_store)
@@ -312,4 +316,8 @@ def create_economics_metric_files(rme_files_path, nsims, uncertainty_dict=defaul
     id_filename = ".\\intervention_keys\\intervention_ID_key_"+rme_files_path.split("\\")[-1]+".csv"
     id_key_df_store.to_csv(id_filename)
 
-    return id_filename
+    store_ecol_ids_df = pd.DataFrame(store_ecol_ids, columns=[str(id) for id in intervention_ids])
+    ecol_id_filename = ".\\intervention_keys\\intervention_rep_idx_"+rme_files_path.split("\\")[-1]+".csv"
+    store_ecol_ids_df.to_csv(ecol_id_filename)
+
+    return rme_files_path.split("\\")[-1]

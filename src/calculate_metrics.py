@@ -170,6 +170,7 @@ def reef_condition_rme(results_data, scen_ids, ecol_uncert, sheltervolume_parame
         nb_coral_juv = np.mean(results_data["nb_coral_juv"][scen_ids, :, :], axis=0)
         rubble = np.mean(results_data["rubble"][scen_ids, :, :], axis=0)
         relative_shelter_volume = np.mean(results_data["relative"][scen_ids, :, :], axis=0)
+        curr_eco_sim = scen_ids[0]
 
     if ecol_uncert == 1: # If we want eco model uncertainty, sample from 20 reefmod simulations
         curr_eco_sim = random.choices(scen_ids, k=nsims)
@@ -255,7 +256,7 @@ def reef_condition_rme(results_data, scen_ids, ecol_uncert, sheltervolume_parame
     reefcondition[reefcondition == sum(crit_val[3:])] = 0.3
     reefcondition[reefcondition == 0.0] = 0.1
 
-    return {"total_cover": total_cover, "shelter_volume": shelterVolume, "coraljuv_relative": coraljuv_relative, "COTSrel_complementary": COTSrel_complementary, "rubble_complementary": rubble_complementary, "RCI" : reefcondition}
+    return {"total_cover": total_cover, "shelter_volume": shelterVolume, "coraljuv_relative": coraljuv_relative, "COTSrel_complementary": COTSrel_complementary, "rubble_complementary": rubble_complementary, "RCI" : reefcondition}, curr_eco_sim
 
 def rti_rme(ecol_indicators, rti_intercept):
     # Calculate RTI, which is just the RCI made continuous (coefficients calculated previously,
@@ -296,11 +297,11 @@ def indicator_master(result_set, scen_ids, nsims, uncertainty_dict=default_uncer
     maxcoraljuv, sheltervolume_parameters, rci_crit, rti_intercept, intercept1, intercept2, slope1, slope2 = indicator_params(result_set, scen_ids, uncertainty_dict=uncertainty_dict)
 
     # Calculate RCI and ecological indicators
-    ecol_indicators = reef_condition_rme(result_set, scen_ids, uncertainty_dict["ecol_uncert"], sheltervolume_parameters, rci_crit, maxcoraljuv, nsims)
+    ecol_indicators, ecol_sample_ids = reef_condition_rme(result_set, scen_ids, uncertainty_dict["ecol_uncert"], sheltervolume_parameters, rci_crit, maxcoraljuv, nsims)
     ecol_indicators["RTI"] = rti_rme(ecol_indicators, rti_intercept)
     ecol_indicators["RFI"] = rfi_rme(ecol_indicators["total_cover"], intercept1, slope1, intercept2, slope2)
 
-    return ecol_indicators
+    return ecol_indicators, ecol_sample_ids
 
 def extract_metrics(results_data, scen_ids, nsims, uncertainty_dict=default_uncertainty_dict()):
     """
@@ -336,11 +337,11 @@ def extract_metrics(results_data, scen_ids, nsims, uncertainty_dict=default_unce
     num_reefs = len(results_data['locations'][:])
     m = num_reefs*num_years
 
-    ecol_indicators = indicator_master(results_data, scen_ids, nsims, uncertainty_dict=uncertainty_dict)
+    ecol_indicators, ecol_sample_ids = indicator_master(results_data, scen_ids, nsims, uncertainty_dict=uncertainty_dict)
 
     #save_metrics = np.zeros((nsims, m, len(ecol_indicators)))
     # Extract outputs and convert to long-form format, then save
     for m_key in ecol_indicators:
         ecol_indicators[m_key] = np.reshape(ecol_indicators[m_key][:, :, 0:num_years], (nsims, m))
 
-    return ecol_indicators
+    return ecol_indicators, ecol_sample_ids

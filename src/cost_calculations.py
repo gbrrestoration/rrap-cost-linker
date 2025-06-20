@@ -234,4 +234,4 @@ def calculate_costs(ID_key_fn, nsims, deploy_model_filepath=config["deploy_model
             cost_df.loc[cost_df.year==int_yr, cost_df.columns[2:]] = cost_types(cost_sum, cont_p, nsims)
 
 
-        cost_df.to_csv('./cost_outputs/intervention'+str(scen_id)+'_mc_cost_data.csv')
+        cost_df.to_csv('./cost_outputs/ID'+str(scen_id)+'intervention_mc_cost_data.csv')

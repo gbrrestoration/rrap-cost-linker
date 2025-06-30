@@ -16,8 +16,9 @@ The following modules are first imported:
 The key metrics summary files for each intervention/counterfactual run can then be generated using
 `prd.create_economics_metric_files()`. This can be run with default parameters with just the filepath
 to the rme results and number of simulations, or with more detail specifications on types of uncertainty
-to sample and which metrics to calculate. The number of simulations `nsims` includes sampling the types
-of uncertainty specified by the uncertainty flags `ecol_uncert`, `shelt_uncert` and `expert_uncert`.
+to sample and which metrics to calculate. The total number of simulations `nsims` includes sampling the types
+of uncertainty specified by the uncertainty flags `ecol_uncert`, `shelt_uncert` and `expert_uncert`,
+and the same number of samples will be drawn from the cost modelling.
 
 If `ecol_uncert=1`, ecological uncertainty is sampled in the results by sampling rme reps for a particular
 set of results (stochastic samples within a single climate model). If `ecol_uncert=0` the mean over all
@@ -36,10 +37,10 @@ The defaults include area saved in and above good condition and area weighted RC
     # Filepath to RME runs to process
     rme_files_path = "path to ReefModEngine.jl results"
     # Number of sims for metrics sampling (default includes ecological and expert uncertainty in RCI calcs)
-    nsims = 3
+    nsims = 300
     # Create metric datafiles for economics modelling and extract filename for intervention key
     int_keys_fn = prd.create_economics_metric_files(rme_files_path, nsims, ecol_uncert=1, shelt_uncert=0, expert_uncert=1,
-                                  metrics = [area_saved_above_thresh, area_weighted_rci])
+                                  metrics = [rci, rfi])
 
 
 After creating the metric summary files for CREAM, the cost files can be created by sampling the cost models
@@ -53,12 +54,10 @@ of which are specified in `config.csv`.
 
 .. code-block:: python
 
-    # Number of cost model draws
-    n_draws = 2**2
     # Load ID doc which links scenarios to settings and outputs
     ID_key = pd.read_csv(int_keys_fn)
     # Create cost datafiles for the intervention run ids in ID_key
-    cc.calculate_costs(ID_key, n_draws)
+    cc.calculate_costs(ID_key, nsims)
 
 
 The sampled cost files will be available in the `cost_outputs` folder and the metric summary files will be

@@ -17,3 +17,6 @@ src/econ_outputs/*
 src/cost_outputs/*
 src/cost_models/*
 src/intervention_keys/*
+
+# Ignore config containing path to cost models
+src/config.json

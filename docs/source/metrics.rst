@@ -11,12 +11,13 @@ Raw RCI
 The RCI can be calculated using :meth:`process_RME_data.raw_rci`. This metric comprises 5 reef metrics,
     * Relative coral cover
     * Relative shelter volume
-    * Relative cover of juveniles
-    * Inverse relative crown of thorns population (relative to outbreak levels)
-    * Inverse rubble proportion
+    * Relative abundance of juveniles
+    * Relative crown of thorns population (relative to outbreak levels)
+    * Rubble cover
 
 These values are categorised as within Very Good, Good, Fair, Poor or Very Poor condition depending on their
-values and a set of categories compiled by expert elicitation:
+values and a set of categories compiled by expert elicitation. The expert elicitation process was carried out
+at a workshop in October 2021 with 8 coral reef experts elicited.
 
 .. csv-table:: Expert elicitated reef condition metrics
    :header-rows: 1
@@ -24,26 +25,26 @@ values and a set of categories compiled by expert elicitation:
 
 The raw RCI is calculated by asessing the condition of a reef at each timestep for each metric according
 to the above categories. The reef is assigned the condition of the highest category for which 3 or more metrics satisfy
-that category's threshold. The raw expert condition categories of data collected from 7 experts can also be sampled
+that category's threshold. The raw expert condition categories of data collected from 8 experts can also be sampled
 when calculating metrics by setting `expert_uncert=1`.
 
 RTI
 ---
 
-The RTI is calculated as a linear regression on the RCI condition categories, forming a continuous version of
-the RCI. RTI can be calculated using :meth:`process_RME_data.raw_rti`.
+The RTI is a continuous version of the RCI condition categories. RTI can be calculated using
+:meth:`process_RME_data.raw_rti`.
 
 RFI
 ---
 
-The RFI or Reef Fishing Index, estimates the total fish biomas in kg km^2, based on a linear regression of total relative
+The RFI or Reef Fishing Index, estimates the total fish biomas in kg km^2, based on a linear regression of total
 cover. This is based on digitisation of Fig 4A and 6B in Graham and Nash, 2012 `<https://doi.org/10.1007/s00338-012-0984-y>`_
 The RFI can be calculated using :meth:`process_RME_data.rfi`.
 
 RCI
 ---
 The RCI looks at the total area of reef for which the condition is within the Good or Very Good categories.
-Area saved RCI can be calculated using :meth:`process_RME_data.area_saved_rci`.
+RCI can be calculated using :meth:`process_RME_data.area_saved_rci`.
 
 Area weighted RCI
 -----------------

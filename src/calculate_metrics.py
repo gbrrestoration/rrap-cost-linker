@@ -78,11 +78,11 @@ def indicator_params(result_set, scen_ids, uncertainty_dict=default_uncertainty_
     else:
         sheltervolume_parameters = np.array([
             [-8.31 + np.random.normal(0,0.514), 1.47], # branching from Urbina-Barretto 2021
-            [-8.32 + np.random.normal(0,0.514), 1.50],  # tabular from Urbina-Barretto 2021
-            [-7.37 + np.random.normal(0,0.514), 1.34], # columnar from Urbina-Barretto 2021, assumed similar for corymbose Acropora
-            [-7.37 + np.random.normal(0,0.514), 1.34], # columnar from Urbina-Barretto 2021, assumed similar for corymbose non-Acropora
-            [-9.69 +  np.random.normal(0,0.514), 1.49], # massive from Urbina-Barretto 2021, assumed similar for encrusting and small massives
-            [-9.69 +  np.random.normal(0,0.514), 1.49]])    # massive from Urbina-Barretto 2021,  assumed similar for large massives
+            [-8.32 + np.random.normal(0,0.388), 1.50],  # tabular from Urbina-Barretto 2021
+            [-7.37 + np.random.normal(0,0.561), 1.34], # columnar from Urbina-Barretto 2021, assumed similar for corymbose Acropora
+            [-7.37 + np.random.normal(0,0.561), 1.34], # columnar from Urbina-Barretto 2021, assumed similar for corymbose non-Acropora
+            [-9.69 +  np.random.normal(0,0.603), 1.49], # massive from Urbina-Barretto 2021, assumed similar for encrusting and small massives
+            [-9.69 +  np.random.normal(0,0.603), 1.49]])    # massive from Urbina-Barretto 2021,  assumed similar for large massives
 
     if uncertainty_dict["expert_uncert"] == 0: # If there is no uncertainty from survey, use median results
         G = pd.read_csv('.//datasets//Heneghan_RCI.csv')
@@ -106,9 +106,9 @@ def indicator_params(result_set, scen_ids, uncertainty_dict=default_uncertainty_
 
     ## RTI LINEAR REGRESSION UNCERTAINTY
     if uncertainty_dict["rti_uncert"] == 0:
-        rti_intercept = -0.498 # Intercept of rci to rti linear equation
+        rti_intercept = -0.871 # Intercept of rci to rti linear equation
     else:
-        rti_intercept = -0.498 + np.random.normal(0, 0.163) # Intercept of rci to rti linear equation
+        rti_intercept = -0.871 + np.random.normal(0, 0.0036) # Intercept of rci to rti linear equation
 
     ## RFI BUILT FROM DIGITISING FIG 4A AND FIG 6B FROM Graham and Nash, 2012 https://doi.org/10.1007/s00338-012-0984-y
 
@@ -170,6 +170,7 @@ def reef_condition_rme(results_data, scen_ids, ecol_uncert, sheltervolume_parame
         nb_coral_juv = np.mean(results_data["nb_coral_juv"][scen_ids, :, :], axis=0)
         rubble = np.mean(results_data["rubble"][scen_ids, :, :], axis=0)
         relative_shelter_volume = np.mean(results_data["relative"][scen_ids, :, :], axis=0)
+        curr_eco_sim = scen_ids[0]
 
     if ecol_uncert == 1: # If we want eco model uncertainty, sample from 20 reefmod simulations
         curr_eco_sim = random.choices(scen_ids, k=nsims)
@@ -255,14 +256,14 @@ def reef_condition_rme(results_data, scen_ids, ecol_uncert, sheltervolume_parame
     reefcondition[reefcondition == sum(crit_val[3:])] = 0.3
     reefcondition[reefcondition == 0.0] = 0.1
 
-    return {"total_cover": total_cover, "shelter_volume": shelterVolume, "coraljuv_relative": coraljuv_relative, "COTSrel_complementary": COTSrel_complementary, "rubble_complementary": rubble_complementary, "RCI" : reefcondition}
+    return {"total_cover": total_cover, "shelter_volume": shelterVolume, "coraljuv_relative": coraljuv_relative, "COTSrel_complementary": COTSrel_complementary, "rubble_complementary": rubble_complementary, "RCI" : reefcondition}, curr_eco_sim
 
 def rti_rme(ecol_indicators, rti_intercept):
     # Calculate RTI, which is just the RCI made continuous (coefficients calculated previously,
     # by fitting linear regression of discrete RCI to the 6 ecological indicators underpinning it
-    all_reeftourism = rti_intercept + 0.291*ecol_indicators["total_cover"]
-    + 0.628*ecol_indicators["shelter_volume"] + 1.335*ecol_indicators["coraljuv_relative"]
-    + 0.212*ecol_indicators["COTSrel_complementary"] + 0.250*ecol_indicators["rubble_complementary"]
+    all_reeftourism = rti_intercept + 0.7678 *ecol_indicators["total_cover"]
+    + 0.2945*ecol_indicators["shelter_volume"] + 0.8371*ecol_indicators["coraljuv_relative"]
+    + 0.2822*ecol_indicators["COTSrel_complementary"] + 0.7764*ecol_indicators["rubble_complementary"]
 
     all_reeftourism[all_reeftourism > 0.9] = 0.9
     all_reeftourism[all_reeftourism < 0.1] = 0.1
@@ -296,11 +297,11 @@ def indicator_master(result_set, scen_ids, nsims, uncertainty_dict=default_uncer
     maxcoraljuv, sheltervolume_parameters, rci_crit, rti_intercept, intercept1, intercept2, slope1, slope2 = indicator_params(result_set, scen_ids, uncertainty_dict=uncertainty_dict)
 
     # Calculate RCI and ecological indicators
-    ecol_indicators = reef_condition_rme(result_set, scen_ids, uncertainty_dict["ecol_uncert"], sheltervolume_parameters, rci_crit, maxcoraljuv, nsims)
+    ecol_indicators, ecol_sample_ids = reef_condition_rme(result_set, scen_ids, uncertainty_dict["ecol_uncert"], sheltervolume_parameters, rci_crit, maxcoraljuv, nsims)
     ecol_indicators["RTI"] = rti_rme(ecol_indicators, rti_intercept)
     ecol_indicators["RFI"] = rfi_rme(ecol_indicators["total_cover"], intercept1, slope1, intercept2, slope2)
 
-    return ecol_indicators
+    return ecol_indicators, ecol_sample_ids
 
 def extract_metrics(results_data, scen_ids, nsims, uncertainty_dict=default_uncertainty_dict()):
     """
@@ -336,11 +337,11 @@ def extract_metrics(results_data, scen_ids, nsims, uncertainty_dict=default_unce
     num_reefs = len(results_data['locations'][:])
     m = num_reefs*num_years
 
-    ecol_indicators = indicator_master(results_data, scen_ids, nsims, uncertainty_dict=uncertainty_dict)
+    ecol_indicators, ecol_sample_ids = indicator_master(results_data, scen_ids, nsims, uncertainty_dict=uncertainty_dict)
 
     #save_metrics = np.zeros((nsims, m, len(ecol_indicators)))
     # Extract outputs and convert to long-form format, then save
     for m_key in ecol_indicators:
         ecol_indicators[m_key] = np.reshape(ecol_indicators[m_key][:, :, 0:num_years], (nsims, m))
 
-    return ecol_indicators
+    return ecol_indicators, ecol_sample_ids

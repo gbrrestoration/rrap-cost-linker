@@ -312,7 +312,7 @@ def create_economics_metric_files(rme_files_path, nsims, uncertainty_dict=defaul
         id_key_df["number_of_species"] = 6 # Set at 6 as RME
         id_key_df["start_year"] = start_year
         id_key_df["end_year"] = end_year
-        id_key_df["climate_model"] = scens_idx["GCM name"][0]
+        id_key_df["climate_model"] = np.unique(scens_df_iv["GCM name"])[0]
         id_key_df = id_key_df.rename(columns={'number of corals':'number_of_1YO_corals','intervention id':'ID', 'year':'intervention_years'})
         id_key_df_store = pd.concat([id_key_df_store, id_key_df])
 

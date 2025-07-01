@@ -188,7 +188,6 @@ def calculate_costs(ID_key_fn, nsims, deploy_model_filepath=config["deploy_model
     ID_key = pd.read_csv( ".\\intervention_keys\\intervention_ID_key_"+ID_key_fn+".csv")
     ecol_ids_df = pd.read_csv( ".\\intervention_keys\\intervention_rep_idx_"+ID_key_fn+".csv")
     for scen_id in np.unique(ID_key.ID):
-        nreps = int(max(ID_key.rep)) # Number of rme reps (ecological uncertainty)
         scen_idx = ID_key.ID==scen_id # Intervention scenario ID to link costs to ecological model outcomes
         int_years = ID_key.intervention_years[scen_idx] # Intervention years
 
@@ -232,6 +231,5 @@ def calculate_costs(ID_key_fn, nsims, deploy_model_filepath=config["deploy_model
             # Calculate all cost codes and add to dataframe
             cost_sum = (factors_df_dep[["Cost","setupCost"]] + factors_df_prod[["Cost","setupCost"]]).values[0:nsims, :]
             cost_df.loc[cost_df.year==int_yr, cost_df.columns[2:]] = cost_types(cost_sum, cont_p, nsims)
-
 
         cost_df.to_csv('./cost_outputs/ID'+str(scen_id)+'intervention_mc_cost_data.csv')

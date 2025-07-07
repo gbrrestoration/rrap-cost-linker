@@ -245,6 +245,9 @@ def create_economics_metric_files(rme_files_path, nsims, uncertainty_dict=defaul
 
     # Setup key storage for metrics datafiles and ecological sample ids
     data_store = create_base_economics_dataframe(regions_data, reef_spatial_data, years)
+    sim_cols = ["sim_{0}".format(i) for i in range(1,nsims+1)]
+    store_sims = pd.DataFrame(np.zeros((data_store.shape[0], len(sim_cols))), columns = sim_cols)
+    data_store = pd.concat((data_store, store_sims), axis=1)
     store_ecol_ids = np.zeros((nsims, len(intervention_ids)), dtype=int)
 
     # Setup key table structure used by economics modelling
@@ -270,24 +273,17 @@ def create_economics_metric_files(rme_files_path, nsims, uncertainty_dict=defaul
         iv_scens = unique_iv_scens[(iv_id*n_reps-2):(iv_id*n_reps-2)+n_reps]
         cf_scens = unique_cf_scens[(iv_id*n_reps-2):(iv_id*n_reps-2)+n_reps]
 
-        new_cols = ["sim_{0}".format(i) for i in range(1,nsims+1)]
-        data_store[new_cols] = np.zeros((data_store.shape[0], len(new_cols)))
-
         # Setup structure for intervention key - links intervention ID and filename to cost model data
         id_key_df = scens_df_iv[["intervention id", "year", "rep", "number of corals"]]
         n_scens_id = id_key_df.shape[0]
-        id_key_df["distance_to_port_NM"] = np.zeros((n_scens_id,))
-        id_key_df["furthest_representative_reef"] = np.repeat("", (n_scens_id,))
-        id_key_df["closest_representative_reef"] = np.repeat("", (n_scens_id,))
-
 
         # Add distance to port data to save in intervention key
         [rep_reefs_sort, total_dist] = find_max_reef_distance(reef_spatial_data, regions_data, iv_reefs, max_dist = max_dist)
 
         # Store furthest and closest reefs in representative clsuters
-        id_key_df["furthest_representative_reef"] = rep_reefs_sort[-1]
-        id_key_df["closest_representative_reef"] = rep_reefs_sort[0]
-        id_key_df["distance_to_port_NM"]= total_dist
+        id_key_df = pd.concat((id_key_df, pd.DataFrame(np.repeat(rep_reefs_sort[-1],(n_scens_id,)), columns=["furthest_representative_reef"])), axis=1)
+        id_key_df = pd.concat((id_key_df, pd.DataFrame(np.repeat(rep_reefs_sort[0],(n_scens_id,)), columns=["closest_representative_reef"])), axis=1)
+        id_key_df = pd.concat((id_key_df, pd.DataFrame(np.repeat(total_dist,(n_scens_id,)), columns=["distance_to_port_NM"])), axis=1)
 
         # Extract metrics for intervention and counterfactual scenarios
         metrics_data_iv, ecol_ids = extract_metrics(results_data, iv_scens, nsims, uncertainty_dict=uncertainty_dict)
@@ -296,15 +292,15 @@ def create_economics_metric_files(rme_files_path, nsims, uncertainty_dict=defaul
         store_ecol_ids[:, iv_idx] = ecol_ids
 
         for met_func in metrics:
-            data_store[new_cols] = met_func(metrics_data_iv, data_store)
+            data_store[sim_cols] = met_func(metrics_data_iv, data_store)
             iv_filename = 'ID'+str(iv_id)+'_intervention'+base_met_filename+met_func.__name__+'.csv'
             data_store.to_csv(econ_storage_path+iv_filename)
-            data_store[new_cols] = met_func(metrics_data_cf, data_store)
+            data_store[sim_cols] = met_func(metrics_data_cf, data_store)
             cf_filename = 'ID'+str(iv_id)+'_counterfactual'+base_met_filename+met_func.__name__+'.csv'
             data_store.to_csv(econ_storage_path+cf_filename)
 
         # Drop data columns to allow those for next intervention to be added
-        data_store = data_store.drop(new_cols, axis=1)
+        data_store = data_store.drop(sim_cols, axis=1)
 
         # Add to record key data for cost modelling
         id_key_df["results_filename"] = iv_filename

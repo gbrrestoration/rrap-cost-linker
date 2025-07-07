@@ -251,7 +251,10 @@ def create_economics_metric_files(rme_files_path, nsims, uncertainty_dict=defaul
     store_ecol_ids = np.zeros((nsims, len(intervention_ids)), dtype=int)
 
     # Setup key table structure used by economics modelling
-    id_key_df_store = pd.DataFrame(columns=['ID', 'results_filename', 'climate_model', 'intervention_years', 'number_of_1YO_corals', 'port_id', 'distance_to_port_NM', 'intervention_reef_id', 'number_of_species', 'start_year', 'end_year'])
+    id_key_df_store = pd.DataFrame(columns=['ID', 'intervention_years', 'rep', 'number_of_1YO_corals',
+       'distance_to_port_NM', 'furthest_representative_reef',
+       'closest_representative_reef', 'results_filename', 'port_id',
+       'number_of_species', 'start_year', 'end_year', 'climate_model'])
 
     # Base filename for saving metrics
     base_met_filename = '_uncertainty_ecol'+str(uncertainty_dict["ecol_uncert"])+'_indicator'+str(uncertainty_dict["expert_uncert"])+'_var_'
@@ -279,7 +282,6 @@ def create_economics_metric_files(rme_files_path, nsims, uncertainty_dict=defaul
         id_key_df["distance_to_port_NM"] = np.zeros((n_scens_id,))
         id_key_df["furthest_representative_reef"] = np.repeat("", (n_scens_id,))
         id_key_df["closest_representative_reef"] = np.repeat("", (n_scens_id,))
-
 
         # Add distance to port data to save in intervention key
         [rep_reefs_sort, total_dist] = find_max_reef_distance(reef_spatial_data, regions_data, iv_reefs, max_dist = max_dist)
@@ -314,6 +316,7 @@ def create_economics_metric_files(rme_files_path, nsims, uncertainty_dict=defaul
         id_key_df["end_year"] = end_year
         id_key_df["climate_model"] = np.unique(scens_df_iv["GCM name"])[0]
         id_key_df = id_key_df.rename(columns={'number of corals':'number_of_1YO_corals','intervention id':'ID', 'year':'intervention_years'})
+
         id_key_df_store = pd.concat([id_key_df_store, id_key_df])
 
     # Save intervention key for generating cost data file for saved intervention and cf files

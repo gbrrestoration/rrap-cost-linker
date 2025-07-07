@@ -6,7 +6,7 @@ import pandas as pd
 rme_files_path = "path to RME output files"
 
 # Number of sims for metrics sampling (default includes ecological and expert uncertainty in RCI calcs)
-nsims = 300
+nsims = 10
 # Create metric datafiles for economics modelling and extract filename for intervention key
 int_keys_fn = prd.create_economics_metric_files(rme_files_path, nsims)
 

@@ -278,10 +278,11 @@ def create_economics_metric_files(rme_files_path, nsims, uncertainty_dict=defaul
 
         # Setup structure for intervention key - links intervention ID and filename to cost model data
         id_key_df = scens_df_iv[["intervention id", "year", "rep", "number of corals"]]
-        n_scens_id = id_key_df.shape[0]
-        id_key_df["distance_to_port_NM"] = np.zeros((n_scens_id,))
-        id_key_df["furthest_representative_reef"] = np.repeat("", (n_scens_id,))
-        id_key_df["closest_representative_reef"] = np.repeat("", (n_scens_id,))
+        n_scens_id, id_key_n_col = id_key_df.shape
+
+        id_key_df.insert(id_key_n_col, "distance_to_port_NM", np.zeros((n_scens_id,)))
+        id_key_df.insert(id_key_n_col+1, "furthest_representative_reef", np.repeat("", (n_scens_id,)))
+        id_key_df.insert(id_key_n_col+2, "closest_representative_reef", np.repeat("", (n_scens_id,)))
 
         # Add distance to port data to save in intervention key
         [rep_reefs_sort, total_dist] = find_max_reef_distance(reef_spatial_data, regions_data, iv_reefs, max_dist = max_dist)

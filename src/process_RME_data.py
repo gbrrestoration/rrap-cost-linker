@@ -276,14 +276,18 @@ def create_economics_metric_files(rme_files_path, nsims, uncertainty_dict=defaul
         # Setup structure for intervention key - links intervention ID and filename to cost model data
         id_key_df = scens_df_iv[["intervention id", "year", "rep", "number of corals"]]
         n_scens_id = id_key_df.shape[0]
+        id_key_df["distance_to_port_NM"] = np.zeros((n_scens_id,))
+        id_key_df["furthest_representative_reef"] = np.repeat("", (n_scens_id,))
+        id_key_df["closest_representative_reef"] = np.repeat("", (n_scens_id,))
+
 
         # Add distance to port data to save in intervention key
         [rep_reefs_sort, total_dist] = find_max_reef_distance(reef_spatial_data, regions_data, iv_reefs, max_dist = max_dist)
 
         # Store furthest and closest reefs in representative clsuters
-        id_key_df = pd.concat((id_key_df, pd.DataFrame(np.repeat(rep_reefs_sort[-1],(n_scens_id,)), columns=["furthest_representative_reef"])), axis=1)
-        id_key_df = pd.concat((id_key_df, pd.DataFrame(np.repeat(rep_reefs_sort[0],(n_scens_id,)), columns=["closest_representative_reef"])), axis=1)
-        id_key_df = pd.concat((id_key_df, pd.DataFrame(np.repeat(total_dist,(n_scens_id,)), columns=["distance_to_port_NM"])), axis=1)
+        id_key_df.loc[:, "furthest_representative_reef"] = rep_reefs_sort[-1]
+        id_key_df.loc[:, "closest_representative_reef"] = rep_reefs_sort[0]
+        id_key_df.loc[:, "distance_to_port_NM"] = total_dist
 
         # Extract metrics for intervention and counterfactual scenarios
         metrics_data_iv, ecol_ids = extract_metrics(results_data, iv_scens, nsims, uncertainty_dict=uncertainty_dict)

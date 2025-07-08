@@ -5,11 +5,13 @@ Cost-eco-model-linker documentation
 ===================================
 
 A python library for generating input files for CREAM economics analyses, using result sets from ReefModEngine.jl
-and sampling the intervention cost models using cost_model_queries.
+and sampling the intervention cost models using the cost_model_queries package.
 
 Contents
 --------
 .. toctree::
+    environment_setup
+    generate_rme_results
     example_workflow
     metrics
     cost_models

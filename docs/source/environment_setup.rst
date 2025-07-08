@@ -7,11 +7,12 @@ where the environment is being initialised.
 
 One option is to install uv directly in VS code using pip:
 
-.. code-block::
+.. code-block:: console
+
     $ pip install uv
 
 The virtual environment can then be initialised by syncing the uv.lock file:
 
-.. code-block::
-    # Install the versions recorded in uv.lock
+.. code-block:: console
+
     uv sync

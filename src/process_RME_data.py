@@ -160,8 +160,8 @@ def rfi(metrics_dict, metrics_df, rfi_thresholds=[0.74, 29.91]):
         rfi_thresholds : RFI thresholds (min and max fish biomass)
     """
     rfi = metrics_dict["RFI"]
-    rfi[rfi < rfi_thresholds[1]] = rfi_thresholds[1]
-    rfi[rfi > rfi_thresholds[2]]  = rfi_thresholds[1]
+    rfi[rfi < rfi_thresholds[0]] = rfi_thresholds[0]
+    rfi[rfi > rfi_thresholds[1]]  = rfi_thresholds[1]
 
     return np.transpose(rfi, (1, 0))
 

@@ -168,7 +168,7 @@ def update_setupcost_factors(factors_df_dep, factors_df_prod, ID_key):
     return factors_df_dep, factors_df_prod
 
 def calculate_costs(ID_key_fn, nsims, deploy_model_filepath=config["deploy_model_filepath"],
-                 prod_model_filepath=config["prod_model_filepath"], cont_p = 0.8):
+                 prod_model_filepath=config["prod_model_filepath"], cont_p = 0.8, iter_id=0):
     """
     Sample costs for a set of interventions specified in ID_key, sampling nsims.
 
@@ -186,8 +186,11 @@ def calculate_costs(ID_key_fn, nsims, deploy_model_filepath=config["deploy_model
         cont_p : float
             Contingency cost proportion.
     """
-    ID_key = pd.read_csv( ".\\intervention_keys\\intervention_ID_key_"+ID_key_fn+".csv")
-    ecol_ids_df = pd.read_csv( ".\\intervention_keys\\intervention_rep_idx_"+ID_key_fn+".csv")
+    ID_key = pd.read_csv( ".\\intervention_keys\\intervention_ID_key_"+ID_key_fn+"_run"+str(iter_id)+".csv")
+    ecol_ids_df = pd.read_csv( ".\\intervention_keys\\intervention_rep_idx_"+ID_key_fn+"_run"+str(iter_id)+".csv")
+
+    deploy_model_filepath = deploy_model_filepath+str(iter_id)+".xlsx"
+    prod_model_filepath = prod_model_filepath+str(iter_id)+".xlsx"
 
     for scen_id in np.unique(ID_key.ID):
         scen_idx = ID_key.ID==scen_id # Intervention scenario ID to link costs to ecological model outcomes
@@ -205,7 +208,6 @@ def calculate_costs(ID_key_fn, nsims, deploy_model_filepath=config["deploy_model
             # Add key intervention parameters for year to dataframe as constants
             factors_df_dep, factors_df_prod = update_factors(factors_df_dep, factors_df_prod, ID_key[["number_of_1YO_corals", "distance_to_port_NM", "number_of_species"]].loc[(ID_key.intervention_years==int_yr)&scen_idx], ecol_ids, nsims)
 
-            # Sample deployment and production costs for dataframe parameters
             factors_df_dep = sample_deployment_cost(deploy_model_filepath, factors_df_dep, factor_specs_dep, N, n_factors=nfactors)
             factors_df_prod = sample_production_cost(prod_model_filepath, factors_df_prod, factor_specs_prod, N, n_factors=nfactors)
 
@@ -242,4 +244,6 @@ def calculate_costs(ID_key_fn, nsims, deploy_model_filepath=config["deploy_model
             cost_sum = (factors_df_dep[["setupCost", "Cost"]] + factors_df_prod[["setupCost", "Cost"]]).values[0:nsims, :]
             cost_df.loc[cost_df.year==int_yr, cost_df.columns[2:]] = cost_types(cost_sum, cont_p, nsims)
 
-        cost_df.to_csv('./cost_outputs/ID'+str(scen_id)+'intervention_mc_cost_data.csv', index=False)
+        cost_filepath = './cost_outputs/ID'+str(scen_id)+'intervention_mc_cost_data_iter_id'+str(iter_id)+'.csv'
+        cost_df.to_csv(cost_filepath)
+        return cost_filepath

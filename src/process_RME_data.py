@@ -182,11 +182,13 @@ def raw_rti(metrics_dict, metrics_df):
 
     return np.transpose(metrics_dict["RTI"], (1, 0))
 
-def create_economics_metric_files(rme_files_path, nsims, uncertainty_dict=default_uncertainty_dict(),
-                                  metrics = [rci, raw_rti, rfi],
-                                  max_dist = 25.0,
-                                  economics_spatial_filepath='.//datasets//econ_spatial.csv',
-                                  econ_storage_path=".//econ_outputs//"):
+def create_economics_metric_files(rme_files_path, nsims, nbatches,
+                                uncertainty_dict=default_uncertainty_dict(),
+                                ncores=4,
+                                metrics = [rci, raw_rti, rfi],
+                                max_dist = 25.0,
+                                economics_spatial_filepath='.//datasets//econ_spatial.csv',
+                                econ_storage_path=".//econ_outputs//"):
     """
     Main function for creating metric file summarys for input to economics modelling.
 
@@ -314,11 +316,12 @@ def create_economics_metric_files(rme_files_path, nsims, uncertainty_dict=defaul
         id_key_df_store = pd.concat([id_key_df_store, id_key_df])
 
     # Save intervention key for generating cost data file for saved intervention and cf files
-    id_filename = ".\\intervention_keys\\intervention_ID_key_"+rme_files_path.split("\\")[-1]+".csv"
-    id_key_df_store.to_csv(id_filename)
+    id_filename = ".\\intervention_keys\\intervention_ID_key_"+rme_files_path.split("\\")[-1]+"_run"
+    ecol_id_filename = ".\\intervention_keys\\intervention_rep_idx_"+rme_files_path.split("\\")[-1]+"_run"
 
-    store_ecol_ids_df = pd.DataFrame(store_ecol_ids, columns=[str(id) for id in intervention_ids])
-    ecol_id_filename = ".\\intervention_keys\\intervention_rep_idx_"+rme_files_path.split("\\")[-1]+".csv"
-    store_ecol_ids_df.to_csv(ecol_id_filename)
+    for i_core in range(ncores):
+        id_key_df_store.to_csv(id_filename+str(i_core)+".csv")
+        store_ecol_ids_df = pd.DataFrame(store_ecol_ids[nbatches*i_core:nbatches*(i_core+1)], columns=[str(id) for id in intervention_ids])
+        store_ecol_ids_df.to_csv(ecol_id_filename+str(i_core)+".csv")
 
     return rme_files_path.split("\\")[-1]

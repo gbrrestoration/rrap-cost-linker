@@ -31,17 +31,17 @@ def get_NK(nsims, n_factors):
 def cost_types(cost, contingency, nsims):
     """
     Calculate key cost codes:
-    1 - CAPEX - sum of production and deployment cost
-    2 - Contingency CAPEX - % of CAPEX
-    3 - OPEX - sum of production and deployment cost
-    4 - Sustaining capital OPEX - set to zero for now (assumed to be included in OPEX through contract)
-    5 - Contingency OPEX - % of OPEX
-    6 - Vessel fuel - only relevant if volunteer vessels are used - set to zero for now
-    7 - CAPEX-monitoring - set to zero (assumed no monitoring cost)
-    8 - Contingency CAPEX-monitoring - % of CAPEX-monitoring
-    9 - OPEX-monitoring - set to zero (assumed no monitoring cost)
-    10 - Sustaining capital OPEX-monitoring - set to zero (assumed no monitoring cost)
-    11 - Contingency OPEX-monitoring - % of OPEX-monitoring
+    - 1 : CAPEX,  sum of production and deployment cost
+    - 2 : Contingency CAPEX,  % of CAPEX
+    - 3 : OPEX,  sum of production and deployment cost
+    - 4 : Sustaining capital OPEX, set to zero for now (assumed to be included in OPEX through contract)
+    - 5 : Contingency OPEX, % of OPEX
+    - 6 : Vessel fuel, only relevant if volunteer vessels are used - set to zero for now
+    - 7 : CAPEX-monitoring, set to zero (assumed no monitoring cost)
+    - 8 : Contingency CAPEX-monitoring, % of CAPEX-monitoring
+    - 9 : OPEX-monitoring, set to zero (assumed no monitoring cost)
+    - 10 : Sustaining capital OPEX-monitoring, set to zero (assumed no monitoring cost)
+    - 11 : Contingency OPEX-monitoring, % of OPEX-monitoring
 
     Parameters
     ----------
@@ -168,7 +168,7 @@ def update_setupcost_factors(factors_df_dep, factors_df_prod, ID_key):
     return factors_df_dep, factors_df_prod
 
 def calculate_costs(ID_key_fn, nsims, deploy_model_filepath=config["deploy_model_filepath"],
-                 prod_model_filepath=config["prod_model_filepath"], cont_p = 0.8, iter_id=0):
+                 prod_model_filepath=config["prod_model_filepath"], cont_p = 0.25, iter_id=0):
     """
     Sample costs for a set of interventions specified in ID_key, sampling nsims.
 
@@ -217,7 +217,7 @@ def calculate_costs(ID_key_fn, nsims, deploy_model_filepath=config["deploy_model
                 save_cost_dep = factors_df_dep["Cost"]
 
                 # Adjust number of corals to "how many more are being deployed this year than last year?" to caculate setup cost correctly
-                factors_df_dep, factors_df_prod = update_setupcost_factors(factors_df_dep, factors_df_prod, ID_key[["number_of_1YO_corals"]].loc[(ID_key.intervention_years==int_years.iloc[int_yr_idx-1])])
+                factors_df_dep, factors_df_prod = update_setupcost_factors(factors_df_dep, factors_df_prod, ID_key[["number_of_1YO_corals"]].loc[(ID_key.intervention_years==int_yr-1)])
 
                 if any(factors_df_dep['num_devices']<=0):
                     # If deploying no more than previous year, setup cost is zero

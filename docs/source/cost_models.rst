@@ -42,9 +42,9 @@ through consultation with the Translation to Deployment Team and sensitivity ana
 
 .. csv-table:: Cost model parameters
 
-   :header: "Parameter name", "Description", "Expected range", "Model"
+    "**Parameter name**", "**Description**", "**Expected range**", "**Model**"
 
-   "num_devices", "The number of devices outplanted in a year. Each device carries 3 baby corals, with a survival rate to 1YO of 1_YOEC_yield.", "(1000, 5000000)", "Deployment and Production"
+   "num_devices", "The number of devices outplanted in a year. Each device carries 3 baby corals, with a survival rate to 1YO of *1YOEC_yield*.", "(1000, 5000000)", "Deployment and Production"
    "species_no",  "Number of unique species/regions combinations to be outplanted. Each species and region needs different tanks for production.", "(1, 12+)", "Production"
    "col_spawn_gam_bun, gam_bun_egg, egg_embryo, embryo_freeswim", "Parameters detailing conversions from the spawn to gamete to egg to embryo to freeswimming stage of the coral lifecycle.", "See example config file", "Production"
    "freeswim_settle, settle_just, just_mature", "Parameters detailing conversions from the freeswimming to settlement-ready larvae, to just-settled larva to just-settled unit to mature unit.", "See example config file", "Production"
@@ -59,7 +59,7 @@ through consultation with the Translation to Deployment Team and sensitivity ana
    "distance_from_port", "Distance from port to intervention reef in nautical miles", "Depends on intervention reef(s)", "Deployment"
    "secs_per_dev", "On transect deployment rate of devices", "(1,2)", "Deployment"
    "proportion", "Proportion by which device deployment rate ius reduced due to poor visibility", "(0.5,0.55), but depends on conditions", "Deployment"
-   "bins_per_tender", "Bins holding devices that ca fit in each tender", "(4,6) but depends on tender", "Deployment"
+   "bins_per_tender", "Bins holding devices that can fit in each tender", "(4,6) but depends on tender", "Deployment"
    "deployment_dur", "Days over which the deployment occurs", "(25, 28)", "Deployment"
 
 Sampling the cost models
@@ -69,6 +69,28 @@ particular input deployment volume, number of species, distance from port to the
 These are sampled using functions developed in the `cost_model_queries` python package
 `<https://github.com/open-AIMS/cost_model_queries>`_ . More details on the sampling approach can be found in the
 documentation for this package : `<https://cost-model-queries.readthedocs.io/en/latest/?badge=latest>`_ .
+
+Cost model samples output file
+------------------------------
+The output files for the cost sampling include 11 cost codes for each intervention year and simulation which are used by CREAM.
+These are described in the following table:
+
+.. csv-table:: Cost codes
+
+   "**Cost code**", "**Cost component**", "**Description**"
+
+    "1", "CAPEX", "Sum of setup (capital expenditure) costs for the production and deployment stages."
+    "2", "Contingency of CAPEX", "% of CAPEX, default is 25%."
+    "3", "OPEX", "Sum of operational costs for the production and deployment stages."
+    "4", "Sustaining capital OPEX", "Set to zero for now (assumed to be included in OPEX through the contract)."
+    "5", "Contingency of OPEX", "% of OPEX, default is 25%."
+    "6", "Vessel fuel", "Only relevant if volunteer vessels are used, set to zero for now."
+    "7", "CAPEX - monitoring", "Set to zero (assumed no monitoring cost)."
+    "8", "Contingency CAPEX-monitoring", "% of CAPEX monitoring."
+    "9", "OPEX - monitoring", "Set to zero (assumed no monitoring cost)."
+    "10", "Sustaining captial OPEX - monitoring", "Set to zero (assumed no monitoring cost).",
+    "11", "Contingency OPEX-monitoring", "% of OPEX monitoring"
+
 
 Calculating costs for interventions over multiple years
 -------------------------------------------------------

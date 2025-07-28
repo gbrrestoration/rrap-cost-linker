@@ -52,6 +52,7 @@ def find_representative_reefs(iv_reef_spatial, regions_data, max_dist = 25.0):
 
     # Find distance to port for each intervention reef
     iv_reef_spatial["distance_to_port_NM"] = np.zeros((iv_reef_spatial.shape[0],))
+
     for reef in iv_reef_spatial["UNIQUE_ID"].values:
         iv_reef_spatial.loc[iv_reef_spatial["UNIQUE_ID"]==reef, "distance_to_port_NM"] = (regions_data.loc[regions_data["UNIQUE_ID"]==reef,["minimum_distance_to_nearest_port_m"]].iloc[0]*0.00053996).minimum_distance_to_nearest_port_m # Convert to nautical miles
 
@@ -78,6 +79,7 @@ def find_max_reef_distance(reef_spatial_data, regions_data, iv_reefs, max_dist =
         data_store : dataframe
             Storage dataframe for creating economics metric files
     """
+
     iv_reef_spatial = reef_spatial_data.loc[reef_spatial_data["GBRMPA_ID"].isin(iv_reefs)]
 
     if len(iv_reefs)>1:

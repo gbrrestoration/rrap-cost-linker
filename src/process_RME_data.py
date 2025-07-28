@@ -28,8 +28,6 @@ def load_regions_data(economics_spatial_filepath):
         regions_data : dataframe
     """
     regions_data = pd.read_csv(economics_spatial_filepath) # Economic spatial data key
-    regions_data["reef_uniqueid"] = [str(i) for i in regions_data["reef_uniqueid"]]
-    regions_data = regions_data.rename(columns={'reef_uniqueid':'UNIQUE_ID'})
 
     return regions_data
 
@@ -78,27 +76,19 @@ def create_base_economics_dataframe(regions_data, reef_spatial_data, years):
         data_store: dataframe
             Basic economics file structure to save for each intervention/counterfactual scenario.
     """
-    reef_names = regions_data.reef_name
-    unique_ids = regions_data.UNIQUE_ID
+    regions_data = regions_data.sort_values(by="Reef_ID", ignore_index=True)
     n_reefs = len(regions_data.reef_name)
 
     # Setup base dataframe structure
-    columns = ["year_absolute", "year_relative", "Reef_ID"]
-    data_store = pd.DataFrame(np.zeros((n_reefs*len(years), len(columns))),  columns=columns)
-    data_store["year_absolute"] = np.array(list(years)*n_reefs) # Run year
-    data_store["Reef_ID"] = np.repeat(list(range(1, n_reefs+1)), len(years))
-    data_store["reef_name"] = np.repeat(np.array(reef_names), len(years))
-    data_store["UNIQUE_ID"] = np.repeat(np.array(unique_ids), len(years)) # Unique ID for data join
-    data_store["reef_gbrmpa_id"] = np.repeat("", n_reefs*len(years))
+    # Reef_ID holds indices for corresponding ReefModEngine order of reefs
+    data_store = pd.DataFrame(np.zeros((n_reefs*len(years), 2), dtype=int), columns=["year_absolute", "year_relative"])
+    data_store.loc[:, "year_absolute"] = np.array(list(years)*n_reefs)
+    data_store = pd.concat([data_store, pd.DataFrame(np.repeat(regions_data, len(years), axis=0), columns = regions_data.columns)], axis=1)
 
-    # Add GBRMPA IDs by matching UNIQUE_ID (needed to match up for inner join with economics spatial data)
-    for id in unique_ids:
-        data_store.loc[data_store["UNIQUE_ID"]==id, "reef_gbrmpa_id"] = reef_spatial_data.loc[reef_spatial_data["UNIQUE_ID"]==id, "RME_GBRMPA_ID"].iloc[0]
+    # Add UNIQUE ID to regions data to allow cross-referencing for estimating reef distance to port
+    regions_data["UNIQUE_ID"] = reef_spatial_data["UNIQUE_ID"]
 
-    # Add management and other key economics region information and distance to nearest port
-    data_store = data_store.merge(regions_data, on='UNIQUE_ID', how = 'inner')
-
-    return data_store
+    return data_store, regions_data
 
 def area_weighted_rti(metrics_dict, metrics_df):
     """
@@ -244,7 +234,9 @@ def create_economics_metric_files(rme_files_path, nsims, uncertainty_dict=defaul
     unique_cf_scens = np.where(np.array(iv_dict["counterfactual"]).astype(bool))[0]
 
     # Setup key storage for metrics datafiles and ecological sample ids
-    data_store = create_base_economics_dataframe(regions_data, reef_spatial_data, years)
+    data_store, regions_data = create_base_economics_dataframe(regions_data, reef_spatial_data, years)
+
+    # Add columns to store sampled metrics
     sim_cols = ["sim_{0}".format(i) for i in range(1,nsims+1)]
     store_sims = pd.DataFrame(np.zeros((data_store.shape[0], len(sim_cols))), columns = sim_cols)
     data_store = pd.concat((data_store, store_sims), axis=1)

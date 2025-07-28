@@ -2,8 +2,8 @@ import parallel_cost_sampling as pc
 import multiprocessing as mp
 
 # Filepath to RME runs to process
-rme_files_path = "C:\\Users\\rcrocker\\Documents\\Github\\ReefModEngine.jl\\sandbox\\test_results_econ_metrics"
-# econ_test_results_eff_study_domain
+rme_files_path = "filepath to RME resultset"
+
 # Number of sims for metrics sampling (default includes ecological and expert uncertainty in RCI calcs)
 nsims = 10
 ncores = 5 # number of cores to use

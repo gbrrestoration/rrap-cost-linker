@@ -265,8 +265,8 @@ def create_economics_metric_files(rme_files_path, nsims, uncertainty_dict=defaul
         data_store["year_relative"] = data_store["year_absolute"] - min(scens_df_iv["year"])
 
         # Scenario ids for CF and counterfactual
-        iv_scens = unique_iv_scens[(iv_id*n_reps-2):(iv_id*n_reps-2)+n_reps]
-        cf_scens = unique_cf_scens[(iv_id*n_reps-2):(iv_id*n_reps-2)+n_reps]
+        iv_scens = unique_iv_scens[(iv_idx*n_reps):(iv_idx*n_reps)+n_reps]
+        cf_scens = unique_cf_scens[(iv_idx*n_reps):(iv_idx*n_reps)+n_reps]
 
         # Setup structure for intervention key - links intervention ID and filename to cost model data
         id_key_df = scens_df_iv[["intervention id", "year", "rep", "number of corals"]]

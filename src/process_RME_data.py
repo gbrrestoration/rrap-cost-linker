@@ -293,10 +293,10 @@ def create_economics_metric_files(rme_files_path, nsims, uncertainty_dict=defaul
         for met_func in metrics:
             data_store[sim_cols] = met_func(metrics_data_iv, data_store)
             iv_filename = 'ID'+str(iv_id)+'_intervention'+base_met_filename+met_func.__name__+'.csv'
-            data_store.to_csv(econ_storage_path+iv_filename)
+            data_store.to_csv(econ_storage_path+iv_filename, index=False)
             data_store[sim_cols] = met_func(metrics_data_cf, data_store)
             cf_filename = 'ID'+str(iv_id)+'_counterfactual'+base_met_filename+met_func.__name__+'.csv'
-            data_store.to_csv(econ_storage_path+cf_filename)
+            data_store.to_csv(econ_storage_path+cf_filename, index=False)
 
         # Drop data columns to allow those for next intervention to be added
         data_store = data_store.drop(sim_cols, axis=1)

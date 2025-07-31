@@ -77,6 +77,7 @@ def initialise_cost_df(years, nsims):
     cost_df = pd.DataFrame(np.zeros((n_years*11, 2 + nsims)), columns=cols)
     cost_df.loc[:, "year"] = np.array(np.repeat(years, 11))
     cost_df.loc[:, "component"] = np.tile(np.array(range(1, 12)), n_years)
+
     return cost_df
 
 def factors_dataframe_update(nsims):
@@ -142,11 +143,21 @@ def update_factors(factors_df_dep, factors_df_prod, ID_key, ecol_idx, nsims):
             Number of simulations drawn (may be smaller than dataframe size to get correct number of samples
             for Sobol Sampling).
     """
+    # Sum over reefsets for the same intervention and year to give total number of corals outplanted in each environmental sample (rep)
     temp_id_df = ID_key[["rep","number_of_1YO_corals"]].groupby('rep')["number_of_1YO_corals"].sum().reset_index()
-    factors_df_dep.loc[0:nsims-1, 'num_devices'] = temp_id_df["number_of_1YO_corals"].values[ecol_idx]/factors_df_dep.loc[0:nsims-1, '1YOEC_yield']
-    factors_df_prod.loc[0:nsims-1, 'num_devices'] = temp_id_df["number_of_1YO_corals"].values[ecol_idx]/factors_df_dep.loc[0:nsims-1, '1YOEC_yield']
+
+    # Update 1YO corals and convert to equivalent number of devices
+    factors_df_dep.loc[0:nsims-1, 'num_devices'] = np.ceil(temp_id_df["number_of_1YO_corals"].values[ecol_idx]/factors_df_dep.loc[0:nsims-1, '1YOEC_yield'])
+    factors_df_prod.loc[0:nsims-1, 'num_devices'] = np.ceil(temp_id_df["number_of_1YO_corals"].values[ecol_idx]/factors_df_dep.loc[0:nsims-1, '1YOEC_yield'])
+
+    # Update number of species
     factors_df_prod.loc[:, 'species_no'] = ID_key["number_of_species"].iloc[0]
-    factors_df_dep.loc[:, 'port'] = 1 # Port does not matter as we are using distance to port directly
+
+    # Make sure the production and deployment models have the same 1YO coral yield per device
+    factors_df_prod.loc[:, '1YOEC_yield'] = factors_df_dep['1YOEC_yield'].values
+
+    # Port does not matter as we are using distance to port directly
+    factors_df_dep.loc[:, 'port'] = 1
     factors_df_dep.loc[:, 'distance_from_port'] = ID_key["distance_to_port_NM"].iloc[0]
 
     return factors_df_dep, factors_df_prod
@@ -170,9 +181,12 @@ def update_setupcost_factors(factors_df_dep, factors_df_prod, ID_key, ecol_idx, 
             Number of simulations drawn (may be smaller than dataframe size to get correct number of samples
             for Sobol Sampling).
     """
+    # Sum over reefsets for the same intervention and year to give total number of corals outplanted in each environmental sample (rep)
     temp_id_df = ID_key[["rep","number_of_1YO_corals"]].groupby('rep')["number_of_1YO_corals"].sum().reset_index()
-    factors_df_dep.loc[0:nsims-1, 'num_devices'] = factors_df_dep.loc[0:nsims-1, 'num_devices'] - (temp_id_df["number_of_1YO_corals"].values[ecol_idx]/factors_df_dep.loc[0:nsims-1, '1YOEC_yield'])
-    factors_df_prod.loc[0:nsims-1, 'num_devices'] = factors_df_prod.loc[0:nsims-1,'num_devices'] - (temp_id_df["number_of_1YO_corals"].values[ecol_idx]/factors_df_dep.loc[0:nsims-1, '1YOEC_yield'])
+
+    # Update 1YO corals ro additional 1YO corals compared to previous year and convert to equivalent number of devices
+    factors_df_dep.loc[0:nsims-1, 'num_devices'] = factors_df_dep.loc[0:nsims-1, 'num_devices'] - np.ceil(temp_id_df["number_of_1YO_corals"].values[ecol_idx]/factors_df_dep.loc[0:nsims-1, '1YOEC_yield'])
+    factors_df_prod.loc[0:nsims-1, 'num_devices'] = factors_df_prod.loc[0:nsims-1,'num_devices'] - np.ceil(temp_id_df["number_of_1YO_corals"].values[ecol_idx]/factors_df_dep.loc[0:nsims-1, '1YOEC_yield'])
 
     return factors_df_dep, factors_df_prod
 
@@ -194,6 +208,8 @@ def calculate_costs(ID_key_fn, nsims, deploy_model_filepath=config["deploy_model
             Path to production cost model.
         cont_p : float
             Contingency cost proportion.
+        iter_id : int
+            ID used for parallel sampling to keep track of batches for ordered recombination.
     """
     ID_key = pd.read_csv( ".\\intervention_keys\\intervention_ID_key_"+ID_key_fn+"_run"+str(iter_id)+".csv")
     ecol_ids_df = pd.read_csv( ".\\intervention_keys\\intervention_rep_idx_"+ID_key_fn+"_run"+str(iter_id)+".csv")
@@ -221,11 +237,6 @@ def calculate_costs(ID_key_fn, nsims, deploy_model_filepath=config["deploy_model
 
             factors_df_dep = sample_deployment_cost(deploy_model_filepath, factors_df_dep, factor_specs_dep, N, n_factors=nfactors)
             factors_df_prod = sample_production_cost(prod_model_filepath, factors_df_prod, factor_specs_prod, N, n_factors=nfactors)
-
-            # If number of devices is zero for some reefs, set costs to zero
-            if any(factors_df_prod["num_devices"]==0):
-                factors_df_prod.loc[factors_df_prod["num_devices"]==0, ["setupCost", "Cost"]] = 0.0
-                factors_df_dep.loc[factors_df_dep["num_devices"]==0, ["setupCost", "Cost"]] = 0.0
 
             if int_yr>min(int_years):
                 # Save calculated operational costs

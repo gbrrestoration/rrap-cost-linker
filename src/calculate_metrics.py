@@ -344,4 +344,4 @@ def extract_metrics(results_data, scen_ids, nsims, uncertainty_dict=default_unce
     for m_key in ecol_indicators:
         ecol_indicators[m_key] = np.reshape(ecol_indicators[m_key][:, :, 0:num_years], (nsims, m))
 
-    return ecol_indicators, ecol_sample_ids
+    return ecol_indicators, np.array(ecol_sample_ids)

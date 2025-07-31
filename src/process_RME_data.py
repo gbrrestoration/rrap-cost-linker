@@ -290,6 +290,8 @@ def create_economics_metric_files(rme_files_path, nsims, nbatches,
         metrics_data_iv, ecol_ids = extract_metrics(results_data, iv_scens, nsims, uncertainty_dict=uncertainty_dict)
         metrics_data_cf, _ = extract_metrics(results_data, cf_scens, nsims, uncertainty_dict=uncertainty_dict)
 
+        # Result sampling ids to ignore counterfactuals in cost sampling
+        ecol_ids[ecol_ids>=max(id_key_df["rep"])] = ecol_ids[ecol_ids>max(id_key_df["rep"])]-max(id_key_df["rep"])-1
         store_ecol_ids[:, iv_idx] = ecol_ids
 
         for met_func in metrics:

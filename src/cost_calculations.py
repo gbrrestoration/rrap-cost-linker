@@ -26,6 +26,7 @@ def get_NK(nsims, n_factors):
     See https://salib.readthedocs.io/en/latest/api.html#sobol-sensitivity-analysis
     """
     K = int((2*n_factors) + 2)
+
     return int(np.ceil(nsims/K)), K
 
 def cost_types(cost, contingency, nsims):
@@ -52,9 +53,7 @@ def cost_types(cost, contingency, nsims):
         nsims : int
             Total number of simulations (from metrics sampling)
     """
-    cost = np.reshape(cost, (2, nsims))
-
-    return np.vstack((np.vstack((cost[0, :], cost[0, :]*contingency, cost[1, :], np.zeros(nsims), cost[1,:]*contingency)), np.zeros((6, nsims))))
+    return np.vstack((np.vstack((cost[:, 0], cost[:, 0]*contingency, cost[:, 1], np.zeros(nsims), cost[:, 1]*contingency)), np.zeros((6, nsims))))
 
 def initialise_cost_df(years, nsims):
     """

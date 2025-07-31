@@ -226,7 +226,7 @@ def create_economics_metric_files(rme_files_path, nsims, nbatches,
     start_year = years[0]
     end_year = years[-1]
 
-    # Get unique intervention IDs from result set (unique intervention and climate model)
+    # Get unique intervention IDs from result set (a unique intervention scenario run in ReefModEngine.jl)
     intervention_ids = np.unique(scens_df["intervention id"])
 
     # Extract ids for cf and intervention runs

@@ -4,7 +4,6 @@ import geopandas as gp
 import numpy as np
 import json
 
-# from reef_distances import find_representative_reefs
 from calculate_metrics import extract_metrics, default_uncertainty_dict
 from reef_distances import find_max_reef_distance
 
@@ -179,7 +178,6 @@ def raw_rti(metrics_dict, metrics_df):
         metrics_df : dataframe
             Dataframe containing scenario summary dataframe
     """
-
     return np.transpose(metrics_dict["RTI"], (1, 0))
 
 def create_economics_metric_files(rme_files_path, nsims, nbatches,
@@ -291,7 +289,7 @@ def create_economics_metric_files(rme_files_path, nsims, nbatches,
         metrics_data_cf, _ = extract_metrics(results_data, cf_scens, nsims, uncertainty_dict=uncertainty_dict)
 
         # Result sampling ids to ignore counterfactuals in cost sampling
-        ecol_ids[ecol_ids>=max(id_key_df["rep"])] = ecol_ids[ecol_ids>max(id_key_df["rep"])]-max(id_key_df["rep"])-1
+        ecol_ids[ecol_ids>=max(id_key_df["rep"])] = ecol_ids[ecol_ids>=max(id_key_df["rep"])]-max(id_key_df["rep"])
         store_ecol_ids[:, iv_idx] = ecol_ids
 
         for met_func in metrics:

@@ -172,7 +172,7 @@ def reef_condition_rme(results_data, scen_ids, ecol_uncert, sheltervolume_parame
         relative_shelter_volume = np.mean(results_data["relative"][scen_ids, :, :], axis=0)
         curr_eco_sim = scen_ids[0]
 
-    if ecol_uncert == 1: # If we want eco model uncertainty, sample from 20 reefmod simulations
+    if ecol_uncert == 1: # If we want eco model uncertainty, sample from reefmod simulations
         curr_eco_sim = random.choices(scen_ids, k=nsims)
         cots = results_data["cots"][curr_eco_sim, :, :]
         coral_cover_per_taxa = results_data["total_taxa_cover"][curr_eco_sim, :, :, :]

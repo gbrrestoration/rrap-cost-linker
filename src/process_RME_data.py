@@ -237,7 +237,7 @@ def create_economics_metric_files(rme_files_path, nsims, nbatches,
     data_store, regions_data = create_base_economics_dataframe(regions_data, reef_spatial_data, years)
 
     # Add columns to store sampled metrics
-    sim_cols = ["sim_{0}".format(i) for i in range(1,nsims+1)]
+    sim_cols = ["sim_{0}".format(i) for i in range(1,nbatches+1)]
     store_sims = pd.DataFrame(np.zeros((data_store.shape[0], len(sim_cols))), columns = sim_cols)
     data_store = pd.concat((data_store, store_sims), axis=1)
     store_ecol_ids = np.zeros((nsims, len(intervention_ids)), dtype=int)
@@ -250,9 +250,16 @@ def create_economics_metric_files(rme_files_path, nsims, nbatches,
 
     # Base filename for saving metrics
     base_met_filename = '_uncertainty_ecol'+str(uncertainty_dict["ecol_uncert"])+'_indicator'+str(uncertainty_dict["expert_uncert"])+'_var_'
+    # Save intervention key for generating cost data file for saved intervention and cf files
+    id_filename = ".\\intervention_keys\\intervention_ID_key_"+rme_files_path.split("\\")[-1]+"_run"
+    ecol_id_filename = ".\\intervention_keys\\intervention_rep_idx_"+rme_files_path.split("\\")[-1]+"_run"
+    metric_filepaths = [""]*len(intervention_ids)
 
     # Save a csv for each unique intervention, one for cf and one for iv runs
     for (iv_idx, iv_id) in enumerate(intervention_ids):
+
+        store_metric_filepaths = [""]*len(metrics)*ncores*2
+        filecount = 0
         # Get scenario table for intervention
         scens_idx = scens_df["intervention id"]==iv_id
         scens_df_iv = scens_df[scens_idx]
@@ -262,7 +269,7 @@ def create_economics_metric_files(rme_files_path, nsims, nbatches,
         iv_reefs = sum([iv_dict[reefset_name] for reefset_name in reefset_names], [])
 
         # Year relative starts at 0 on the first year of intervention
-        data_store["year_relative"] = data_store["year_absolute"] - min(scens_df_iv["year"])
+        data_store["year_relative"] = data_store["year_absolute"] - (min(scens_df_iv["year"]) + 1)
 
         # Scenario ids for CF and counterfactual
         iv_scens = unique_iv_scens[(iv_idx*n_reps):(iv_idx*n_reps)+n_reps]
@@ -284,21 +291,23 @@ def create_economics_metric_files(rme_files_path, nsims, nbatches,
         id_key_df.loc[:, "closest_representative_reef"] = rep_reefs_sort[0]
         id_key_df.loc[:, "distance_to_port_NM"] = total_dist
 
-        # Extract metrics for intervention and counterfactual scenarios
-        metrics_data_iv, ecol_ids = extract_metrics(results_data, iv_scens, nsims, uncertainty_dict=uncertainty_dict)
-        metrics_data_cf, _ = extract_metrics(results_data, cf_scens, nsims, uncertainty_dict=uncertainty_dict)
+        for i_core in range(ncores):
+            # Extract metrics for intervention and counterfactual scenarios
+            metrics_data_iv, ecol_ids = extract_metrics(results_data, iv_scens, nbatches, uncertainty_dict=uncertainty_dict)
+            metrics_data_cf, _ = extract_metrics(results_data, cf_scens, nbatches, uncertainty_dict=uncertainty_dict)
 
-        # Result sampling ids to ignore counterfactuals in cost sampling
-        ecol_ids[ecol_ids>=max(id_key_df["rep"])] = ecol_ids[ecol_ids>=max(id_key_df["rep"])]-max(id_key_df["rep"])
-        store_ecol_ids[:, iv_idx] = ecol_ids
+            # Result sampling ids to ignore counterfactuals in cost sampling
+            ecol_ids[ecol_ids>=max(id_key_df["rep"])] = ecol_ids[ecol_ids>=max(id_key_df["rep"])]-max(id_key_df["rep"])
+            store_ecol_ids[nbatches*i_core:nbatches*(i_core+1), iv_idx] = ecol_ids
 
-        for met_func in metrics:
-            data_store[sim_cols] = met_func(metrics_data_iv, data_store)
-            iv_filename = 'ID'+str(iv_id)+'_intervention'+base_met_filename+met_func.__name__+'.csv'
-            data_store.to_csv(econ_storage_path+iv_filename, index=False)
-            data_store[sim_cols] = met_func(metrics_data_cf, data_store)
-            cf_filename = 'ID'+str(iv_id)+'_counterfactual'+base_met_filename+met_func.__name__+'.csv'
-            data_store.to_csv(econ_storage_path+cf_filename, index=False)
+            for met_func in metrics:
+                data_store[sim_cols] = met_func(metrics_data_iv, data_store)
+                store_metric_filepaths[filecount] = 'ID'+str(iv_id)+'_intervention'+base_met_filename+met_func.__name__+'_batch'+str(i_core)+'.csv'
+                data_store.to_csv(econ_storage_path+store_metric_filepaths[filecount], index=False)
+                data_store[sim_cols] = met_func(metrics_data_cf, data_store)
+                store_metric_filepaths[filecount+1] = 'ID'+str(iv_id)+'_counterfactual'+base_met_filename+met_func.__name__+'_batch'+str(i_core)+'.csv'
+                data_store.to_csv(econ_storage_path+store_metric_filepaths[filecount+1], index=False)
+                filecount+=2
 
         # Drop data columns to allow those for next intervention to be added
         data_store = data_store.drop(sim_cols, axis=1)
@@ -306,7 +315,7 @@ def create_economics_metric_files(rme_files_path, nsims, nbatches,
         # Add to record key data for cost modelling
         id_key_n_col = id_key_df.shape[1]
 
-        id_key_df.insert(id_key_n_col, "results_filename", np.repeat(iv_filename, (n_scens_id,)))
+        id_key_df.insert(id_key_n_col, "results_filename", np.repeat('ID'+str(iv_id)+'_'+base_met_filename, (n_scens_id,)))
         id_key_df.insert(id_key_n_col+1,"number_of_species", np.ones((n_scens_id,))*6)
         id_key_df.insert(id_key_n_col+2, "start_year", np.repeat(start_year, (n_scens_id,)))
         id_key_df.insert(id_key_n_col+3, "end_year", np.repeat(end_year, (n_scens_id,)))
@@ -314,14 +323,11 @@ def create_economics_metric_files(rme_files_path, nsims, nbatches,
         id_key_df = id_key_df.rename(columns={'number of corals':'number_of_1YO_corals','intervention id':'ID', 'year':'intervention_years'})
 
         id_key_df_store = pd.concat([id_key_df_store, id_key_df])
-
-    # Save intervention key for generating cost data file for saved intervention and cf files
-    id_filename = ".\\intervention_keys\\intervention_ID_key_"+rme_files_path.split("\\")[-1]+"_run"
-    ecol_id_filename = ".\\intervention_keys\\intervention_rep_idx_"+rme_files_path.split("\\")[-1]+"_run"
+        metric_filepaths[iv_idx] = store_metric_filepaths
 
     for i_core in range(ncores):
         id_key_df_store.to_csv(id_filename+str(i_core)+".csv")
-        store_ecol_ids_df = pd.DataFrame(store_ecol_ids[nbatches*i_core:nbatches*(i_core+1)], columns=[str(id) for id in intervention_ids])
+        store_ecol_ids_df = pd.DataFrame(store_ecol_ids[nbatches*i_core:nbatches*(i_core+1), :], columns=[str(id) for id in intervention_ids])
         store_ecol_ids_df.to_csv(ecol_id_filename+str(i_core)+".csv")
 
-    return rme_files_path.split("\\")[-1]
+    return rme_files_path.split("\\")[-1], metric_filepaths

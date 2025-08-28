@@ -40,13 +40,53 @@ def para_sample_econ(rme_files_path, nsims, ncores=5, uncertainty_dict=prd.defau
     nbatches = math.ceil(nsims/ncores)
 
     # Create metric datafiles for economics modelling and extract filename for intervention key
-    int_keys_fn = prd.create_economics_metric_files(rme_files_path, nsims, nbatches, ncores=ncores,
+    # Files are created separately for each core (as a large number of runs can cause memory issues
+    # when calculating metrics due to handling large metrics datacubes)
+    int_keys_fn, metric_filepaths = prd.create_economics_metric_files(rme_files_path,
+                                                    nsims, nbatches, ncores=ncores,
                                                     metrics=metrics, max_dist=max_dist,
                                                     uncertainty_dict=uncertainty_dict,
                                                     economics_spatial_filepath=economics_spatial_filepath,
-                                                    econ_storage_path=econ_storage_path)
+                                                     econ_storage_path=econ_storage_path)
+
+    # Post process metrics to be in single file
+    for filepaths in metric_filepaths:
+        for filetype in ["intervention", "counterfactual"]:
+            file_list = [fn for fn in filepaths if filetype in fn]
+            post_process_metrics(file_list, metrics, nsims, nbatches)
 
     return int_keys_fn, nbatches
+
+def post_process_metrics(metric_filepaths, metrics, nsims, nbatches):
+    """
+    When running multiple cores for cost sampling, metrics calculations are also broken into batches
+    to avoid memory issues when creating large metrics datacubes (have shape nsims*nyears*nreefs)
+
+    Parameters
+    ----------
+        metric_filepaths : list{string}
+            List of all filepaths where metrics are saved.
+        metrics : list{function}
+            List of metric functions which were calculated.
+        nsims : int
+            Total number of simulations runs
+        nbatches : int
+            Number of samples per core run
+    """
+    init_metric_df = pd.read_csv('./econ_outputs/'+metric_filepaths[0])
+    sim_cols = ["sim_"+str(i) for i in range(1, nsims+1)]
+    metric_df = pd.DataFrame(np.zeros((init_metric_df.shape[0], nsims), dtype=np.float64), columns = sim_cols)
+    metric_df = pd.concat((init_metric_df[init_metric_df.columns[0:19]], metric_df), axis=1)
+
+    for metric_f in metrics:
+        file_list = [fn for fn in metric_filepaths if metric_f.__name__  in fn]
+        save_fn = file_list[0][:-11]+".csv"
+
+        for (idx_met, metrics_file) in enumerate(file_list):
+            met_temp = pd.read_csv('./econ_outputs/'+metrics_file)
+            metric_df.iloc[:, idx_met*nbatches+19:idx_met*nbatches+19+nbatches] = met_temp.iloc[:, 19:nbatches+19]
+            metric_df.to_csv('./econ_outputs/'+save_fn, index=False)
+
 
 def calc_costs_para(iter_id, int_keys_fn, n_sims, deploy_model_filepath=config["deploy_model_filepath"],
                                 prod_model_filepath=config["prod_model_filepath"],

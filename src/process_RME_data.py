@@ -85,7 +85,7 @@ def create_base_economics_dataframe(regions_data, reef_spatial_data, years):
     data_store = pd.concat([data_store, pd.DataFrame(np.repeat(regions_data, len(years), axis=0), columns = regions_data.columns)], axis=1)
 
     # Add UNIQUE ID to regions data to allow cross-referencing for estimating reef distance to port
-    regions_data["UNIQUE_ID"] = reef_spatial_data["UNIQUE_ID"]
+    regions_data.loc[:, "UNIQUE_ID"] = reef_spatial_data["UNIQUE_ID"]
 
     return data_store, regions_data
 
@@ -269,7 +269,7 @@ def create_economics_metric_files(rme_files_path, nsims, nbatches,
         iv_reefs = sum([iv_dict[reefset_name] for reefset_name in reefset_names], [])
 
         # Year relative starts at 0 on the first year of intervention
-        data_store["year_relative"] = data_store["year_absolute"] - (min(scens_df_iv["year"]) + 1)
+        data_store.loc[:, "year_relative"] = data_store["year_absolute"] - (min(scens_df_iv["year"]) + 1)
 
         # Scenario ids for CF and counterfactual
         iv_scens = unique_iv_scens[(iv_idx*n_reps):(iv_idx*n_reps)+n_reps]
@@ -322,7 +322,11 @@ def create_economics_metric_files(rme_files_path, nsims, nbatches,
         id_key_df.insert(id_key_n_col+4, "climate_model", scens_df_iv["GCM name"].values)
         id_key_df = id_key_df.rename(columns={'number of corals':'number_of_1YO_corals','intervention id':'ID', 'year':'intervention_years'})
 
-        id_key_df_store = pd.concat([id_key_df_store, id_key_df])
+        if id_key_df_store.empty:
+            id_key_df_store = id_key_df
+        else:
+            id_key_df_store = pd.concat([id_key_df_store, id_key_df])
+
         metric_filepaths[iv_idx] = store_metric_filepaths
 
     for i_core in range(ncores):

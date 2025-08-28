@@ -98,10 +98,6 @@ def factors_dataframe_update(nsims):
             Factor specification for sampling factors in the production cost model.
         factors_df_prod : dataframe
             Sampled factors dataframe for the production cost model
-        nfactors : int
-            Min number of factors in models.
-        N : int
-            Number of simulations to input to Sobol sampling to achieve approx nsims draws
     """
 
     # Sample deployment model factors
@@ -122,7 +118,7 @@ def factors_dataframe_update(nsims):
     factors_df_dep = convert_factor_types(factors_df_dep, factor_specs_dep.is_cat)
     factors_df_prod = convert_factor_types(factors_df_prod, factor_specs_prod.is_cat)
 
-    return factor_specs_dep, factors_df_dep.iloc[0:N*K], factor_specs_prod, factors_df_prod.iloc[0:N*K], nfactors, N
+    return factor_specs_dep, factors_df_dep.iloc[0:N*K], factor_specs_prod, factors_df_prod.iloc[0:N*K]
 
 def update_factors(factors_df_dep, factors_df_prod, ID_key, ecol_idx, nsims):
     """
@@ -228,14 +224,14 @@ def calculate_costs(ID_key_fn, nsims, deploy_model_filepath=config["deploy_model
 
         cost_df = initialise_cost_df(int_years, nsims)
 
-        factor_specs_dep, factors_df_dep, factor_specs_prod, factors_df_prod, nfactors, N = factors_dataframe_update(nsims)
+        factor_specs_dep, factors_df_dep, factor_specs_prod, factors_df_prod= factors_dataframe_update(nsims)
 
         for int_yr in int_years:
             # Add key intervention parameters for year to dataframe as constants
             factors_df_dep, factors_df_prod = update_factors(factors_df_dep, factors_df_prod, ID_key.loc[(ID_key.intervention_years==int_yr)&scen_idx, ["number_of_1YO_corals", "distance_to_port_NM", "number_of_species", "rep"]], ecol_ids, nsims)
 
-            factors_df_dep = sample_deployment_cost(deploy_model_filepath, factors_df_dep, factor_specs_dep, N, n_factors=nfactors)
-            factors_df_prod = sample_production_cost(prod_model_filepath, factors_df_prod, factor_specs_prod, N, n_factors=nfactors)
+            factors_df_dep = sample_deployment_cost(deploy_model_filepath, factors_df_dep, factor_specs_dep)
+            factors_df_prod = sample_production_cost(prod_model_filepath, factors_df_prod, factor_specs_prod)
 
             if int_yr>min(int_years):
                 # Save calculated operational costs
@@ -251,12 +247,10 @@ def calculate_costs(ID_key_fn, nsims, deploy_model_filepath=config["deploy_model
                     factors_df_dep.loc[factors_df_dep['num_devices']<=0, "setupCost"] = 0
 
                 if any(factors_df_dep['num_devices'].values[0:nsims]>0):
-                    # This will make the new number of samples equal to the number of scenarios with num_devices>0
-                    N_new = sum(factors_df_dep['num_devices']>0)/(2 * nfactors + 2)
 
                     # If deploying more than last year, recalculate setup cost for only those additional corals
-                    factors_df_dep_new = sample_deployment_cost(deploy_model_filepath, factors_df_dep.loc[factors_df_dep['num_devices']>0,:], factor_specs_dep, N_new, n_factors=nfactors)
-                    factors_df_prod_new = sample_production_cost(prod_model_filepath, factors_df_prod.loc[factors_df_dep['num_devices']>0,:], factor_specs_prod, N_new, n_factors=nfactors)
+                    factors_df_dep_new = sample_deployment_cost(deploy_model_filepath, factors_df_dep.loc[factors_df_dep['num_devices']>0, :], factor_specs_dep)
+                    factors_df_prod_new = sample_production_cost(prod_model_filepath, factors_df_prod.loc[factors_df_dep['num_devices']>0, :], factor_specs_prod)
 
                     # Replace orginally calculated setup costs with updated setup costs
                     factors_df_prod.loc[factors_df_dep['num_devices']>0, "setupCost"] = factors_df_prod_new["setupCost"]

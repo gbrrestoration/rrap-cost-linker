@@ -5,7 +5,7 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "cost-model-queries>=0.0.9",
+    "cost-model-queries==0.0.12",
     "geopandas>=1.0.1",
     "netcdf4>=1.7.2",
     "numpy>=2.2.4",

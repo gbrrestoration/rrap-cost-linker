@@ -11,7 +11,7 @@ production,Conversions,freeswim_settle,11,10,0.7,0.9,FALSE
 production,Conversions,settle_just,12,11,0.7,0.9,FALSE
 production,Conversions,just_unit,14,11,6,9,TRUE
 production,Conversions,just_mature,14,15,0.7,0.9,FALSE
-production,Conversions,1YOEC_yield,19,18,0.6,0.8,FALSE
+production,Conversions,1YOEC_yield,19,18,0.7,0.8,FALSE
 production,Logistics,optimal_rear_dens,11,5,1,3,TRUE
 deployment,Dashboard,setupCost,11,11,1000,1000000,FALSE
 deployment,Dashboard,Cost,6,11,1000,1000000,FALSE
@@ -20,10 +20,10 @@ deployment,Dashboard,port,6,4,0,4,TRUE
 deployment,Dashboard,DAJ_a_r,9,4,9,10,TRUE
 deployment,Dashboard,DAJ_c_s,10,4,1,2,TRUE
 deployment,Dashboard,deck_space,13,4,39,40,FALSE
-deployment,Lookup Tables,cape_ferg_price,19,7,12500,13500,FALSE
-deployment,Lookup Tables,ship_endurance,19,15,13,15,TRUE
+deployment,Lookup Tables,cape_ferg_price,23,7,6000,8000,FALSE
+deployment,Lookup Tables,ship_endurance,23,15,13,15,TRUE
 deployment,Lookup Tables,distance_from_port,54,8,1,210,FALSE
-deployment,Conversions,1YOEC_yield,25,5,0.6,0.8,FALSE
+deployment,Conversions,1YOEC_yield,25,5,0.7,0.8,FALSE
 deployment,Logistics,secs_per_dev,84,6,0,1,TRUE
 deployment,Logistics,proportion,84,9,0.5,0.55,FALSE
 deployment,Logistics,bins_per_tender,83,9,4,6,TRUE

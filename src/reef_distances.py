@@ -51,7 +51,7 @@ def find_representative_reefs(iv_reef_spatial, regions_data, max_dist = 25.0):
     c_mat = fclusterdata(X, t=max_dist, metric=haversine, criterion='distance')
 
     # Find distance to port for each intervention reef
-    iv_reef_spatial["distance_to_port_NM"] = np.zeros((iv_reef_spatial.shape[0],))
+    iv_reef_spatial = iv_reef_spatial.assign(distance_to_port_NM = np.zeros((iv_reef_spatial.shape[0],)))
 
     for reef in iv_reef_spatial["UNIQUE_ID"].values:
         iv_reef_spatial.loc[iv_reef_spatial["UNIQUE_ID"]==reef, "distance_to_port_NM"] = (regions_data.loc[regions_data["UNIQUE_ID"]==reef,["minimum_distance_to_nearest_port_m"]].iloc[0]*0.00053996).minimum_distance_to_nearest_port_m # Convert to nautical miles
@@ -85,7 +85,7 @@ def find_max_reef_distance(reef_spatial_data, regions_data, iv_reefs, max_dist =
     if len(iv_reefs)>1:
         representative_reefs, rep_reefs_max_dist = find_representative_reefs(iv_reef_spatial, regions_data, max_dist = max_dist)
 
-            # Find cluster which is closest to port and set distance to port as distance to this reef
+        # Find cluster which is closest to port and set distance to port as distance to this reef
         cl_idx_sort = np.argsort(rep_reefs_max_dist)
         initial_dist_from_port = rep_reefs_max_dist[cl_idx_sort[0]]
 
@@ -94,12 +94,14 @@ def find_max_reef_distance(reef_spatial_data, regions_data, iv_reefs, max_dist =
 
         # Calculate distances between representative reefs from the closest to port reef to furthest
         rep_reef_spatial = reef_spatial_data.loc[reef_spatial_data["GBRMPA_ID"].isin(rep_reefs_sort)]
+
         X = rep_reef_spatial[["LON","LAT"]].values
         rep_reef_dist_mat = distance_matrix(X, X)
 
         total_dist = initial_dist_from_port
         for dist_idx in range(rep_reef_dist_mat.shape[1]-1):
             total_dist += rep_reef_dist_mat[dist_idx, dist_idx+1]
+
     else:
         rep_reefs_sort = [iv_reefs[0], iv_reefs[0]]
         total_dist = (regions_data.loc[regions_data["UNIQUE_ID"]==iv_reef_spatial["UNIQUE_ID"].values[0], ["minimum_distance_to_nearest_port_m"]].iloc[0]).minimum_distance_to_nearest_port_m # Convert to nautical miles

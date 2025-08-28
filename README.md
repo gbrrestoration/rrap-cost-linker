@@ -2,6 +2,8 @@
 
 [![Documentation Status](https://readthedocs.org/projects/cost-eco-model-linker/badge/?version=latest)](https://cost-eco-model-linker.readthedocs.io/en/latest/?badge=latest)
 
+![economics_modelling_flowchart](economics_flow_chart.png)
+
 A python library for generating input files for the CREAM economics analysis suite, using result sets from ReefModEngine.jl and sampling the intervention cost models using the cost_model_queries package.
 
 ### Sampled metrics output files
@@ -17,10 +19,11 @@ Cost-eco-model-linker generates sampled cost output files for each of the interv
 
 ### Configuration files
 
-Two configuration files are required for the cost model sampling component of this repository. A `config.csv' file is required to designate the names, types and positions of cost model parameters, such as in the example below:
+Two configuration files are required for the cost model sampling component of this repository. A `config.csv` file is required to designate the names, types and positions of cost model parameters, such as in the example below:
 
 ![config_ex](docs/source/config_file_ex.png)
 
-Another config.json file specifies "deploy_model_filepath" and "deploy_prod_filepath" which are the filepaths to the deployment and production cost models respectively.
+Another `config.json` file specifies "deploy_model_filepath" and "deploy_prod_filepath" which are the filepaths to the deployment and production cost models respectively.
 
 #### See the full docs for environment set up, examples, and descriptions of the cost and ecological modelling.
+

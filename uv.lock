@@ -164,7 +164,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "cost-model-queries", specifier = ">=0.0.9" },
+    { name = "cost-model-queries", specifier = "==0.0.12" },
     { name = "geopandas", specifier = ">=1.0.1" },
     { name = "netcdf4", specifier = ">=1.7.2" },
     { name = "numpy", specifier = ">=2.2.4" },
@@ -177,7 +177,7 @@ requires-dist = [
 
 [[package]]
 name = "cost-model-queries"
-version = "0.0.11"
+version = "0.0.12"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "matplotlib" },
@@ -188,9 +188,9 @@ dependencies = [
     { name = "seaborn" },
     { name = "statsmodels" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/5c/f5/b398c578a265af68303bbf0c77dfd36b49f8d28666423fd8a278d79c12c2/cost_model_queries-0.0.11.tar.gz", hash = "sha256:692983b3ac326ff1ccdd1050228d295c01956464c90c5c0eed8f9a2598f7bbf3", size = 73370 }
+sdist = { url = "https://files.pythonhosted.org/packages/2a/35/9e44f929dd08ec91b63b8a3d58d2898e4c98e2a30c0c484fc68a0e9fd08f/cost_model_queries-0.0.12.tar.gz", hash = "sha256:d6d11a83f38b54033bb3d278d4d0f955fe796a2228382041ca9dc91abc533ffb", size = 72915 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/c4/89/b12bfa3295a5af7e1adac1ae56ca3fab62b5f021269ec2ed8d07f174bc51/cost_model_queries-0.0.11-py3-none-any.whl", hash = "sha256:0b63aa5976ac0bcdcd1a65fae30c09d2cf32cb811a275d73f2ebc5e4e552a1a6", size = 39952 },
+    { url = "https://files.pythonhosted.org/packages/35/db/62c9a1d7c5c0615548929f032a35fbe86aca471e40cdebccd1c653e3f74e/cost_model_queries-0.0.12-py3-none-any.whl", hash = "sha256:5e3f7ed39c73ab976edf3cf0dc1ad0abd3cfa56ba39f6cc15569add7bff975c8", size = 39631 },
 ]
 
 [[package]]

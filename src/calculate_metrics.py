@@ -9,9 +9,10 @@ def default_uncertainty_dict():
     what sources of uncertainty are sampled when calculating metrics.
 
     Returns
-    ----------
+    -------
         uncertainty_dict : dict
             Contains information on what uncertainty types to sample.
+
         - ecol_uncert : int (0 or 1)
             If 1 includes ecological uncertainty by sampling metrics over climate replicates, if 0 just uses
             mean of metrics over climate replicates.

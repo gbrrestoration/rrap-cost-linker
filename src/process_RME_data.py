@@ -112,7 +112,8 @@ def rci(metrics_dict, metrics_df, rci_threshold=0.6):
             Dict containing key sampled metrics and the RCI
         metrics_df : dataframe
             Dataframe containing scenario summary dataframe
-        rci_threshold : RCI threshold above which to calculate area saved for.
+        rci_threshold : float
+            RCI threshold (in (0.0, 1.0)) above which to calculate area saved for.
     """
     rci = metrics_dict["RCI"]
     rci[rci >= rci_threshold] = 1
@@ -146,7 +147,8 @@ def rfi(metrics_dict, metrics_df, rfi_thresholds=[0.74, 29.91]):
             Dict containing key sampled metrics and the RFI
         metrics_df : dataframe
             Dataframe containing scenario summary dataframe
-        rfi_thresholds : RFI thresholds (min and max fish biomass)
+        rfi_thresholds : float
+            RFI thresholds (min and max fish biomass)
     """
     rfi = metrics_dict["RFI"]
     rfi[rfi < rfi_thresholds[0]] = rfi_thresholds[0]

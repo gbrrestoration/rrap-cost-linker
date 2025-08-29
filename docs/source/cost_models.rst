@@ -3,10 +3,17 @@ Cost Models
 
 The cost modelling used to calculate intervention costs are Excel-based models developed by the RRAP Translation to
 Deployment team. The models to sample need to be downloaded and added to the `cost_models` folder to be accessible by
-the functions in this library. They also require two key configuration files to be placed in the `src` folder.
+the functions in this library. The current latest versions of the cost models that `Cost-eco-model-linker` is compatible
+with are:
 
-The file 'config.csv' is a configuration file for sampling the cost model parameters and describes the
-names, excel spreadsheet positions and ranges of parameters to sample from the cost models. An example of
+- Coral Aquaculture Deployment : "3.5.5 CA Deployment Model.xlxs"
+- Coral Aquaculture Production : "3.7.0 CA Production Model.xlxs"
+
+Configuration files
+-------------------
+
+Sampling the cost models requires two key configuration files to be placed in the `src` folder. The file 'config.csv' is a configuration file for sampling the cost model parameters and describes the
+names, spreadsheet cell positions and sampling ranges of parameters to sample from the cost models. An example of
 this file is below:
 
 .. image:: config_file_ex.png
@@ -22,11 +29,11 @@ the file must include the following columns:
     * `range_lower`, `range_upper` : the upper and lower bounds for sampling the parameter.
     * `is_cat` : a flag designating whether the parameter is categorical or not.
 
-At minimum, `config.csv` should include info for `setupCost` and `Cost` parameters for both the `production` and
+The `config.csv` should include info for `setupCost` and `Cost` parameters for both the `production` and
 `deployment` models, parameters which are used to extract the setup (CAPEX) and operational (OPEX) cost
 respectively for a given intervention.
 
-The other configuration file, `config.json` specifies the path to the cost model excel documents. For example:
+The other configuration file, `config.json` specifies the path to the cost models. For example:
 
 .. literalinclude:: config.json
   :language: JSON
@@ -64,6 +71,7 @@ through consultation with the Translation to Deployment Team and sensitivity ana
 
 Sampling the cost models
 ------------------------
+
 The Excel-based cost models give CAPEX and OPEX costs of the production and deployment stages of outplanting corals, for a
 particular input deployment volume, number of species, distance from port to the deployment reef, and other factors.
 These are sampled using functions developed in the `cost_model_queries` python package
@@ -72,6 +80,7 @@ documentation for this package : `<https://cost-model-queries.readthedocs.io/en/
 
 Cost model samples output file
 ------------------------------
+
 The output files for the cost sampling include 11 cost codes for each intervention year and simulation which are used by CREAM.
 These are described in the following table:
 
@@ -99,10 +108,10 @@ corals planned for outplanting compared to the previous year. For example, if 10
 200,000 in the second year and 200,000 in the third year, the setup costs are $X, $X and $0 respectively. The operational
 costs are calculated the same regardless of the year. These year by year cost differences for setup cost are not specified
 in the Excel models, but are dealt with in the functions :meth:`cost_calculations.update_setupcost_factors` and
-:meth:`cost_calculations.calculate_costs`. It particular, for years greater than the first intervention year, the costs are sampled
-first normally to extract the operational cost. Then the difference in number of corals between the current and previoous years is calculated.
-For differences less than or equal to 0, the setup cost is set to zero. For differences in number of corals greater than zero,
-the cost is resampled and just the setup cost is saved.
+:meth:`cost_calculations.calculate_costs`. In particular, for years greater than the first intervention year, the costs are sampled
+first using the total number of outplants to extract the operational cost. Then the difference in number of corals between the current
+and previous year is calculated. For differences less than or equal to 0, the setup cost is set to zero. For differences in number of corals greater than zero,
+the cost is resampled for the difference in number of corals and just the setup cost is updated.
 
 Calculating distance to port for multiple reefs
 -----------------------------------------------

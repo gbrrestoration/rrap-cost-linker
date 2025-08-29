@@ -15,19 +15,23 @@ The following is an example metrics summary file generated to input to CREAM, fo
    :header-rows: 1
    :file: interventionID_ecol0_intervention_var_rci.csv
 
-A file such as the above is generated for `each intervention run`, i.e. for each unique combination of climate model, deployment
-volume, enhancement level, deployment years etc. run in ReefModEngine.jl. The outputs in the columns `sim_1`, `sim_2` etc.
-represent different draws for the same intervention scenario. Each draw may sample ecological, expert and other forms of
+A file such as the above is generated for `each intervention run`, i.e. for each unique combination of deployment
+volume, enhancement level, deployment years etc. run in ReefModEngine.jl. Unique files are also generated for each metric and for each counterfactual
+and intervention. For example, if one intervention is run for 3 metrics (RCI, RTI, RFI), 6 files will be generated.
+
+The outputs in the columns `sim_1`, `sim_2` etc.
+represent different draws for the same intervention scenario, which can be across multiple climate models. Each draw may sample ecological, expert and other forms of
 uncertainty depending on the uncertainty settings when the files were generated (see :meth:`calculate_metrics.default_uncertainty_dict`).
 The other columns summarize key information such year, year relative to the first intervention year, reef name,
 distance to port and other spatial information.
 
 Each intervention is identifiable through an intervention ID captured in the file name. For a set of runs, an intervention
-ID key file (as a CSV) is also generated, which links key intervention parameters to an intervention ID. An example intervention ID
-key file is included below. Note that the number of 1YO corals reported is the actual number of outplants used in the RME, so it varies
+ID key file (as a CSV) is also generated and saved in `intervention_keys`, which links key intervention parameters to an intervention ID.
+An example intervention ID key file is included below. Note that the number of 1YO corals reported is the actual number of outplants recorded in `ReefModEngine.jl`, so it varies
 slightly between climate model replicates, while the input value for deployment volume will not vary for the same intervention ID.
-The functions here treat the varying number of outplants for a single intervention as a stochastic sample for that interventionin the
-cost model sampling.
+The functions here treat the varying number of outplants for a single intervention as a stochastic sample for that intervention in the
+cost model sampling. The intervention ID key files are necessary to assure scenario sampling matches between the cost and metrics samples,
+but also for future reference as a record of the intervention scenarios which are run for a particular set of economics input files.
 
 .. csv-table:: Example economics metrics input file
    :header-rows: 1
@@ -35,6 +39,7 @@ cost model sampling.
 
 Cost summary file structure
 ---------------------------
+
 The cost files generated have the stucture shown in the example below. The `component` column refers to 11 key cost codes:
     1. CAPEX - sum of production and deployment cost
     2. Contingency CAPEX - % of CAPEX
@@ -51,7 +56,8 @@ The cost files generated have the stucture shown in the example below. The `comp
 Each of the columns `draw1`, `draw2` etc refer to unique samples drawn from the cost models for a particular
 intervention scenario by varying key cost model parameters (specified in `config.csv`). The cost files and
 metric summary files are linked by their intervention ID, as described in the intervention ID key file generated
-when the metric summary files are produced.
+when the metric summary files are produced. Cost files are only generated for the intervention scenarios as counterfactual
+scenario will have zero cost, so for a given unique intervention ID, one cost file is generated.
 
 .. csv-table:: Example intervention ID key file
    :header-rows: 1

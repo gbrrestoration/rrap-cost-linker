@@ -128,7 +128,8 @@ def indicator_params(result_set, scen_ids, uncertainty_dict=default_uncertainty_
 
     return maxcoraljuv, sheltervolume_parameters, rci_crit, rti_intercept, intercept1, intercept2, slope1, slope2
 
-def reef_condition_rme(results_data, scen_ids, ecol_uncert, sheltervolume_parameters, rci_crit, maxcoraljuv, nsims):
+def reef_condition_rme(results_data, scen_ids, ecol_uncert, sheltervolume_parameters, rci_crit, maxcoraljuv, nsims,
+                       criteria_threshold = 0.6, cots_outbreak_threshold = 1500.0):
     """
     Calculates reef condition for a set of scenarios in the provided ReefModEngine.jl results_data.
 
@@ -150,6 +151,10 @@ def reef_condition_rme(results_data, scen_ids, ecol_uncert, sheltervolume_parame
             Max juveniles baseline (can be included instead of using hindcasting baseline).
         nsims : int
             Number of simulations to sample
+        criteria_threshold : float
+            Threshold for how many metrics meet the criteria for a particular reef category to be satisfied,
+        cots_outbreak_threshold : float
+            Number of CoTS per km2 to classify as outbreak
 
     Returns
     -------
@@ -158,13 +163,10 @@ def reef_condition_rme(results_data, scen_ids, ecol_uncert, sheltervolume_parame
         metrics_dict : np.array
             Structure containing each of the metrics comprising the RCI, each arrays of size (nsims, nreefs, nyears).
     """
-    # Settings
-    criteria_threshold = 0.6 # threshold for how many criteria need to be met for category to be satisfied.
-    cots_outbreak_threshold = 0.2 # number of CoTS per manta tow to classify as outbreak
     n_metrics = 5 # see below for metrics implemented
 
     if ecol_uncert == 0: # If we don't want eco model uncertainty, take mean of nsims
-        cots = np.mean(results_data["cots"][scen_ids, :, :], axis=0)
+        cots = np.mean(results_data["cots"][scen_ids, :, :], axis=0)/0.01 # convert to km2 from hectare
         coral_cover_per_taxa = np.mean(results_data["total_taxa_cover"], axis=0)
         # data.nb_coral_adol = np.mean(F.nb_coral_adol, axis=0)
         # data.nb_coral_adult = np.mean(F.nb_coral_adult, axis=0)
@@ -175,7 +177,7 @@ def reef_condition_rme(results_data, scen_ids, ecol_uncert, sheltervolume_parame
 
     if ecol_uncert == 1: # If we want eco model uncertainty, sample from reefmod simulations
         curr_eco_sim = random.choices(scen_ids, k=nsims)
-        cots = results_data["cots"][curr_eco_sim, :, :]
+        cots = results_data["cots"][curr_eco_sim, :, :]/0.01 # convert to km2 from hectare
         coral_cover_per_taxa = results_data["total_taxa_cover"][curr_eco_sim, :, :, :]
         nb_coral_juv = results_data["nb_coral_juv"][curr_eco_sim, :, :]
         rubble = results_data["rubble"][curr_eco_sim, :, :]
@@ -275,7 +277,8 @@ def rfi_rme(total_cover, intercept1, slope1, intercept2, slope2):
     # Calculate total fish biomass, kg km2, 0.01 coefficient is to convert from kg ha to kg km2
     return 0.01*(intercept2 + slope2*(intercept1 + slope1*total_cover*100))
 
-def indicator_master(result_set, scen_ids, nsims, uncertainty_dict=default_uncertainty_dict()):
+def indicator_master(result_set, scen_ids, nsims, uncertainty_dict=default_uncertainty_dict(),
+                     criteria_threshold=0.6, cots_outbreak_threshold=1500.0):
     """
     Calculates indicator metrics for a set of scenarios in the provided ReefModEngine.jl results_data.
 
@@ -287,6 +290,10 @@ def indicator_master(result_set, scen_ids, nsims, uncertainty_dict=default_uncer
             Contains information of which types of uncertainty to sample when processing metrics.
         nsims : int
             Number of simulations to sample
+        criteria_threshold : float
+            Threshold for how many metrics meet the criteria for a particular reef category to be satisfied,
+        cots_outbreak_threshold : float
+            Number of CoTS per km2 to classify as outbreak
 
     Returns
     -------
@@ -298,13 +305,15 @@ def indicator_master(result_set, scen_ids, nsims, uncertainty_dict=default_uncer
     maxcoraljuv, sheltervolume_parameters, rci_crit, rti_intercept, intercept1, intercept2, slope1, slope2 = indicator_params(result_set, scen_ids, uncertainty_dict=uncertainty_dict)
 
     # Calculate RCI and ecological indicators
-    ecol_indicators, ecol_sample_ids = reef_condition_rme(result_set, scen_ids, uncertainty_dict["ecol_uncert"], sheltervolume_parameters, rci_crit, maxcoraljuv, nsims)
+    ecol_indicators, ecol_sample_ids = reef_condition_rme(result_set, scen_ids, uncertainty_dict["ecol_uncert"], sheltervolume_parameters, rci_crit, maxcoraljuv, nsims,
+                                                          criteria_threshold=criteria_threshold, cots_outbreak_threshold=cots_outbreak_threshold)
     ecol_indicators["RTI"] = rti_rme(ecol_indicators, rti_intercept)
     ecol_indicators["RFI"] = rfi_rme(ecol_indicators["total_cover"], intercept1, slope1, intercept2, slope2)
 
     return ecol_indicators, ecol_sample_ids
 
-def extract_metrics(results_data, scen_ids, nsims, uncertainty_dict=default_uncertainty_dict()):
+def extract_metrics(results_data, scen_ids, nsims, uncertainty_dict=default_uncertainty_dict(),
+                    criteria_threshold=0.6, cots_outbreak_threshold=1500.0):
     """
     Calculates indicator metrics for a set of scenarios in the provided ReefModEngine.jl results_data and
     saves in a summary array of size (nsims, nreefs*nyears), suitable to be saved in the economics dataframe
@@ -320,6 +329,10 @@ def extract_metrics(results_data, scen_ids, nsims, uncertainty_dict=default_unce
             Number of simulations to sample
         uncertainty_dict : dict
             Contains information of which types of uncertainty to sample when processing metrics.
+        criteria_threshold : float
+            Threshold for how many metrics meet the criteria for a particular reef category to be satisfied,
+        cots_outbreak_threshold : float
+            Number of CoTS per km2 to classify as outbreak
 
     Returns
     -------
@@ -338,9 +351,9 @@ def extract_metrics(results_data, scen_ids, nsims, uncertainty_dict=default_unce
     num_reefs = len(results_data['locations'][:])
     m = num_reefs*num_years
 
-    ecol_indicators, ecol_sample_ids = indicator_master(results_data, scen_ids, nsims, uncertainty_dict=uncertainty_dict)
+    ecol_indicators, ecol_sample_ids = indicator_master(results_data, scen_ids, nsims, uncertainty_dict=uncertainty_dict,
+                                                        criteria_threshold=criteria_threshold, cots_outbreak_threshold=cots_outbreak_threshold)
 
-    #save_metrics = np.zeros((nsims, m, len(ecol_indicators)))
     # Extract outputs and convert to long-form format, then save
     for m_key in ecol_indicators:
         ecol_indicators[m_key] = np.reshape(ecol_indicators[m_key][:, :, 0:num_years], (nsims, m))

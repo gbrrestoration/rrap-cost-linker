@@ -188,7 +188,9 @@ def create_economics_metric_files(rme_files_path, nsims, nbatches=None,
                                 metrics = [rci, raw_rti, rfi],
                                 max_dist = 25.0,
                                 economics_spatial_filepath='.//datasets//econ_spatial.csv',
-                                econ_storage_path=".//econ_outputs//"):
+                                econ_storage_path=".//econ_outputs//",
+                                criteria_threshold=0.6,
+                                cots_outbreak_threshold=1500.0):
     """
     Main function for creating metric file summarys for input to economics modelling.
 
@@ -298,8 +300,10 @@ def create_economics_metric_files(rme_files_path, nsims, nbatches=None,
 
         for i_core in range(ncores):
             # Extract metrics for intervention and counterfactual scenarios
-            metrics_data_iv, ecol_ids = extract_metrics(results_data, iv_scens, nbatches, uncertainty_dict=uncertainty_dict)
-            metrics_data_cf, _ = extract_metrics(results_data, cf_scens, nbatches, uncertainty_dict=uncertainty_dict)
+            metrics_data_iv, ecol_ids = extract_metrics(results_data, iv_scens, nbatches, uncertainty_dict=uncertainty_dict,
+                                                        criteria_threshold=criteria_threshold, cots_outbreak_threshold=cots_outbreak_threshold)
+            metrics_data_cf, _ = extract_metrics(results_data, cf_scens, nbatches, uncertainty_dict=uncertainty_dict,
+                                                 criteria_threshold=criteria_threshold, cots_outbreak_threshold=cots_outbreak_threshold)
 
             # Result sampling ids to ignore counterfactuals in cost sampling
             ecol_ids[ecol_ids>=max(id_key_df["rep"])] = ecol_ids[ecol_ids>=max(id_key_df["rep"])]-max(id_key_df["rep"])

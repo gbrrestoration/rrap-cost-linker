@@ -182,9 +182,9 @@ def raw_rti(metrics_dict, metrics_df):
     """
     return np.transpose(metrics_dict["RTI"], (1, 0))
 
-def create_economics_metric_files(rme_files_path, nsims, nbatches,
+def create_economics_metric_files(rme_files_path, nsims, nbatches=None,
                                 uncertainty_dict=default_uncertainty_dict(),
-                                ncores=4,
+                                ncores=1,
                                 metrics = [rci, raw_rti, rfi],
                                 max_dist = 25.0,
                                 economics_spatial_filepath='.//datasets//econ_spatial.csv',
@@ -214,6 +214,9 @@ def create_economics_metric_files(rme_files_path, nsims, nbatches,
         id_filename : string
             Filename for ID key file, which links economics metrics
     """
+    # If nbatches not provided, set to nsims (calculate in one go rather than in sets of nbatches)
+    nbatches = nbatches if nbatches is not None else nsims
+
     # Load all relevant data
     regions_data = load_regions_data(economics_spatial_filepath)
 

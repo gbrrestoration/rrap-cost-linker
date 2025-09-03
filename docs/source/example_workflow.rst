@@ -26,8 +26,7 @@ to sample, metrics to calculate and other setting when generating the metrics ta
     # Number of sims for metrics sampling (default includes ecological and expert uncertainty in RCI calcs)
     nsims = 300
     # Create metric datafiles for economics modelling and extract filename for intervention key
-    # nbatches = nsims and ncores = 1 if not using parallelisation
-    int_keys_fn, filepaths = prd.create_economics_metric_files(rme_files_path, nsims, nsims, ncores=1)
+    int_keys_fn, filepaths = prd.create_economics_metric_files(rme_files_path, nsims)
 
 
 After creating the metric summary files for `CREAM`, the cost files can be created by sampling the cost models
@@ -65,6 +64,11 @@ This can be done using the following code:
 
     # Create economics metrics input files, get number of batches needed to complete nsims over ncores
     int_keys_fn, nbatches = pc.para_sample_econ(rme_files_path, nsims, ncores=ncores)
+
+    # Delete global variables which cause memory errors when running parallelised cost sampling
+    for var in list(globals().keys()):
+        if var not in [ 'pc', 'mp', 'int_keys_fn', 'nsims', 'ncores', 'nbatches', '__name__', '__builtins__','__spec__']:
+            del globals()[var]
 
     # Run cost sampling in parallel on ncores
     if __name__ == "__main__":

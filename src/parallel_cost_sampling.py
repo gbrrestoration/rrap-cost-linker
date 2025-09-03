@@ -44,7 +44,7 @@ def para_sample_econ(rme_files_path, nsims, ncores=5, uncertainty_dict=prd.defau
     # Files are created separately for each core (as a large number of runs can cause memory issues
     # when calculating metrics due to handling large metrics datacubes)
     int_keys_fn, metric_filepaths = prd.create_economics_metric_files(rme_files_path,
-                                                    nsims, nbatches, ncores=ncores,
+                                                    nsims, nbatches=nbatches, ncores=ncores,
                                                     metrics=metrics, max_dist=max_dist,
                                                     uncertainty_dict=uncertainty_dict,
                                                     economics_spatial_filepath=economics_spatial_filepath,

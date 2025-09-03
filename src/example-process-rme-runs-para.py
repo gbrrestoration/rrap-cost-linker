@@ -12,6 +12,11 @@ ncores = 5 # number of cores to use
 # Create economics metrics input files, get number of batches needed to complete nsims over ncores
 int_keys_fn, nbatches = pc.para_sample_econ(rme_files_path, nsims, ncores=ncores)
 
+# Delete global variables which cause memory errors when running parallelised cost sampling
+for var in list(globals().keys()):
+    if var not in [ 'pc', 'mp', 'int_keys_fn', 'nsims', 'ncores', 'nbatches', '__name__', '__builtins__','__spec__']:
+        del globals()[var]
+
 # Run cost sampling in parallel on ncores
 if __name__ == "__main__":
     pool = mp.Pool(ncores)

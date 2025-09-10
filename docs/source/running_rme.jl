@@ -15,7 +15,7 @@ target_reef_ids = ["16-071"]
 n_target_reefs = length(target_reef_ids)
 
 run_name = "Test Moore runs"       # Name to associate with this set of runs
-start_year = 2025
+start_year = 2007
 end_year = 2099
 years = collect(start_year:end_year)
 n_years = (end_year-start_year) + 1
@@ -34,7 +34,7 @@ result_store = ResultStore(start_year, end_year)
 gcm = @RME gcmName(1::Cint)::Cstring # Use first climate model
 
 iv_years = collect(2026:2030)
-n_corals_per_year = 1000000
+n_corals_per_year = 10000000
 
 reset_rme()  # Reset RME to clear any previous runs
 

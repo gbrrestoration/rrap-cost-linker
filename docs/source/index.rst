@@ -27,8 +27,8 @@ Contents
 --------
 .. toctree::
     environment_setup
-    generate_rme_results
-    example_workflow
-    metrics
     cost_models
+    generate_rme_results
+    metrics
     output_file_format
+    example_workflow

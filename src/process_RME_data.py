@@ -2,7 +2,7 @@ import netCDF4 as nc
 import pandas as pd
 import geopandas as gp
 import numpy as np
-import json
+import json, os
 
 from calculate_metrics import extract_metrics, default_uncertainty_dict
 from reef_distances import find_max_reef_distance
@@ -214,6 +214,7 @@ def create_economics_metric_files(rme_files_path, nsims, nbatches=None,
         id_filename : string
             Filename for ID key file, which links economics metrics
     """
+    rme_files_path = os.path.abspath(rme_files_path)
     # If nbatches not provided, set to nsims (calculate in one go rather than in sets of nbatches)
     nbatches = nbatches if nbatches is not None else nsims
 

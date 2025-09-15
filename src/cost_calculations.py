@@ -1,3 +1,5 @@
+from os.path import join as path_join
+
 import numpy as np
 import json
 import pandas as pd
@@ -206,11 +208,17 @@ def calculate_costs(ID_key_fn, nsims, deploy_model_filepath=config["deploy_model
         iter_id : int
             ID used for parallel sampling to keep track of batches for ordered recombination.
     """
-    ID_key = pd.read_csv( ".\\intervention_keys\\intervention_ID_key_"+ID_key_fn+"_run"+str(iter_id)+".csv")
-    ecol_ids_df = pd.read_csv( ".\\intervention_keys\\intervention_rep_idx_"+ID_key_fn+"_run"+str(iter_id)+".csv")
+    iv_keys = "./intervention_keys"
+    iv_ID_key = f"ID_key_{ID_key_fn}"
+    rep_idx_key = f"rep_idx_{ID_key_fn}"
+    _iter_id = str(iter_id)
+    run_id = f"run{_iter_id}"
 
-    deploy_model_filepath = deploy_model_filepath+str(iter_id)+".xlsx"
-    prod_model_filepath = prod_model_filepath+str(iter_id)+".xlsx"
+    ID_key = pd.read_csv(path_join(iv_keys, f"intervention_{iv_ID_key}_{run_id}.csv"))
+    ecol_ids_df = pd.read_csv(path_join(iv_keys, f"intervention_{rep_idx_key}_{run_id}.csv"))
+
+    deploy_model_filepath = deploy_model_filepath + f"{_iter_id}.xlsx"
+    prod_model_filepath = prod_model_filepath + f"{_iter_id}.xlsx"
 
     cost_filepaths = [""]*len(np.unique(ID_key.ID))
 

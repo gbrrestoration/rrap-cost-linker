@@ -1,3 +1,6 @@
+import os
+from os.path import join as path_join
+
 import netCDF4 as nc
 import pandas as pd
 import geopandas as gp
@@ -11,7 +14,7 @@ def load_reef_data():
     """
     Loads key reef spatial data.
     """
-    return gp.read_file(".\\datasets\\reefmod_gbr.gpkg")
+    return gp.read_file(path_join("./", "datasets", "reefmod_gbr.gpkg"))
 
 def load_regions_data(economics_spatial_filepath):
     """
@@ -48,11 +51,13 @@ def load_result_files(rme_files_path):
         iv_dict : dict
             Contains other key scenario info, such as whether the scenario is counterfactual or intervention.
     """
-    scens_df = pd.read_csv(rme_files_path+"\\iv_yearly_scenarios.csv") # intervention scenarios table
-    results_data = nc.Dataset(rme_files_path+"\\results.nc") # Metric results
+
+    # intervention scenarios table
+    scens_df = pd.read_csv(path_join(rme_files_path, "iv_yearly_scenarios.csv")
+    results_data = nc.Dataset(path_join(rme_files_path, "results.nc"))  # Metric results
 
     # Load struct with interventions data
-    with open(rme_files_path+'\\scenario_info.json', 'r') as file:
+    with open(path_join(rme_files_path, "scenario_info.json"), 'r') as file:
         iv_dict = json.load(file)
 
     return results_data, scens_df, iv_dict
@@ -256,8 +261,10 @@ def create_economics_metric_files(rme_files_path, nsims, nbatches=None,
     # Base filename for saving metrics
     base_met_filename = '_uncertainty_ecol'+str(uncertainty_dict["ecol_uncert"])+'_indicator'+str(uncertainty_dict["expert_uncert"])+'_var_'
     # Save intervention key for generating cost data file for saved intervention and cf files
-    id_filename = ".\\intervention_keys\\intervention_ID_key_"+rme_files_path.split("\\")[-1]+"_run"
-    ecol_id_filename = ".\\intervention_keys\\intervention_rep_idx_"+rme_files_path.split("\\")[-1]+"_run"
+
+    run_id = os.path.split(rme_files_path)[-1] + "_run"
+    id_filename = path_join("./", "intervention_keys", "intervention_ID_key_"+run_id)
+    ecol_id_filename = path_join("./", "intervention_keys", "intervention_rep_idx_"+run_id)
     metric_filepaths = [""]*len(intervention_ids)
 
     # Save a csv for each unique intervention, one for cf and one for iv runs
@@ -339,4 +346,4 @@ def create_economics_metric_files(rme_files_path, nsims, nbatches=None,
         store_ecol_ids_df = pd.DataFrame(store_ecol_ids[nbatches*i_core:nbatches*(i_core+1), :], columns=[str(id) for id in intervention_ids])
         store_ecol_ids_df.to_csv(ecol_id_filename+str(i_core)+".csv")
 
-    return rme_files_path.split("\\")[-1], metric_filepaths
+    return os.path.split(rme_files_path)[-1], metric_filepaths

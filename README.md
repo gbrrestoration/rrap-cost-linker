@@ -6,6 +6,30 @@
 
 A python library for generating input files for the CREAM economics analysis suite, using result sets from ReefModEngine.jl and sampling the intervention cost models using the cost_model_queries package.
 
+## Quick setup
+
+```shell
+# Initialize project
+$ uv init
+
+# Create project environment
+$ uv venv
+
+# Activate project environment
+# this command will differ slightly on *nix
+$ .venv\Scripts\activate
+
+# This should install dependencies and change the initial prompt to:
+(cost-eco-model-linker) $
+
+# Now if you run `python`, the python install for the environment will be launched
+(cost-eco-model-linker) $ python
+Python 3.12.10 (main, Apr  9 2025, 04:06:22) [MSC v.1943 64 bit (AMD64)] on win32
+Type "help", "copyright", "credits" or "license" for more information.
+Ctrl click to launch VS Code Native REPL
+>>>
+```
+
 ### Sampled metrics output files
 
 Cost-eco-model-linker generates sampled economics metric files, including the Reef Condition Index, Reef Fishing Index and Reef Tourism Index, in a format suitable for input to [CREAM](https://github.com/gbrrestoration/CREAM). The metrics are calculated from results

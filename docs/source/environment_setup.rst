@@ -19,3 +19,12 @@ The virtual environment can then be initialised by syncing the `uv.lock` file:
 .. code-block:: console
 
     uv sync
+
+
+Run the commands below to create and activate the project environment
+
+.. code-block:: console
+
+    uv init
+    uv venv
+    .venv\Scripts\activate  # this command will differ slightly on *nix

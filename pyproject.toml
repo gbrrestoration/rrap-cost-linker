@@ -1,18 +1,26 @@
 [project]
-name = "cost-eco-model-linker"
+name = "cost_eco_model_linker"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "cost-model-queries==0.0.12",
     "geopandas>=1.0.1",
-    "ipython>=9.5.0",
     "netcdf4>=1.7.2",
     "numpy>=2.2.4",
     "pandas>=2.2.3",
     "pywin32>=310",
     "pyyaml>=6.0.2",
+    "salib>=1.5.2",
     "sphinx>=8.2.3",
     "sphinx-autoapi>=3.6.0",
+]
+
+[dependency-groups]
+dev = [
+    "ipdb>=0.13.13",
+    "ipython>=9.6.0",
+]
+lint = [
+    "ruff>=0.14.1",
 ]

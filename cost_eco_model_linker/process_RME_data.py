@@ -229,7 +229,7 @@ def create_economics_metric_files(
         economics_spatial_filepath = path_join(THIS_DIR, "datasets", "econ_spatial.csv")
 
     if econ_storage_path is None:
-        econ_storage_path = path_join(THIS_DIR, "datasets", "econ_outputs.csv")
+        econ_storage_path = path_join(THIS_DIR, "econ_outputs")
 
     # If nbatches not provided, set to nsims (calculate in one go rather than in sets of nbatches)
     nbatches = nbatches if nbatches is not None else nsims
@@ -327,11 +327,13 @@ def create_economics_metric_files(
 
             for met_func in metrics:
                 data_store[sim_cols] = met_func(metrics_data_iv, data_store)
-                store_metric_filepaths[filecount] = 'ID'+str(iv_id)+'_intervention'+base_met_filename+met_func.__name__+'_batch'+str(i_core)+'.csv'
-                data_store.to_csv(econ_storage_path+store_metric_filepaths[filecount], index=False)
+                store_metric_filepaths[filecount] = f"ID{iv_id}_intervention{base_met_filename}{met_func.__name__}_batch{i_core}.csv"
+                data_store.to_csv(path_join(econ_storage_path, store_metric_filepaths[filecount]), index=False)
+
                 data_store[sim_cols] = met_func(metrics_data_cf, data_store)
-                store_metric_filepaths[filecount+1] = 'ID'+str(iv_id)+'_counterfactual'+base_met_filename+met_func.__name__+'_batch'+str(i_core)+'.csv'
-                data_store.to_csv(econ_storage_path+store_metric_filepaths[filecount+1], index=False)
+                store_metric_filepaths[filecount+1] = f"ID{iv_id}_counterfactual{base_met_filename}{met_func.__name__}_batch{i_core}.csv"
+                data_store.to_csv(path_join(econ_storage_path, store_metric_filepaths[filecount+1]), index=False)
+
                 filecount+=2
 
         # Drop data columns to allow those for next intervention to be added

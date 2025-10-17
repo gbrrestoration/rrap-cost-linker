@@ -25,8 +25,6 @@ def load_config():
     with open('config.json', 'r') as file:
         return json.load(file)
 
-# config = load_config()
-
 def get_NK(nsims, n_factors):
     """
     Calculate number of input Sobol samples, N, given number of total simulations required and number of factors.
@@ -194,7 +192,7 @@ def update_setupcost_factors(factors_df_dep, factors_df_prod, ID_key, ecol_idx, 
     return factors_df_dep, factors_df_prod
 
 
-def calculate_costs(ID_key_fn, nsims, deploy_model_filepath, prod_model_filepath, cont_p=0.25, iter_id=0):
+def calculate_costs(iv_keys_dir, ID_key_fn, nsims, deploy_model_filepath, prod_model_filepath, cont_p=0.25, iter_id=0):
     """
     Sample costs for a set of interventions specified in ID_key, sampling nsims.
 
@@ -214,14 +212,13 @@ def calculate_costs(ID_key_fn, nsims, deploy_model_filepath, prod_model_filepath
         iter_id : int
             ID used for parallel sampling to keep track of batches for ordered recombination.
     """
-    iv_keys = path_join(THIS_DIR, "intervention_keys")
     iv_ID_key = f"ID_key_{ID_key_fn}"
     rep_idx_key = f"rep_idx_{ID_key_fn}"
     _iter_id = str(iter_id)
     run_id = f"run{_iter_id}"
 
-    ID_key = pd.read_csv(path_join(iv_keys, f"intervention_{iv_ID_key}_{run_id}.csv"))
-    ecol_ids_df = pd.read_csv(path_join(iv_keys, f"intervention_{rep_idx_key}_{run_id}.csv"))
+    ID_key = pd.read_csv(path_join(iv_keys_dir, f"intervention_{iv_ID_key}_{run_id}.csv"))
+    ecol_ids_df = pd.read_csv(path_join(iv_keys_dir, f"intervention_{rep_idx_key}_{run_id}.csv"))
 
     deploy_model_filepath = deploy_model_filepath + f"{_iter_id}.xlsx"
     prod_model_filepath = prod_model_filepath + f"{_iter_id}.xlsx"

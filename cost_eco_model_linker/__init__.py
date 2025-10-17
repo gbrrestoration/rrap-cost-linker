@@ -1,5 +1,4 @@
-from . import cost_calculations
-from . import process_RME_data
-
-from cost_eco_model_linker.process_RME_data import create_economics_metric_files
-from cost_eco_model_linker.cost_calculations import calculate_costs
+from setup_results import setup_dirs
+from process_RME_data import create_economics_metric_files
+from cost_calculations import calculate_costs
+from runner import evaluate

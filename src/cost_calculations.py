@@ -4,11 +4,11 @@ import numpy as np
 import json
 import pandas as pd
 
-from cost_model_queries.sampling.sampling_functions import (
+from sampling import (
     problem_spec,
     convert_factor_types,
     sample_deployment_cost,
-    sample_production_cost
+    sample_production_cost,
 )
 
 def load_config():

@@ -1,15 +1,22 @@
+import os
 from os.path import join as path_join
 
 import numpy as np
 import json
 import pandas as pd
 
+<<<<<<< HEAD:src/cost_calculations.py
 from sampling import (
+=======
+from .sampling import (
+>>>>>>> bb7a6aa (Reorganise code as Python package):cost_eco_model_linker/cost_calculations.py
     problem_spec,
     convert_factor_types,
     sample_deployment_cost,
     sample_production_cost,
 )
+
+THIS_DIR = os.path.dirname(__file__)
 
 def load_config():
     """
@@ -18,7 +25,7 @@ def load_config():
     with open('config.json', 'r') as file:
         return json.load(file)
 
-config = load_config()
+# config = load_config()
 
 def get_NK(nsims, n_factors):
     """
@@ -101,10 +108,9 @@ def factors_dataframe_update(nsims):
         factors_df_prod : dataframe
             Sampled factors dataframe for the production cost model
     """
-
     # Sample deployment model factors
-    sp_dep, factor_specs_dep = problem_spec("deployment")
-    sp_prod, factor_specs_prod = problem_spec("production")
+    sp_dep, factor_specs_dep = problem_spec("deployment", path_join(THIS_DIR, "config.csv"))
+    sp_prod, factor_specs_prod = problem_spec("production", path_join(THIS_DIR, "config.csv"))
 
     nfactors = np.min([factor_specs_dep.shape[0], factor_specs_prod.shape[0]]) - 2
     N, K = get_NK(nsims, nfactors)
@@ -187,8 +193,8 @@ def update_setupcost_factors(factors_df_dep, factors_df_prod, ID_key, ecol_idx, 
 
     return factors_df_dep, factors_df_prod
 
-def calculate_costs(ID_key_fn, nsims, deploy_model_filepath=config["deploy_model_filepath"],
-                 prod_model_filepath=config["prod_model_filepath"], cont_p = 0.25, iter_id=0):
+
+def calculate_costs(ID_key_fn, nsims, deploy_model_filepath, prod_model_filepath, cont_p=0.25, iter_id=0):
     """
     Sample costs for a set of interventions specified in ID_key, sampling nsims.
 
@@ -208,7 +214,7 @@ def calculate_costs(ID_key_fn, nsims, deploy_model_filepath=config["deploy_model
         iter_id : int
             ID used for parallel sampling to keep track of batches for ordered recombination.
     """
-    iv_keys = "./intervention_keys"
+    iv_keys = path_join(THIS_DIR, "intervention_keys")
     iv_ID_key = f"ID_key_{ID_key_fn}"
     rep_idx_key = f"rep_idx_{ID_key_fn}"
     _iter_id = str(iter_id)
@@ -237,7 +243,6 @@ def calculate_costs(ID_key_fn, nsims, deploy_model_filepath=config["deploy_model
         for int_yr in int_years:
             # Add key intervention parameters for year to dataframe as constants
             factors_df_dep, factors_df_prod = update_factors(factors_df_dep, factors_df_prod, ID_key.loc[(ID_key.intervention_years==int_yr)&scen_idx, ["number_of_1YO_corals", "distance_to_port_NM", "number_of_species", "rep"]], ecol_ids, nsims)
-
             factors_df_dep = sample_deployment_cost(deploy_model_filepath, factors_df_dep, factor_specs_dep)
             factors_df_prod = sample_production_cost(prod_model_filepath, factors_df_prod, factor_specs_prod)
 
@@ -272,8 +277,8 @@ def calculate_costs(ID_key_fn, nsims, deploy_model_filepath=config["deploy_model
             cost_sum = (factors_df_dep[["setupCost", "Cost"]] + factors_df_prod[["setupCost", "Cost"]]).values[0:nsims, :]
             cost_df.loc[cost_df.year==int_yr, cost_df.columns[2:]] = cost_types(cost_sum, cont_p, nsims)
 
-        cost_filepath = './cost_outputs/ID'+str(scen_id)+'intervention_mc_cost_data_iter_id'+str(iter_id)+'.csv'
+        cost_filepath = path_join(THIS_DIR, "cost_outputs", f"ID{scen_id}intervention_mc_cost_data_iter_id{iter_id}.csv")
         cost_df.to_csv(cost_filepath, index=False)
         cost_filepaths[id_idx] = cost_filepath
 
-    return  cost_filepaths
+    return cost_filepaths

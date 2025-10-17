@@ -7,14 +7,16 @@ import geopandas as gp
 import numpy as np
 import json
 
-from calculate_metrics import extract_metrics, default_uncertainty_dict
-from reef_distances import find_max_reef_distance
+from .calculate_metrics import extract_metrics, default_uncertainty_dict
+from .reef_distances import find_max_reef_distance
+
+THIS_DIR = os.path.dirname(__file__)
 
 def load_reef_data():
     """
     Loads key reef spatial data.
     """
-    return gp.read_file(path_join("./", "datasets", "reefmod_gbr.gpkg"))
+    return gp.read_file(path_join(THIS_DIR, "datasets", "reefmod_gbr.gpkg"))
 
 def load_regions_data(economics_spatial_filepath):
     """
@@ -187,13 +189,17 @@ def raw_rti(metrics_dict, metrics_df):
     """
     return np.transpose(metrics_dict["RTI"], (1, 0))
 
-def create_economics_metric_files(rme_files_path, nsims, nbatches=None,
-                                uncertainty_dict=default_uncertainty_dict(),
-                                ncores=1,
-                                metrics = [rci, raw_rti, rfi],
-                                max_dist = 25.0,
-                                economics_spatial_filepath='.//datasets//econ_spatial.csv',
-                                econ_storage_path=".//econ_outputs//"):
+def create_economics_metric_files(
+        rme_files_path,
+        nsims,
+        nbatches=None,
+        uncertainty_dict=default_uncertainty_dict(),
+        ncores=1,
+        metrics = [rci, raw_rti, rfi],
+        max_dist = 25.0,
+        economics_spatial_filepath=None,
+        econ_storage_path=None
+):
     """
     Main function for creating metric file summarys for input to economics modelling.
 
@@ -219,6 +225,12 @@ def create_economics_metric_files(rme_files_path, nsims, nbatches=None,
         id_filename : string
             Filename for ID key file, which links economics metrics
     """
+    if economics_spatial_filepath is None:
+        economics_spatial_filepath = path_join(THIS_DIR, "datasets", "econ_spatial.csv")
+
+    if econ_storage_path is None:
+        econ_storage_path = path_join(THIS_DIR, "datasets", "econ_outputs.csv")
+
     # If nbatches not provided, set to nsims (calculate in one go rather than in sets of nbatches)
     nbatches = nbatches if nbatches is not None else nsims
 
@@ -263,8 +275,9 @@ def create_economics_metric_files(rme_files_path, nsims, nbatches=None,
     # Save intervention key for generating cost data file for saved intervention and cf files
 
     run_id = os.path.split(rme_files_path)[-1] + "_run"
-    id_filename = path_join("./", "intervention_keys", "intervention_ID_key_"+run_id)
-    ecol_id_filename = path_join("./", "intervention_keys", "intervention_rep_idx_"+run_id)
+
+    id_filename = path_join(THIS_DIR, "intervention_keys", "intervention_ID_key_"+run_id)
+    ecol_id_filename = path_join(THIS_DIR, "intervention_keys", "intervention_rep_idx_"+run_id)
     metric_filepaths = [""]*len(intervention_ids)
 
     # Save a csv for each unique intervention, one for cf and one for iv runs

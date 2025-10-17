@@ -1,3 +1,7 @@
+<<<<<<< HEAD:src/sampling.py
+=======
+import os
+>>>>>>> bb7a6aa (Reorganise code as Python package):cost_eco_model_linker/sampling.py
 import win32com.client
 from SALib import ProblemSpec
 import numpy as np
@@ -194,8 +198,17 @@ def _sample_cost(wb_file_path, factors_df, factor_spec, calculate_cost):
         factors_df : dataframe
             Updated sampled factor dataframe with costs added
     """
+<<<<<<< HEAD:src/sampling.py
     xlApp = win32com.client.Dispatch("Excel.Application")  # Open workbook
     wb = xlApp.Workbooks.Open(wb_file_path)
+=======
+    # win32com Excel interface can only open files using their absolute paths
+    wb_file_path = os.path.abspath(wb_file_path)
+
+    # Open workbook
+    xlapp = win32com.client.gencache.EnsureDispatch('Excel.Application')
+    wb = xlapp.Workbooks.Open(wb_file_path)
+>>>>>>> bb7a6aa (Reorganise code as Python package):cost_eco_model_linker/sampling.py
 
     total_cost = np.zeros((factors_df.shape[0], 2))
     for idx_n in range(len(total_cost)):

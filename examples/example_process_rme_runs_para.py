@@ -1,3 +1,5 @@
+import cost_eco_model_linker
+
 import parallel_cost_sampling as pc
 import multiprocessing as mp
 import time

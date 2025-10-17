@@ -2,6 +2,10 @@ import netCDF4 as nc
 import pandas as pd
 import numpy as np
 import random
+import os
+from os.path import join as path_join
+
+THIS_DIR = os.path.dirname(__file__)
 
 def default_uncertainty_dict():
     """
@@ -86,11 +90,11 @@ def indicator_params(result_set, scen_ids, uncertainty_dict=default_uncertainty_
             [-9.69 +  np.random.normal(0,0.603), 1.49]])    # massive from Urbina-Barretto 2021,  assumed similar for large massives
 
     if uncertainty_dict["expert_uncert"] == 0: # If there is no uncertainty from survey, use median results
-        G = pd.read_csv('.//datasets//Heneghan_RCI.csv')
+        G = pd.read_csv(path_join(THIS_DIR, "datasets", "Heneghan_RCI.csv"))
         rci_crit = np.array(G.loc[:, G.columns[[1, 3, 4, 6 ,8]]])
     else:
         # If there is uncertainty from survey, draw each metric's thresholds randomly from pool of experts
-        G = pd.read_csv('.//datasets//ExpertReefCondition_AllResults.csv')
+        G = pd.read_csv(path_join(THIS_DIR, "datasets", "ExpertReefCondition_AllResults.csv"))
         G = np.array(G.loc[:, G.columns[[2, 3, 5 ,6, 7]]]) # Cut off first two columns, convert to array
 
         num_experts = int(G.shape[0]/5) # How many experts
@@ -106,10 +110,9 @@ def indicator_params(result_set, scen_ids, uncertainty_dict=default_uncertainty_
                         G[experts[4]:G_len:num_experts, 4]])
 
     ## RTI LINEAR REGRESSION UNCERTAINTY
-    if uncertainty_dict["rti_uncert"] == 0:
-        rti_intercept = -0.871 # Intercept of rci to rti linear equation
-    else:
-        rti_intercept = -0.871 + np.random.normal(0, 0.0036) # Intercept of rci to rti linear equation
+    rti_intercept = -0.871 # Intercept of rci to rti linear equation
+    if uncertainty_dict["rti_uncert"] != 0:
+        rti_intercept += np.random.normal(0, 0.0036) # Intercept of rci to rti linear equation
 
     ## RFI BUILT FROM DIGITISING FIG 4A AND FIG 6B FROM Graham and Nash, 2012 https://doi.org/10.1007/s00338-012-0984-y
 

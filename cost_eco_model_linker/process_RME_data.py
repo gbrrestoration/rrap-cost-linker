@@ -192,13 +192,13 @@ def raw_rti(metrics_dict, metrics_df):
 def create_economics_metric_files(
         rme_files_path,
         nsims,
+        stores,
         nbatches=None,
         uncertainty_dict=default_uncertainty_dict(),
         ncores=1,
         metrics = [rci, raw_rti, rfi],
         max_dist = 25.0,
         economics_spatial_filepath=None,
-        econ_storage_path=None
 ):
     """
     Main function for creating metric file summarys for input to economics modelling.
@@ -228,8 +228,7 @@ def create_economics_metric_files(
     if economics_spatial_filepath is None:
         economics_spatial_filepath = path_join(THIS_DIR, "datasets", "econ_spatial.csv")
 
-    if econ_storage_path is None:
-        econ_storage_path = path_join(THIS_DIR, "econ_outputs")
+    econ_storage_path = stores.econ_dir
 
     # If nbatches not provided, set to nsims (calculate in one go rather than in sets of nbatches)
     nbatches = nbatches if nbatches is not None else nsims
@@ -265,10 +264,12 @@ def create_economics_metric_files(
     store_ecol_ids = np.zeros((nsims, len(intervention_ids)), dtype=int)
 
     # Setup key table structure used by economics modelling
-    id_key_df_store = pd.DataFrame(columns=['ID', 'intervention_years', 'rep', 'number_of_1YO_corals',
-       'distance_to_port_NM', 'furthest_representative_reef',
-       'closest_representative_reef', 'results_filename',
-       'number_of_species', 'start_year', 'end_year', 'climate_model'])
+    id_key_df_store = pd.DataFrame(columns=[
+        'ID', 'intervention_years', 'rep', 'number_of_1YO_corals',
+        'distance_to_port_NM', 'furthest_representative_reef',
+        'closest_representative_reef', 'results_filename',
+        'number_of_species', 'start_year', 'end_year', 'climate_model'
+    ])
 
     # Base filename for saving metrics
     ecol_uncert = uncertainty_dict["ecol_uncert"]
@@ -278,8 +279,8 @@ def create_economics_metric_files(
     # Save intervention key for generating cost data file for saved intervention and cf files
     run_id = os.path.split(rme_files_path)[-1] + "_run"
 
-    id_filename = path_join(THIS_DIR, "intervention_keys", "intervention_ID_key_"+run_id)
-    ecol_id_filename = path_join(THIS_DIR, "intervention_keys", "intervention_rep_idx_"+run_id)
+    id_filename = path_join(stores.intervention_keys_dir, "intervention_ID_key_"+run_id)
+    ecol_id_filename = path_join(stores.intervention_keys_dir, "intervention_rep_idx_"+run_id)
     metric_filepaths = [""]*len(intervention_ids)
 
     # Save a csv for each unique intervention, one for cf and one for iv runs

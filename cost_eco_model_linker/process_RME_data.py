@@ -271,9 +271,11 @@ def create_economics_metric_files(
        'number_of_species', 'start_year', 'end_year', 'climate_model'])
 
     # Base filename for saving metrics
-    base_met_filename = '_uncertainty_ecol'+str(uncertainty_dict["ecol_uncert"])+'_indicator'+str(uncertainty_dict["expert_uncert"])+'_var_'
-    # Save intervention key for generating cost data file for saved intervention and cf files
+    ecol_uncert = uncertainty_dict["ecol_uncert"]
+    expert_uncert = uncertainty_dict["expert_uncert"]
+    base_met_filename = f"_uncertainty_ecol{ecol_uncert}_indicator{expert_uncert}_var_"
 
+    # Save intervention key for generating cost data file for saved intervention and cf files
     run_id = os.path.split(rme_files_path)[-1] + "_run"
 
     id_filename = path_join(THIS_DIR, "intervention_keys", "intervention_ID_key_"+run_id)

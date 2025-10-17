@@ -53,7 +53,7 @@ def load_result_files(rme_files_path):
     """
 
     # intervention scenarios table
-    scens_df = pd.read_csv(path_join(rme_files_path, "iv_yearly_scenarios.csv")
+    scens_df = pd.read_csv(path_join(rme_files_path, "iv_yearly_scenarios.csv"))
     results_data = nc.Dataset(path_join(rme_files_path, "results.nc"))  # Metric results
 
     # Load struct with interventions data

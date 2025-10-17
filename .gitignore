@@ -20,3 +20,5 @@ src/intervention_keys/*
 
 # Ignore config containing path to cost models
 src/config.json
+
+sandbox/

@@ -7,6 +7,8 @@ Cost-eco-model-linker documentation
 A python library for generating input files for the `CREAM`, `<https://github.com/gbrrestoration/CREAM>`_ economics analysis suite, using
 result sets from `ReefModEngine.jl`, `<https://github.com/open-AIMS/ReefModEngine.jl>`_ and sampling the intervention cost models using the `cost_model_queries` package.
 
+Link to Github : `<https://github.com/open-AIMS/cost-eco-model-linker>`_
+
 Purpose
 -------
 
@@ -27,8 +29,8 @@ Contents
 --------
 .. toctree::
     environment_setup
-    generate_rme_results
-    example_workflow
-    metrics
     cost_models
+    generate_rme_results
+    metrics
     output_file_format
+    example_workflow

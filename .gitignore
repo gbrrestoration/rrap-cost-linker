@@ -22,3 +22,5 @@ src/intervention_keys/*
 src/config.json
 
 sandbox/
+
+.vscode/

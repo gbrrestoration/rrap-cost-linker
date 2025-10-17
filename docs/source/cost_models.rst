@@ -11,6 +11,17 @@ with are:
 
 To get access to these models, contact Nick Dendle at QUT.
 
+To run non-parallelised runs, these need to be saved as "3.5.5 CA Deployment Model0.xlxs" and "3.7.0 CA Production Model0.xlxs"
+respectively. For parallelised runs, as many copies need to be saved as the number of cores that will be run on. For example,
+if using 3 cores, you would need to save
+
+- "3.5.5 CA Deployment Model0.xlxs" and "3.7.0 CA Production Model0.xlxs"
+- "3.5.5 CA Deployment Model1.xlxs" and "3.7.0 CA Production Model1.xlxs"
+- "3.5.5 CA Deployment Model2.xlxs" and "3.7.0 CA Production Model2.xlxs"
+
+This is because multiple copies of an excel file of the same name cannot be open at once, so multiple copies with different names
+must be made to call the models in parallel.
+
 Configuration files
 -------------------
 
@@ -36,10 +47,12 @@ The `config.csv` should include info for `setupCost` and `Cost` parameters for b
 `deployment` models, parameters which are used to extract the setup (CAPEX) and operational (OPEX) cost
 respectively for a given intervention.
 
-The other configuration file, `config.json` specifies the path to the cost models. For example:
+The other configuration file, `config.json` specifies the path to the cost models without the filetype and copy number mentioned above. For example:
 
 .. literalinclude:: config.json
   :language: JSON
+
+When doing parallelised runs, these filepaths are used to find the model copies and load them on each core.
 
 Both configuration files should be placed in the `src` folder.
 

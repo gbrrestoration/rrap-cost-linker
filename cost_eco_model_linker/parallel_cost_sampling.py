@@ -1,18 +1,20 @@
-import process_RME_data as prd
-import math
-import cost_calculations as cc
 import os
+
+from . import process_RME_data as prd
+from . import cost_calculations as cc
 import pandas as pd
 import numpy as np
 
-config = cc.load_config()
-
-def para_sample_econ(rme_files_path, nsims, ncores=5, uncertainty_dict=prd.default_uncertainty_dict(),
-                                metrics = [prd.rci, prd.raw_rti, prd.rfi],
-                                max_dist = 25.0,
-                                economics_spatial_filepath='.//datasets//econ_spatial.csv',
-                                econ_storage_path=".//econ_outputs//"
-                                ):
+def para_sample_econ(
+        rme_files_path,
+        nsims,
+        economics_spatial_filepath,
+        econ_storage_path,
+        ncores=5,
+        uncertainty_dict=None,
+        metrics=None,
+        max_dist=25.0,
+):
     """
     Run economics metrics data creation files so that corresponding cost data can be sampled in parallel.
     Saves ID key files so that these are available for all cores while sampling cost models in parallel.
@@ -20,35 +22,45 @@ def para_sample_econ(rme_files_path, nsims, ncores=5, uncertainty_dict=prd.defau
 
     Parameters
     ----------
-        rme_files_path : string
-            String giving the path to resultset folder.
-        nsims : int
-            Number of simulations to sampling (including uncertainty types as specified)
-        ncores : int
-            Number of cores to sample cost models over.
-        uncertainty_dict : dict
-            Contains information on what uncertainty types to sample.
-        max_dist : float
-            Maximum distance between reefs within a "cluster". Total distance to port is calculated as distance
-            to port for closest reef cluster + distance between each additional further cluster where distance between
-            clusters is calculated as distance between the reefs furthest from port in each cluster.
-        economics_spatial_filepath : string
-            Filepath for economics spatial data (econ_spatial.csv)
-        econ_storage_path : string
-            Where to store output economics metrics files.
-        """
+    rme_files_path : string
+        String giving the path to resultset folder.
+    nsims : int
+        Number of simulations to sampling (including uncertainty types as specified)
+    economics_spatial_filepath : string
+        Filepath for economics spatial data (econ_spatial.csv)
+    econ_storage_path : string
+        Where to store output economics metrics files.
+    ncores : int
+        Number of cores to sample cost models over.
+    uncertainty_dict : dict
+        Contains information on what uncertainty types to sample.
+    max_dist : float
+        Maximum distance between reefs within a "cluster". Total distance to port is calculated as distance
+        to port for closest reef cluster + distance between each additional further cluster where distance between
+        clusters is calculated as distance between the reefs furthest from port in each cluster.
+    """
+    nbatches = np.ceil(nsims/ncores)
 
-    nbatches = math.ceil(nsims/ncores)
+    if metrics is None:
+        metrics = [prd.rci, prd.raw_rti, prd.rfi]
+
+    if uncertainty_dict is None:
+        uncertainty_dict = prd.default_uncertainty_dict()
 
     # Create metric datafiles for economics modelling and extract filename for intervention key
     # Files are created separately for each core (as a large number of runs can cause memory issues
     # when calculating metrics due to handling large metrics datacubes)
-    int_keys_fn, metric_filepaths = prd.create_economics_metric_files(rme_files_path,
-                                                    nsims, nbatches=nbatches, ncores=ncores,
-                                                    metrics=metrics, max_dist=max_dist,
-                                                    uncertainty_dict=uncertainty_dict,
-                                                    economics_spatial_filepath=economics_spatial_filepath,
-                                                     econ_storage_path=econ_storage_path)
+    int_keys_fn, metric_filepaths = prd.create_economics_metric_files(
+        rme_files_path,
+        nsims,
+        nbatches=nbatches,
+        ncores=ncores,
+        metrics=metrics,
+        max_dist=max_dist,
+        uncertainty_dict=uncertainty_dict,
+        economics_spatial_filepath=economics_spatial_filepath,
+        econ_storage_path=econ_storage_path
+    )
 
     post_process_all_ids_metrics(metric_filepaths, metrics, nsims, nbatches)
 
@@ -69,14 +81,14 @@ def post_process_metrics(metric_filepaths, metrics, nsims, nbatches):
 
     Parameters
     ----------
-        metric_filepaths : list{string}
-            List of all filepaths where metrics are saved.
-        metrics : list{function}
-            List of metric functions which were calculated.
-        nsims : int
-            Total number of simulations runs
-        nbatches : int
-            Number of samples per core run
+    metric_filepaths : list{string}
+        List of all filepaths where metrics are saved.
+    metrics : list{function}
+        List of metric functions which were calculated.
+    nsims : int
+        Total number of simulations runs
+    nbatches : int
+        Number of samples per core run
     """
     init_metric_df = pd.read_csv('./econ_outputs/'+metric_filepaths[0])
     sim_cols = ["sim_"+str(i) for i in range(1, nsims+1)]
@@ -94,29 +106,38 @@ def post_process_metrics(metric_filepaths, metrics, nsims, nbatches):
 
         metric_df.to_csv('./econ_outputs/'+save_fn, index=False)
 
-def calc_costs_para(iter_id, int_keys_fn, n_sims, deploy_model_filepath=config["deploy_model_filepath"],
-                                prod_model_filepath=config["prod_model_filepath"],
-                                cont_p = 0.25):
+def calc_costs_para(
+        iter_id, int_keys_fn, n_sims,
+        deploy_model_filepath, prod_model_filepath,
+        cont_p=0.25
+):
     """
     Wrapper function to allow cost model sampling in parallel over ncores.
 
     Parameters
     ----------
-        ID_key : dataframe
-            Dataframe created by running create_economics_metric_files connecting economics metric files to
-            intervention scenario IDs and parameters.
-        nsims : int
-            Total number of draws to sample cost models, should match ecological metrics sampling.
-        deploy_model_filepath : string
-            Path to deployment cost model.
-        prod_model_filepath : string
-            Path to production cost model.
-        cont_p : float
-            Contingency cost proportion.
+    ID_key : dataframe
+        Dataframe created by running create_economics_metric_files connecting economics metric files to
+        intervention scenario IDs and parameters.
+    nsims : int
+        Total number of draws to sample cost models, should match ecological metrics sampling.
+    deploy_model_filepath : string
+        Path to deployment cost model.
+    prod_model_filepath : string
+        Path to production cost model.
+    cont_p : float
+        Contingency cost proportion.
+    iter_id : int
+        Iteration ID
     """
-    return cc.calculate_costs(int_keys_fn, n_sims, iter_id=iter_id, deploy_model_filepath=deploy_model_filepath,
-                                prod_model_filepath=prod_model_filepath,
-                                cont_p=cont_p)
+    return cc.calculate_costs(
+        int_keys_fn,
+        n_sims,
+        deploy_model_filepath,
+        prod_model_filepath,
+        cont_p=cont_p,
+        iter_id=iter_id
+    )
 
 def post_process_costs(result, nbatches, nsims):
     """

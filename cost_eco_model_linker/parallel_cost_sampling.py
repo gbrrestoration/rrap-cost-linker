@@ -64,16 +64,13 @@ def para_sample_econ(
         econ_storage_path=econ_storage_path
     )
 
-    post_process_all_ids_metrics(metric_filepaths, metrics, nsims, nbatches)
-
-    return int_keys_fn, nbatches
-
-def post_process_all_ids_metrics(metric_filepaths, metrics, nsims, nbatches):
     # Post process metrics to be in single file
     for filepaths in metric_filepaths:
         for filetype in ["intervention", "counterfactual"]:
             file_list = [fn for fn in filepaths if filetype in fn]
             post_process_metrics(file_list, metrics, nsims, nbatches)
+
+    return int_keys_fn, nbatches
 
 
 def post_process_metrics(metric_filepaths, metrics, nsims, nbatches):

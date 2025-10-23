@@ -17,7 +17,7 @@ $ uv venv
 
 # Activate project environment
 # this command will differ slightly on *nix
-$ .venv\Scripts\activate
+$ .venv/Scripts/activate
 
 # This should install dependencies and change the initial prompt to:
 (cost-eco-model-linker) $
@@ -28,6 +28,23 @@ Python 3.12.10 (main, Apr  9 2025, 04:06:22) [MSC v.1943 64 bit (AMD64)] on win3
 Type "help", "copyright", "credits" or "license" for more information.
 Ctrl click to launch VS Code Native REPL
 >>>
+```
+
+## Quick start
+
+```python
+import cost_eco_model_linker as ceml
+
+# Filepath to RME runs to process
+rme_files_path = "./path_to_RME_outputs"
+deployment_model = "./3.5.5 CA Deployment Model"
+production_model = "./3.7.0 CA Production Model"
+output_path = "./"
+
+# Number of sims for metrics sampling (default includes ecological and expert uncertainty in RCI calcs)
+nsims = 10
+
+ceml.evaluate(rme_files_path, nsims, deployment_model, production_model, output_path)
 ```
 
 ## Development setup

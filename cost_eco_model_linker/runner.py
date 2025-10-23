@@ -1,11 +1,24 @@
-from os.path import join as path_join
 from .setup_results import RESULT_DIRS
 from . import setup_dirs
 from . import create_economics_metric_files
 from . import calculate_costs
 
 
-def evaluate(rme_files_path, nsims, deploy_model_fn, prod_model_fn, results_dir):
+def evaluate(rme_files_path: str, nsims: int, deploy_model_fn: str, prod_model_fn: str, results_dir: str) -> list[str]:
+    """
+    Evaluate costs of intervention scenarios.
+
+    Parameters
+    ----------
+    rme_files_path : str, Path to ReefMod Engine results
+    nsims : int, number of simulations to evaluate
+    deploy_model_fn : str, Path to deployment (spreadsheet) model (including filename but excluding file extension)
+    prod_model_fn : str, Path to production (spreadsheet) model (including filename but excluding file extension)
+    results_dir : path to place results
+
+    Returns
+    list, result paths
+    """
     stores = setup_dirs(results_dir)
 
     # Create metric data files for economics modelling and extract filename for intervention key

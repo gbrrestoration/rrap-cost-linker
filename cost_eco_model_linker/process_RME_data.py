@@ -194,10 +194,10 @@ def create_economics_metric_files(
         nsims,
         stores,
         nbatches=None,
-        uncertainty_dict=default_uncertainty_dict(),
+        uncertainty_dict=None,
         ncores=1,
-        metrics = [rci, raw_rti, rfi],
-        max_dist = 25.0,
+        metrics=None,
+        max_dist=25.0,
         economics_spatial_filepath=None,
 ):
     """
@@ -227,6 +227,12 @@ def create_economics_metric_files(
     """
     if economics_spatial_filepath is None:
         economics_spatial_filepath = path_join(THIS_DIR, "datasets", "econ_spatial.csv")
+
+    if uncertainty_dict is None:
+        uncertainty_dict = default_uncertainty_dict()
+
+    if metrics is None:
+        metrics = [rci, raw_rti, rfi]
 
     econ_storage_path = stores.econ_dir
 

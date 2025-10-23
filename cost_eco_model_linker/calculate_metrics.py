@@ -7,15 +7,15 @@ from os.path import join as path_join
 
 THIS_DIR = os.path.dirname(__file__)
 
-def default_uncertainty_dict():
+def default_uncertainty_dict() -> dict:
     """
     Creates a dictionary containing default uncertainty parameter settings. Can be modified to control
     what sources of uncertainty are sampled when calculating metrics.
 
     Returns
     -------
-        uncertainty_dict : dict
-            Contains information on what uncertainty types to sample.
+    uncertainty_dict : dict
+        Contains information on what uncertainty types to sample.
 
         - ecol_uncert : int (0 or 1)
             If 1 includes ecological uncertainty by sampling metrics over climate replicates, if 0 just uses
@@ -32,13 +32,13 @@ def default_uncertainty_dict():
             If 1 includes RFI uncertainty by sampling linear regression parameters used to calculate RFI.
 
     """
-    uncertainty_dict = {"ecol_uncert" : 1,
-                        "shelt_uncert" : 0,
-                        "expert_uncert" : 1,
-                        "rti_uncert" : 1,
-                        "rfi_uncert" : 1}
-
-    return uncertainty_dict
+    return {
+        "ecol_uncert" : 1,
+        "shelt_uncert" : 0,
+        "expert_uncert" : 1,
+        "rti_uncert" : 1,
+        "rfi_uncert" : 1
+    }
 
 def indicator_params(result_set, scen_ids, uncertainty_dict=default_uncertainty_dict(), juv_max_years=[0,18], maxcoraljuv=[]):
     """

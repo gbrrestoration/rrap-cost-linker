@@ -1,5 +1,7 @@
 import os
+from os.path import join as path_join
 
+from .setup_results import RESULT_DIRS
 from . import process_RME_data as prd
 from . import cost_calculations as cc
 import pandas as pd

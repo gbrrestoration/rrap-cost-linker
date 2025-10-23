@@ -40,6 +40,7 @@ def default_uncertainty_dict() -> dict:
         "rfi_uncert" : 1
     }
 
+
 def indicator_params(result_set, scen_ids, uncertainty_dict=default_uncertainty_dict(), juv_max_years=[0,18], maxcoraljuv=[]):
     """
     Calculates key parameters for shelter volume and RCI calculations given uncertainty sampling choices.

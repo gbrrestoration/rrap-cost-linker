@@ -201,29 +201,31 @@ def create_economics_metric_files(
         economics_spatial_filepath=None,
 ):
     """
-    Main function for creating metric file summarys for input to economics modelling.
+    Main function for creating metric file summaries for input to economics modelling.
 
     Parameters
     ----------
-        rme_files_path : string
-            String giving the path to resultset folder.
-        nsims : int
-            Number of simulations to sampling (including uncertainty types as specified)
-        uncertainty_dict : dict
-            Contains information on what uncertainty types to sample.
-        max_dist : float
-            Maximum distance between reefs within a "cluster". Total distance to port is calculated as distance
-            to port for closest reef cluster + distance between each additional further cluster where distance between
-            clusters is calculated as distance between the reefs furthest from port in each cluster.
-        economics_spatial_filepath : string
-            Filepath for economics spatial data (econ_spatial.csv)
-        econ_storage_path : string
-            Where to store output economics metrics files.
+    rme_files_path : string
+        String giving the path to resultset folder.
+    nsims : int
+        Number of simulations to sampling (including uncertainty types as specified)
+    nbatches : int
+        Number of batches
+    uncertainty_dict : dict
+        Contains information on what uncertainty types to sample.
+    max_dist : float
+        Maximum distance between reefs within a "cluster". Total distance to port is calculated as distance
+        to port for closest reef cluster + distance between each additional further cluster where distance between
+        clusters is calculated as distance between the reefs furthest from port in each cluster.
+    economics_spatial_filepath : string
+        Filepath for economics spatial data (econ_spatial.csv)
+    econ_storage_path : string
+        Where to store output economics metrics files.
 
     Returns
     -------
-        id_filename : string
-            Filename for ID key file, which links economics metrics
+    id_filename : string
+        Filename for ID key file, which links economics metrics
     """
     if economics_spatial_filepath is None:
         economics_spatial_filepath = path_join(THIS_DIR, "datasets", "econ_spatial.csv")
@@ -264,7 +266,7 @@ def create_economics_metric_files(
     data_store, regions_data = create_base_economics_dataframe(regions_data, reef_spatial_data, years)
 
     # Add columns to store sampled metrics
-    sim_cols = ["sim_{0}".format(i) for i in range(1,nbatches+1)]
+    sim_cols = [f"sim_{i}" for i in range(1,nbatches+1)]
     store_sims = pd.DataFrame(np.zeros((data_store.shape[0], len(sim_cols))), columns = sim_cols)
     data_store = pd.concat((data_store, store_sims), axis=1)
     store_ecol_ids = np.zeros((nsims, len(intervention_ids)), dtype=int)

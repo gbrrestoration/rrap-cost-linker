@@ -78,6 +78,8 @@ def post_process_metrics(metric_filepaths, metrics, nsims, nbatches):
     When running multiple cores for cost sampling, metrics calculations are also broken into batches
     to avoid memory issues when creating large metrics datacubes (have shape nsims*nyears*nreefs)
 
+    Writes metric results NOT as a "large metrics datacubes" but as a flat CSV.
+
     Parameters
     ----------
     metric_filepaths : list{string}
@@ -88,22 +90,36 @@ def post_process_metrics(metric_filepaths, metrics, nsims, nbatches):
         Total number of simulations runs
     nbatches : int
         Number of samples per core run
+
+    Returns
+    -------
+    None
     """
-    init_metric_df = pd.read_csv('./econ_outputs/'+metric_filepaths[0])
-    sim_cols = ["sim_"+str(i) for i in range(1, nsims+1)]
-    metric_df = pd.DataFrame(np.zeros((init_metric_df.shape[0], nsims), dtype=np.float64), columns = sim_cols)
+    econ_dir = RESULT_DIRS["econ_dir"]
+
+    init_metric_df = pd.read_csv(path_join(econ_dir, metric_filepaths[0]))
+    sim_cols = [f"sim_{i}" for i in range(1, nsims+1)]
+    metric_df = pd.DataFrame(
+        np.zeros((init_metric_df.shape[0], nsims), dtype=np.float64),
+        columns=sim_cols
+    )
+
+    # TODO: Why 0:19? See also indexing with steps of 19 in for loop below?
     metric_df = pd.concat((init_metric_df[init_metric_df.columns[0:19]], metric_df), axis=1)
 
     for metric_f in metrics:
         file_list = [fn for fn in metric_filepaths if metric_f.__name__  in fn]
-        save_fn = file_list[0][:-11]+".csv"
-
         for (idx_met, metrics_file) in enumerate(file_list):
-            met_temp = pd.read_csv('./econ_outputs/'+metrics_file)
-            metric_df.iloc[:, idx_met*nbatches+19:idx_met*nbatches+19+nbatches] = met_temp.values[:, 19:nbatches+19]
-            os.remove('./econ_outputs/'+metrics_file)
 
-        metric_df.to_csv('./econ_outputs/'+save_fn, index=False)
+            met_file = path_join(econ_dir, metrics_file)
+            met_temp = pd.read_csv(met_file)
+            metric_df.iloc[:, idx_met*nbatches+19:idx_met*nbatches+19+nbatches] = met_temp.values[:, 19:nbatches+19]
+            os.remove(met_file)
+
+        save_fn = file_list[0][:-11]+".csv"  # TODO: Nicer handling of this "-11"
+        out_file = path_join(econ_dir, save_fn)
+        metric_df.to_csv(out_file, index=False)
+
 
 def calc_costs_para(
         iter_id, int_keys_fn, n_sims,

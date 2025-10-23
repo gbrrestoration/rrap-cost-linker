@@ -1,17 +1,20 @@
 import os
 from os.path import join as path_join
 
+import math
+
 from .setup_results import RESULT_DIRS
 from . import process_RME_data as prd
 from . import cost_calculations as cc
 import pandas as pd
 import numpy as np
 
+THIS_DIR = os.path.dirname(__file__)
+
 def para_sample_econ(
         rme_files_path,
         nsims,
-        economics_spatial_filepath,
-        econ_storage_path,
+        stores,
         ncores=5,
         uncertainty_dict=None,
         metrics=None,
@@ -28,8 +31,6 @@ def para_sample_econ(
         String giving the path to resultset folder.
     nsims : int
         Number of simulations to sampling (including uncertainty types as specified)
-    economics_spatial_filepath : string
-        Filepath for economics spatial data (econ_spatial.csv)
     econ_storage_path : string
         Where to store output economics metrics files.
     ncores : int
@@ -41,7 +42,9 @@ def para_sample_econ(
         to port for closest reef cluster + distance between each additional further cluster where distance between
         clusters is calculated as distance between the reefs furthest from port in each cluster.
     """
-    nbatches = np.ceil(nsims/ncores)
+    nbatches = math.ceil(nsims/ncores)
+
+    economics_spatial_filepath = path_join(THIS_DIR, "datasets", "econ_spatial.csv")
 
     if metrics is None:
         metrics = [prd.rci, prd.raw_rti, prd.rfi]
@@ -55,13 +58,13 @@ def para_sample_econ(
     int_keys_fn, metric_filepaths = prd.create_economics_metric_files(
         rme_files_path,
         nsims,
+        stores,
         nbatches=nbatches,
         ncores=ncores,
         metrics=metrics,
         max_dist=max_dist,
         uncertainty_dict=uncertainty_dict,
-        economics_spatial_filepath=economics_spatial_filepath,
-        econ_storage_path=econ_storage_path
+        economics_spatial_filepath=economics_spatial_filepath
     )
 
     # Post process metrics to be in single file
@@ -122,8 +125,11 @@ def post_process_metrics(metric_filepaths, metrics, nsims, nbatches):
 
 
 def calc_costs_para(
-        iter_id, int_keys_fn, n_sims,
-        deploy_model_filepath, prod_model_filepath,
+        int_keys_fn,
+        n_sims,
+        deploy_model_filepath,
+        prod_model_filepath,
+        iter_id,
         cont_p=0.25
 ):
     """

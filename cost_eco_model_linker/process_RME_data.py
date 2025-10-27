@@ -324,10 +324,10 @@ def create_economics_metric_files(
     # Save a csv for each unique intervention, one for cf and one for iv runs
     for (iv_idx, iv_id) in enumerate(intervention_ids):
 
-        store_metric_filepaths = [""]*len(metrics)*ncores*2
+        store_metric_filepaths = [""] * len(metrics) * ncores * 2
         filecount = 0
         # Get scenario table for intervention
-        scens_idx = scens_df["intervention id"]==iv_id
+        scens_idx = scens_df["intervention id"] == iv_id
         scens_df_iv = scens_df[scens_idx]
         n_reps = max(scens_df_iv["rep"])
 
@@ -335,24 +335,36 @@ def create_economics_metric_files(
         iv_reefs = sum([iv_dict[reefset_name] for reefset_name in reefset_names], [])
 
         # Year relative starts at 0 on the first year of intervention
-        data_store.loc[:, "year_relative"] = data_store["year_absolute"] - (min(scens_df_iv["year"]) + 1)
+        data_store.loc[:, "year_relative"] = data_store["year_absolute"] - (
+            min(scens_df_iv["year"]) + 1
+        )
 
         # Scenario ids for CF and counterfactual
-        iv_scens = unique_iv_scens[(iv_idx*n_reps):(iv_idx*n_reps)+n_reps]
-        cf_scens = unique_cf_scens[(iv_idx*n_reps):(iv_idx*n_reps)+n_reps]
+        iv_scens = unique_iv_scens[(iv_idx * n_reps) : (iv_idx * n_reps) + n_reps]
+        cf_scens = unique_cf_scens[(iv_idx * n_reps) : (iv_idx * n_reps) + n_reps]
 
         # Setup structure for intervention key - links intervention ID and filename to cost model data
         id_key_df = scens_df_iv[["intervention id", "year", "rep", "number of corals"]]
         n_scens_id, id_key_n_col = id_key_df.shape
 
         id_key_df.insert(id_key_n_col, "distance_to_port_NM", np.zeros((n_scens_id,)))
-        id_key_df.insert(id_key_n_col+1, "furthest_representative_reef", np.repeat("", (n_scens_id,)))
-        id_key_df.insert(id_key_n_col+2, "closest_representative_reef",  np.repeat("", (n_scens_id,)))
+        id_key_df.insert(
+            id_key_n_col + 1,
+            "furthest_representative_reef",
+            np.repeat("", (n_scens_id,)),
+        )
+        id_key_df.insert(
+            id_key_n_col + 2,
+            "closest_representative_reef",
+            np.repeat("", (n_scens_id,)),
+        )
 
         # Add distance to port data to save in intervention key
-        [rep_reefs_sort, total_dist] = find_max_reef_distance(reef_spatial_data, regions_data, iv_reefs, max_dist = max_dist)
+        [rep_reefs_sort, total_dist] = find_max_reef_distance(
+            reef_spatial_data, regions_data, iv_reefs, max_dist=max_dist
+        )
 
-        # Store furthest and closest reefs in representative clsuters
+        # Store furthest and closest reefs in representative clusters
         id_key_df.loc[:, "furthest_representative_reef"] = rep_reefs_sort[-1]
         id_key_df.loc[:, "closest_representative_reef"] = rep_reefs_sort[0]
         id_key_df.loc[:, "distance_to_port_NM"] = total_dist
@@ -368,14 +380,24 @@ def create_economics_metric_files(
 
             for met_func in metrics:
                 data_store[sim_cols] = met_func(metrics_data_iv, data_store)
-                store_metric_filepaths[filecount] = f"ID{iv_id}_intervention{base_met_filename}{met_func.__name__}_batch{i_core}.csv"
-                data_store.to_csv(path_join(econ_storage_path, store_metric_filepaths[filecount]), index=False)
+                store_metric_filepaths[filecount] = (
+                    f"ID{iv_id}_intervention{base_met_filename}{met_func.__name__}_batch{i_core}.csv"
+                )
+                data_store.to_csv(
+                    path_join(econ_storage_path, store_metric_filepaths[filecount]),
+                    index=False,
+                )
 
                 data_store[sim_cols] = met_func(metrics_data_cf, data_store)
-                store_metric_filepaths[filecount+1] = f"ID{iv_id}_counterfactual{base_met_filename}{met_func.__name__}_batch{i_core}.csv"
-                data_store.to_csv(path_join(econ_storage_path, store_metric_filepaths[filecount+1]), index=False)
+                store_metric_filepaths[filecount + 1] = (
+                    f"ID{iv_id}_counterfactual{base_met_filename}{met_func.__name__}_batch{i_core}.csv"
+                )
+                data_store.to_csv(
+                    path_join(econ_storage_path, store_metric_filepaths[filecount + 1]),
+                    index=False,
+                )
 
-                filecount+=2
+                filecount += 2
 
         # Drop data columns to allow those for next intervention to be added
         data_store = data_store.drop(sim_cols, axis=1)

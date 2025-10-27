@@ -1,6 +1,8 @@
 import os
 from os.path import join as path_join
 
+from itertools import batched
+
 import netCDF4 as nc
 import pandas as pd
 import geopandas as gp
@@ -322,8 +324,8 @@ def create_economics_metric_files(
     metric_filepaths = [""] * len(intervention_ids)
 
     # Save a csv for each unique intervention, one for cf and one for iv runs
-    for (iv_idx, iv_id) in enumerate(intervention_ids):
-
+    chunks = list(batched(range(nsims), nbatches))
+    for iv_idx, iv_id in enumerate(intervention_ids):
         store_metric_filepaths = [""] * len(metrics) * ncores * 2
         filecount = 0
         # Get scenario table for intervention
@@ -369,14 +371,26 @@ def create_economics_metric_files(
         id_key_df.loc[:, "closest_representative_reef"] = rep_reefs_sort[0]
         id_key_df.loc[:, "distance_to_port_NM"] = total_dist
 
-        for i_core in range(ncores):
+        for i_core, batch_sel in enumerate(chunks):
             # Extract metrics for intervention and counterfactual scenarios
-            metrics_data_iv, ecol_ids = extract_metrics(results_data, iv_scens, nbatches, uncertainty_dict=uncertainty_dict)
-            metrics_data_cf, _ = extract_metrics(results_data, cf_scens, nbatches, uncertainty_dict=uncertainty_dict)
+            metrics_data_iv, ecol_ids = extract_metrics(
+                results_data,
+                iv_scens,
+                len(batch_sel),
+                uncertainty_dict=uncertainty_dict,
+            )
+            metrics_data_cf, _ = extract_metrics(
+                results_data,
+                cf_scens,
+                len(batch_sel),
+                uncertainty_dict=uncertainty_dict,
+            )
 
             # Result sampling ids to ignore counterfactuals in cost sampling
-            ecol_ids[ecol_ids>=max(id_key_df["rep"])] = ecol_ids[ecol_ids>=max(id_key_df["rep"])]-max(id_key_df["rep"])
-            store_ecol_ids[nbatches*i_core:nbatches*(i_core+1), iv_idx] = ecol_ids
+            ecol_ids[ecol_ids >= max(id_key_df["rep"])] = ecol_ids[
+                ecol_ids >= max(id_key_df["rep"])
+            ] - max(id_key_df["rep"])
+
 
             for met_func in metrics:
                 data_store[sim_cols] = met_func(metrics_data_iv, data_store)

@@ -279,36 +279,7 @@ def rfi_rme(total_cover, intercept1, slope1, intercept2, slope2):
     # Calculate total fish biomass, kg km2, 0.01 coefficient is to convert from kg ha to kg km2
     return 0.01*(intercept2 + slope2*(intercept1 + slope1*total_cover*100))
 
-def indicator_master(result_set, scen_ids, nsims, uncertainty_dict=default_uncertainty_dict()):
-    """
-    Calculates indicator metrics for a set of scenarios in the provided ReefModEngine.jl results_data.
-
-    Parameters
-    ----------
-        result_set : dict
-            ReefModEngne.jl resultset structure.
-        uncertainty_dict : dict
-            Contains information of which types of uncertainty to sample when processing metrics.
-        nsims : int
-            Number of simulations to sample
-
-    Returns
-    -------
-        reefcondition : np.array
-            Array containing reef condition of size (nsims, nreefs, nyears).
-        metrics_dict : np.array
-            Structure containing each of the metrics comprising the RCI, each arrays of size (nsims, nreefs, nyears).
-    """
-    maxcoraljuv, sheltervolume_parameters, rci_crit, rti_intercept, intercept1, intercept2, slope1, slope2 = indicator_params(result_set, scen_ids, uncertainty_dict=uncertainty_dict)
-
-    # Calculate RCI and ecological indicators
-    ecol_indicators, ecol_sample_ids = reef_condition_rme(result_set, scen_ids, uncertainty_dict["ecol_uncert"], sheltervolume_parameters, rci_crit, maxcoraljuv, nsims)
-    ecol_indicators["RTI"] = rti_rme(ecol_indicators, rti_intercept)
-    ecol_indicators["RFI"] = rfi_rme(ecol_indicators["total_cover"], intercept1, slope1, intercept2, slope2)
-
-    return ecol_indicators, ecol_sample_ids
-
-def extract_metrics(results_data, scen_ids, nsims, uncertainty_dict=default_uncertainty_dict()):
+def extract_metrics(results_data, scen_ids, nsims, uncertainty_dict=None):
     """
     Calculates indicator metrics for a set of scenarios in the provided ReefModEngine.jl results_data and
     saves in a summary array of size (nsims, nreefs*nyears), suitable to be saved in the economics dataframe
@@ -316,33 +287,41 @@ def extract_metrics(results_data, scen_ids, nsims, uncertainty_dict=default_unce
 
     Parameters
     ----------
-        result_set : dict
-            ReefModEngne.jl resultset structure.
-        scen_ids : np.array
-            List of scenario IDs to consider (e.g. only sample counterfactual/intervention etc.).
-        nsims : int
-            Number of simulations to sample
-        uncertainty_dict : dict
-            Contains information of which types of uncertainty to sample when processing metrics.
+    result_set : dict
+        ReefModEngne.jl resultset structure.
+    scen_ids : np.array
+        List of scenario IDs to consider (e.g. only sample counterfactual/intervention etc.).
+    nsims : int
+        Number of simulations to sample
+    uncertainty_dict : dict
+        Contains information of which types of uncertainty to sample when processing metrics.
 
     Returns
     -------
-        save_metrics : np.array
-            Array containing the RCI and each of the metrics comprising the RCI, each arrays of size
-            (nsims, nreefs*nyears, nmetrics). The nmetrics dimension indices correspond to:
-            0 - RCI
-            1 - total_cover
-            2 - shelter_volume
-            3 - coraljuv_relativecoral
-            4 - COTSrel_complementary
-            5 - rubble_complementary
+    save_metrics : np.array
+        Array containing the RCI and each of the metrics comprising the RCI, each arrays of size
+        (nsims, nreefs*nyears, nmetrics). The nmetrics dimension indices correspond to:
+        0 - RCI
+        1 - total_cover
+        2 - shelter_volume
+        3 - coraljuv_relativecoral
+        4 - COTSrel_complementary
+        5 - rubble_complementary
     """
+    if uncertainty_dict is None:
+        uncertainty_dict = default_uncertainty_dict()
+
     years = results_data['timesteps'][:]
     num_years = len(years)
     num_reefs = len(results_data['locations'][:])
     m = num_reefs*num_years
 
-    ecol_indicators, ecol_sample_ids = indicator_master(results_data, scen_ids, nsims, uncertainty_dict=uncertainty_dict)
+    maxcoraljuv, sheltervolume_parameters, rci_crit, rti_intercept, intercept1, intercept2, slope1, slope2 = indicator_params(results_data, scen_ids, uncertainty_dict=uncertainty_dict)
+
+    # Calculate RCI and ecological indicators
+    ecol_indicators, ecol_sample_ids = reef_condition_rme(results_data, scen_ids, uncertainty_dict["ecol_uncert"], sheltervolume_parameters, rci_crit, maxcoraljuv, nsims)
+    ecol_indicators["RTI"] = rti_rme(ecol_indicators, rti_intercept)
+    ecol_indicators["RFI"] = rfi_rme(ecol_indicators["total_cover"], intercept1, slope1, intercept2, slope2)
 
     #save_metrics = np.zeros((nsims, m, len(ecol_indicators)))
     # Extract outputs and convert to long-form format, then save

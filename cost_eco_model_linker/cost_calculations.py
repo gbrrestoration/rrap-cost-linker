@@ -1,6 +1,8 @@
 import os
 from os.path import join as path_join
 
+import shutil
+
 import numpy as np
 import json
 import pandas as pd
@@ -216,8 +218,12 @@ def calculate_costs(iv_keys_dir, ID_key_fn, nsims, deploy_model_filepath, prod_m
     ID_key = pd.read_csv(path_join(iv_keys_dir, f"intervention_{iv_ID_key}_{run_id}.csv"))
     ecol_ids_df = pd.read_csv(path_join(iv_keys_dir, f"intervention_{rep_idx_key}_{run_id}.csv"))
 
-    deploy_model_filepath = deploy_model_filepath + f"{_iter_id}.xlsx"
-    prod_model_filepath = prod_model_filepath + f"{_iter_id}.xlsx"
+    # Copy files for independent run
+    deploy_model_fp = f"{deploy_model_filepath}{_iter_id}.xlsx"
+    shutil.copy(deploy_model_filepath+".xlsx", deploy_model_fp)
+
+    prod_model_fp = f"{prod_model_filepath}{_iter_id}.xlsx"
+    shutil.copy(prod_model_filepath+".xlsx", prod_model_fp)
 
     cost_filepaths = [""]*len(np.unique(ID_key.ID))
 
@@ -236,8 +242,8 @@ def calculate_costs(iv_keys_dir, ID_key_fn, nsims, deploy_model_filepath, prod_m
         for int_yr in int_years:
             # Add key intervention parameters for year to dataframe as constants
             factors_df_dep, factors_df_prod = update_factors(factors_df_dep, factors_df_prod, ID_key.loc[(ID_key.intervention_years==int_yr)&scen_idx, ["number_of_1YO_corals", "distance_to_port_NM", "number_of_species", "rep"]], ecol_ids, nsims)
-            factors_df_dep = sample_deployment_cost(deploy_model_filepath, factors_df_dep, factor_specs_dep)
-            factors_df_prod = sample_production_cost(prod_model_filepath, factors_df_prod, factor_specs_prod)
+            factors_df_dep = sample_deployment_cost(deploy_model_fp, factors_df_dep, factor_specs_dep)
+            factors_df_prod = sample_production_cost(prod_model_fp, factors_df_prod, factor_specs_prod)
 
             if int_yr>min(int_years):
                 # Save calculated operational costs
@@ -255,8 +261,9 @@ def calculate_costs(iv_keys_dir, ID_key_fn, nsims, deploy_model_filepath, prod_m
                 if any(factors_df_dep['num_devices'].values[0:nsims]>0):
 
                     # If deploying more than last year, recalculate setup cost for only those additional corals
-                    factors_df_dep_new = sample_deployment_cost(deploy_model_filepath, factors_df_dep.loc[factors_df_dep['num_devices']>0, :], factor_specs_dep)
-                    factors_df_prod_new = sample_production_cost(prod_model_filepath, factors_df_prod.loc[factors_df_dep['num_devices']>0, :], factor_specs_prod)
+                    active_deployment = factors_df_dep['num_devices']>0
+                    factors_df_dep_new = sample_deployment_cost(deploy_model_fp, factors_df_dep.loc[active_deployment, :], factor_specs_dep)
+                    factors_df_prod_new = sample_production_cost(prod_model_fp, factors_df_prod.loc[active_deployment, :], factor_specs_prod)
 
                     # Replace orginally calculated setup costs with updated setup costs
                     factors_df_prod.loc[factors_df_dep['num_devices']>0, "setupCost"] = factors_df_prod_new["setupCost"]

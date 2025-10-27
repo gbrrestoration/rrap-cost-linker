@@ -93,14 +93,27 @@ def create_base_economics_dataframe(regions_data, reef_spatial_data, years):
 
     # Setup base dataframe structure
     # Reef_ID holds indices for corresponding ReefModEngine order of reefs
-    data_store = pd.DataFrame(np.zeros((n_reefs*len(years), 2), dtype=int), columns=["year_absolute", "year_relative"])
-    data_store.loc[:, "year_absolute"] = np.array(list(years)*n_reefs)
-    data_store = pd.concat([data_store, pd.DataFrame(np.repeat(regions_data, len(years), axis=0), columns = regions_data.columns)], axis=1)
+    data_store = pd.DataFrame(
+        np.zeros((n_reefs * len(years), 2), dtype=int),
+        columns=["year_absolute", "year_relative"],
+    )
+    data_store.loc[:, "year_absolute"] = np.array(list(years) * n_reefs)
+    data_store = pd.concat(
+        [
+            data_store,
+            pd.DataFrame(
+                np.repeat(regions_data, len(years), axis=0),
+                columns=regions_data.columns,
+            ),
+        ],
+        axis=1,
+    )
 
     # Add UNIQUE ID to regions data to allow cross-referencing for estimating reef distance to port
     regions_data.loc[:, "UNIQUE_ID"] = reef_spatial_data["UNIQUE_ID"]
 
     return data_store, regions_data
+
 
 def area_weighted_rti(metrics_dict, metrics_df):
     """
@@ -113,7 +126,15 @@ def area_weighted_rti(metrics_dict, metrics_df):
         metrics_df : dataframe
             Dataframe containing scenario summary dataframe
     """
-    return np.transpose(metrics_dict["RTI"]*np.array(metrics_df["total_area_nine_zones"]/np.sum(metrics_df["total_area_nine_zones"])),(1, 0))
+    return np.transpose(
+        metrics_dict["RTI"]
+        * np.array(
+            metrics_df["total_area_nine_zones"]
+            / np.sum(metrics_df["total_area_nine_zones"])
+        ),
+        (1, 0),
+    )
+
 
 def rci(metrics_dict, metrics_df, rci_threshold=0.6):
     """

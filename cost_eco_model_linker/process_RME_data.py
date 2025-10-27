@@ -12,11 +12,13 @@ from .reef_distances import find_max_reef_distance
 
 THIS_DIR = os.path.dirname(__file__)
 
+
 def load_reef_data():
     """
     Loads key reef spatial data.
     """
     return gp.read_file(path_join(THIS_DIR, "datasets", "reefmod_gbr.gpkg"))
+
 
 def load_regions_data(economics_spatial_filepath):
     """
@@ -31,9 +33,10 @@ def load_regions_data(economics_spatial_filepath):
     -------
         regions_data : dataframe
     """
-    regions_data = pd.read_csv(economics_spatial_filepath) # Economic spatial data key
+    regions_data = pd.read_csv(economics_spatial_filepath)  # Economic spatial data key
 
     return regions_data
+
 
 def load_result_files(rme_files_path):
     """
@@ -59,10 +62,11 @@ def load_result_files(rme_files_path):
     results_data = nc.Dataset(path_join(rme_files_path, "results.nc"))  # Metric results
 
     # Load struct with interventions data
-    with open(path_join(rme_files_path, "scenario_info.json"), 'r') as file:
+    with open(path_join(rme_files_path, "scenario_info.json"), "r") as file:
         iv_dict = json.load(file)
 
     return results_data, scens_df, iv_dict
+
 
 def create_base_economics_dataframe(regions_data, reef_spatial_data, years):
     """
@@ -124,9 +128,10 @@ def rci(metrics_dict, metrics_df, rci_threshold=0.6):
     """
     rci = metrics_dict["RCI"]
     rci[rci >= rci_threshold] = 1
-    rci[rci < rci_threshold]  = 0
+    rci[rci < rci_threshold] = 0
 
-    return np.transpose(rci*np.array(metrics_df["total_area_nine_zones"]),(1, 0))
+    return np.transpose(rci * np.array(metrics_df["total_area_nine_zones"]), (1, 0))
+
 
 def coral_area_saved(metrics_dict, metrics_df):
     """
@@ -140,7 +145,12 @@ def coral_area_saved(metrics_dict, metrics_df):
             Dataframe containing scenario summary dataframe
     """
     # Convert to hectares by dividaing by 100
-    return np.transpose(metrics_dict["total_cover"]*np.array(metrics_df["total_area_nine_zones"]/100),(1, 0))
+    return np.transpose(
+        metrics_dict["total_cover"]
+        * np.array(metrics_df["total_area_nine_zones"] / 100),
+        (1, 0),
+    )
+
 
 def rfi(metrics_dict, metrics_df, rfi_thresholds=[0.74, 29.91]):
     """
@@ -159,9 +169,10 @@ def rfi(metrics_dict, metrics_df, rfi_thresholds=[0.74, 29.91]):
     """
     rfi = metrics_dict["RFI"]
     rfi[rfi < rfi_thresholds[0]] = rfi_thresholds[0]
-    rfi[rfi > rfi_thresholds[1]]  = rfi_thresholds[1]
+    rfi[rfi > rfi_thresholds[1]] = rfi_thresholds[1]
 
     return np.transpose(rfi, (1, 0))
+
 
 def raw_rci(metrics_dict, metrics_df):
     """
@@ -176,6 +187,7 @@ def raw_rci(metrics_dict, metrics_df):
     """
     return np.transpose(metrics_dict["RCI"], (1, 0))
 
+
 def raw_rti(metrics_dict, metrics_df):
     """
     Processes metrics dict into raw RTI for table storage.
@@ -189,16 +201,17 @@ def raw_rti(metrics_dict, metrics_df):
     """
     return np.transpose(metrics_dict["RTI"], (1, 0))
 
+
 def create_economics_metric_files(
-        rme_files_path,
-        nsims,
-        stores,
-        nbatches=None,
-        uncertainty_dict=None,
-        ncores=1,
-        metrics=None,
-        max_dist=25.0,
-        economics_spatial_filepath=None,
+    rme_files_path,
+    nsims,
+    stores,
+    nbatches=None,
+    uncertainty_dict=None,
+    ncores=1,
+    metrics=None,
+    max_dist=25.0,
+    economics_spatial_filepath=None,
 ):
     """
     Main function for creating metric file summaries for input to economics modelling.
@@ -263,21 +276,35 @@ def create_economics_metric_files(
     unique_cf_scens = np.where(np.array(iv_dict["counterfactual"]).astype(bool))[0]
 
     # Setup key storage for metrics datafiles and ecological sample ids
-    data_store, regions_data = create_base_economics_dataframe(regions_data, reef_spatial_data, years)
+    data_store, regions_data = create_base_economics_dataframe(
+        regions_data, reef_spatial_data, years
+    )
 
     # Add columns to store sampled metrics
-    sim_cols = [f"sim_{i}" for i in range(1,nbatches+1)]
-    store_sims = pd.DataFrame(np.zeros((data_store.shape[0], len(sim_cols))), columns = sim_cols)
+    sim_cols = [f"sim_{i}" for i in range(1, nbatches + 1)]
+    store_sims = pd.DataFrame(
+        np.zeros((data_store.shape[0], len(sim_cols))), columns=sim_cols
+    )
     data_store = pd.concat((data_store, store_sims), axis=1)
     store_ecol_ids = np.zeros((nsims, len(intervention_ids)), dtype=int)
 
     # Setup key table structure used by economics modelling
-    id_key_df_store = pd.DataFrame(columns=[
-        'ID', 'intervention_years', 'rep', 'number_of_1YO_corals',
-        'distance_to_port_NM', 'furthest_representative_reef',
-        'closest_representative_reef', 'results_filename',
-        'number_of_species', 'start_year', 'end_year', 'climate_model'
-    ])
+    id_key_df_store = pd.DataFrame(
+        columns=[
+            "ID",
+            "intervention_years",
+            "rep",
+            "number_of_1YO_corals",
+            "distance_to_port_NM",
+            "furthest_representative_reef",
+            "closest_representative_reef",
+            "results_filename",
+            "number_of_species",
+            "start_year",
+            "end_year",
+            "climate_model",
+        ]
+    )
 
     # Base filename for saving metrics
     ecol_uncert = uncertainty_dict["ecol_uncert"]
@@ -285,11 +312,14 @@ def create_economics_metric_files(
     base_met_filename = f"_uncertainty_ecol{ecol_uncert}_indicator{expert_uncert}_var_"
 
     # Save intervention key for generating cost data file for saved intervention and cf files
-    run_id = os.path.split(rme_files_path)[-1] + "_run"
-
-    id_filename = path_join(stores.intervention_keys_dir, "intervention_ID_key_"+run_id)
-    ecol_id_filename = path_join(stores.intervention_keys_dir, "intervention_rep_idx_"+run_id)
-    metric_filepaths = [""]*len(intervention_ids)
+    run_id = os.path.basename(rme_files_path) + "_run"
+    id_filename = path_join(
+        stores.intervention_keys_dir, "intervention_ID_key_" + run_id
+    )
+    ecol_id_filename = path_join(
+        stores.intervention_keys_dir, "intervention_rep_idx_" + run_id
+    )
+    metric_filepaths = [""] * len(intervention_ids)
 
     # Save a csv for each unique intervention, one for cf and one for iv runs
     for (iv_idx, iv_id) in enumerate(intervention_ids):
@@ -353,12 +383,30 @@ def create_economics_metric_files(
         # Add to record key data for cost modelling
         id_key_n_col = id_key_df.shape[1]
 
-        id_key_df.insert(id_key_n_col, "results_filename", np.repeat('ID'+str(iv_id)+'_'+base_met_filename, (n_scens_id,)))
-        id_key_df.insert(id_key_n_col+1,"number_of_species", np.ones((n_scens_id,))*6)
-        id_key_df.insert(id_key_n_col+2, "start_year", np.repeat(start_year, (n_scens_id,)))
-        id_key_df.insert(id_key_n_col+3, "end_year", np.repeat(end_year, (n_scens_id,)))
-        id_key_df.insert(id_key_n_col+4, "climate_model", scens_df_iv["GCM name"].values)
-        id_key_df = id_key_df.rename(columns={'number of corals':'number_of_1YO_corals','intervention id':'ID', 'year':'intervention_years'})
+        id_key_df.insert(
+            id_key_n_col,
+            "results_filename",
+            np.repeat("ID" + str(iv_id) + "_" + base_met_filename, (n_scens_id,)),
+        )
+        id_key_df.insert(
+            id_key_n_col + 1, "number_of_species", np.ones((n_scens_id,)) * 6
+        )
+        id_key_df.insert(
+            id_key_n_col + 2, "start_year", np.repeat(start_year, (n_scens_id,))
+        )
+        id_key_df.insert(
+            id_key_n_col + 3, "end_year", np.repeat(end_year, (n_scens_id,))
+        )
+        id_key_df.insert(
+            id_key_n_col + 4, "climate_model", scens_df_iv["GCM name"].values
+        )
+        id_key_df = id_key_df.rename(
+            columns={
+                "number of corals": "number_of_1YO_corals",
+                "intervention id": "ID",
+                "year": "intervention_years",
+            }
+        )
 
         if id_key_df_store.empty:
             id_key_df_store = id_key_df
@@ -368,8 +416,11 @@ def create_economics_metric_files(
         metric_filepaths[iv_idx] = store_metric_filepaths
 
     for i_core in range(ncores):
-        id_key_df_store.to_csv(id_filename+str(i_core)+".csv")
-        store_ecol_ids_df = pd.DataFrame(store_ecol_ids[nbatches*i_core:nbatches*(i_core+1), :], columns=[str(id) for id in intervention_ids])
-        store_ecol_ids_df.to_csv(ecol_id_filename+str(i_core)+".csv")
+        id_key_df_store.to_csv(id_filename + str(i_core) + ".csv")
+        store_ecol_ids_df = pd.DataFrame(
+            store_ecol_ids[nbatches * i_core : nbatches * (i_core + 1), :],
+            columns=[str(id) for id in intervention_ids],
+        )
+        store_ecol_ids_df.to_csv(ecol_id_filename + str(i_core) + ".csv")
 
     return os.path.split(rme_files_path)[-1], metric_filepaths

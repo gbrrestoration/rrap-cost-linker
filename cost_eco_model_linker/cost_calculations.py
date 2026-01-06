@@ -405,6 +405,7 @@ def calculate_costs(
             "cost_outputs",
             f"ID{scen_id}intervention_mc_cost_data_iter_id{iter_id}.csv",
         )
+
         cost_df.to_csv(cost_filepath, index=False)
         cost_filepaths[id_idx] = cost_filepath
 

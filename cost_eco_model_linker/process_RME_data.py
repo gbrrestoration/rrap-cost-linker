@@ -417,33 +417,19 @@ def create_economics_metric_files(
         # Drop data columns to allow those for next intervention to be added
         data_store = data_store.drop(sim_cols, axis=1)
 
-        # Add to record key data for cost modelling
-        id_key_n_col = id_key_df.shape[1]
-
-        id_key_df.insert(
-            id_key_n_col,
-            "results_filename",
-            np.repeat("ID" + str(iv_id) + "_" + base_met_filename, (n_scens_id,)),
-        )
-        id_key_df.insert(
-            id_key_n_col + 1, "number_of_species", np.ones((n_scens_id,)) * 6
-        )
-        id_key_df.insert(
-            id_key_n_col + 2, "start_year", np.repeat(start_year, (n_scens_id,))
-        )
-        id_key_df.insert(
-            id_key_n_col + 3, "end_year", np.repeat(end_year, (n_scens_id,))
-        )
-        id_key_df.insert(
-            id_key_n_col + 4, "climate_model", scens_df_iv["GCM name"].values
-        )
-        id_key_df = id_key_df.rename(
-            columns={
-                "number of corals": "number_of_1YO_corals",
-                "intervention id": "ID",
-                "year": "intervention_years",
-            }
-        )
+        # Add key data for cost modelling
+        # Uses key table structure used by economics modelling
+        id_key_df = id_key_df.assign(
+            results_filename=f"ID{str(iv_id)}_{base_met_filename}",
+            number_of_species=6,
+            start_year=start_year,
+            end_year=end_year,
+            climate_model=scens_df_iv["GCM name"].values
+        ).rename(columns={
+            "number of corals": "number_of_1YO_corals",
+            "intervention id": "ID",
+            "year": "intervention_years",
+        })
 
         if iv_idx > 0:
             id_key_df_store = id_key_df

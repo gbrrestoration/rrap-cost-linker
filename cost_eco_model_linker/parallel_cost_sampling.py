@@ -3,7 +3,7 @@ from os.path import join as path_join
 
 import math
 
-from .setup_results import RESULT_DIRS
+from .setup_results import RESULT_DIRS, OutputStores
 from . import process_RME_data as prd
 from . import cost_calculations as cc
 import pandas as pd
@@ -11,14 +11,15 @@ import numpy as np
 
 THIS_DIR = os.path.dirname(__file__)
 
+
 def para_sample_econ(
-        rme_files_path,
-        nsims,
-        stores,
-        ncores=5,
-        uncertainty_dict=None,
-        metrics=None,
-        max_dist=25.0,
+    rme_files_path: str,
+    nsims: int,
+    stores: OutputStores,
+    ncores=5,
+    uncertainty_dict=None,
+    metrics=None,
+    max_dist=25.0,
 ):
     """
     Run economics metrics data creation files so that corresponding cost data can be sampled in parallel.
@@ -31,8 +32,8 @@ def para_sample_econ(
         String giving the path to resultset folder.
     nsims : int
         Number of simulations to sampling (including uncertainty types as specified)
-    econ_storage_path : string
-        Where to store output economics metrics files.
+    stores : OutputStores
+        Data class holding output file paths where economic metric files will be stored.
     ncores : int
         Number of cores to sample cost models over.
     uncertainty_dict : dict
@@ -42,7 +43,7 @@ def para_sample_econ(
         to port for closest reef cluster + distance between each additional further cluster where distance between
         clusters is calculated as distance between the reefs furthest from port in each cluster.
     """
-    nbatches = math.ceil(nsims/ncores)
+    nbatches = math.ceil(nsims / ncores)
 
     economics_spatial_filepath = path_join(THIS_DIR, "datasets", "econ_spatial.csv")
 
@@ -64,7 +65,7 @@ def para_sample_econ(
         metrics=metrics,
         max_dist=max_dist,
         uncertainty_dict=uncertainty_dict,
-        economics_spatial_filepath=economics_spatial_filepath
+        economics_spatial_filepath=economics_spatial_filepath,
     )
 
     # Post process metrics to be in single file
@@ -125,12 +126,12 @@ def post_process_metrics(metric_filepaths, metrics, nsims, nbatches):
 
 
 def calc_costs_para(
-        int_keys_fn,
-        n_sims,
-        deploy_model_filepath,
-        prod_model_filepath,
-        iter_id,
-        cont_p=0.25
+    int_keys_fn,
+    n_sims,
+    deploy_model_filepath,
+    prod_model_filepath,
+    iter_id,
+    cont_p=0.25,
 ):
     """
     Wrapper function to allow cost model sampling in parallel over ncores.
@@ -157,8 +158,9 @@ def calc_costs_para(
         deploy_model_filepath,
         prod_model_filepath,
         cont_p=cont_p,
-        iter_id=iter_id
+        iter_id=iter_id,
     )
+
 
 def post_process_costs(result, nbatches, nsims):
     """

@@ -88,29 +88,19 @@ def create_base_economics_dataframe(regions_data: pd.DataFrame, reef_spatial_dat
         data_store: dataframe
             Basic economics file structure to save for each intervention/counterfactual scenario.
     """
-    regions_data = regions_data.sort_values(by="Reef_ID", ignore_index=True)
-    n_reefs = len(regions_data.reef_name)
+    regions_data = regions_data.sort_values(by="Reef_ID", ignore_index=True).copy()
 
-    # Setup base dataframe structure
-    # Reef_ID holds indices for corresponding ReefModEngine order of reefs
-    data_store = pd.DataFrame(
-        np.zeros((n_reefs * len(years), 2), dtype=int),
-        columns=["year_absolute", "year_relative"],
-    )
-    data_store.loc[:, "year_absolute"] = np.array(list(years) * n_reefs)
-    data_store = pd.concat(
-        [
-            data_store,
-            pd.DataFrame(
-                np.repeat(regions_data, len(years), axis=0),
-                columns=regions_data.columns,
-            ),
-        ],
-        axis=1,
-    )
+    # Add UNIQUE_ID cross-reference for estimating reef distance to port
+    regions_data["UNIQUE_ID"] = reef_spatial_data["UNIQUE_ID"].values
 
-    # Add UNIQUE ID to regions data to allow cross-referencing for estimating reef distance to port
-    regions_data.loc[:, "UNIQUE_ID"] = reef_spatial_data["UNIQUE_ID"]
+    # Create year dataframe
+    years_df = pd.DataFrame({
+        "year_absolute": years,
+        "year_relative": 0  # Placeholder if needed later
+    })
+
+    # Cross join: each reef with each year
+    data_store = regions_data.merge(years_df, how="cross")
 
     return data_store, regions_data
 

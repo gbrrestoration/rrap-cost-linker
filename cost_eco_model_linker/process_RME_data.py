@@ -70,7 +70,9 @@ def load_result_files(rme_files_path: str):
     return results_data, scens_df, iv_dict
 
 
-def create_base_economics_dataframe(regions_data: pd.DataFrame, reef_spatial_data: pd.DataFrame, years: list):
+def create_base_economics_dataframe(
+    regions_data: pd.DataFrame, reef_spatial_data: pd.DataFrame, years: list
+):
     """
     Creates base structure for metrics summary files input to economics modelling.
 
@@ -94,10 +96,12 @@ def create_base_economics_dataframe(regions_data: pd.DataFrame, reef_spatial_dat
     regions_data["UNIQUE_ID"] = reef_spatial_data["UNIQUE_ID"].values
 
     # Create year dataframe
-    years_df = pd.DataFrame({
-        "year_absolute": years,
-        "year_relative": 0  # Placeholder if needed later
-    })
+    years_df = pd.DataFrame(
+        {
+            "year_absolute": years,
+            "year_relative": 0,  # Placeholder if needed later
+        }
+    )
 
     # Cross join: each reef with each year
     data_store = regions_data.merge(years_df, how="cross")
@@ -220,8 +224,8 @@ def create_economics_metric_files(
     nsims: int,
     stores,
     nbatches=None,
-    uncertainty_dict=None,
-    ncores=1,
+    uncertainty_dict: dict = None,
+    ncores: int = 1,
     metrics=None,
     max_dist=25.0,
     economics_spatial_filepath=None,
@@ -317,7 +321,7 @@ def create_economics_metric_files(
     metric_filepaths = [""] * len(intervention_ids)
 
     # Calculate number of members per batch to get desired number of batches
-    n_members = int(np.ceil(nsims/nbatches))
+    n_members = int(np.ceil(nsims / nbatches))
     chunks = list(batched(range(nsims), n_members))
 
     # Instantiating variable used to collate dataframes
@@ -342,7 +346,7 @@ def create_economics_metric_files(
         )
 
         # Scenario ids for CF and counterfactual
-        scen_id_start = (iv_idx * n_reps)
+        scen_id_start = iv_idx * n_reps
         scen_id_end = scen_id_start + n_reps
         iv_scens = unique_iv_scens[scen_id_start:scen_id_end]
         cf_scens = unique_cf_scens[scen_id_start:scen_id_end]
@@ -352,7 +356,7 @@ def create_economics_metric_files(
         id_key_df = scens_df_iv[scen_cols].assign(
             distance_to_port_NM=0.0,
             furthest_representative_reef="",
-            closest_representative_reef=""
+            closest_representative_reef="",
         )
 
         # Add distance to port data to save in intervention key
@@ -387,7 +391,7 @@ def create_economics_metric_files(
 
             store_ecol_ids[batch_sel, iv_idx] = ecol_ids
 
-            target_cols = [f"sim_{b+1}" for b in batch_sel]
+            target_cols = [f"sim_{b + 1}" for b in batch_sel]
             fn_prefix = f"ID{iv_id}"
             for met_func in metrics:
                 fn_suffix = f"{base_met_filename}{met_func.__name__}_batch{i_core}"
@@ -424,12 +428,14 @@ def create_economics_metric_files(
             number_of_species=6,
             start_year=start_year,
             end_year=end_year,
-            climate_model=scens_df_iv["GCM name"].values
-        ).rename(columns={
-            "number of corals": "number_of_1YO_corals",
-            "intervention id": "ID",
-            "year": "intervention_years",
-        })
+            climate_model=scens_df_iv["GCM name"].values,
+        ).rename(
+            columns={
+                "number of corals": "number_of_1YO_corals",
+                "intervention id": "ID",
+                "year": "intervention_years",
+            }
+        )
 
         if iv_idx > 0:
             id_key_df_store = id_key_df
@@ -439,12 +445,11 @@ def create_economics_metric_files(
         metric_filepaths[iv_idx] = store_metric_filepaths
 
     for i_core in range(ncores):
-        id_key_df_store.to_csv(f"{id_filename}{str(i_core)}.csv")
+        id_key_df_store.to_csv(f"{id_filename}{str(i_core)}.csv", index=False)
 
-        store_ecol_ids_df = pd.DataFrame(
+        pd.DataFrame(
             store_ecol_ids[nbatches * i_core : nbatches * (i_core + 1), :],
             columns=[str(id) for id in intervention_ids],
-        )
-        store_ecol_ids_df.to_csv(f"ecol_id_filename{str(i_core)}.csv")
+        ).to_csv(f"ecol_id_filename{str(i_core)}.csv", index=False)
 
     return os.path.basename(rme_files_path), metric_filepaths

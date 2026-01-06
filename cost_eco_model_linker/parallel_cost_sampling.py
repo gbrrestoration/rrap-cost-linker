@@ -102,25 +102,27 @@ def post_process_metrics(metric_filepaths, metrics, nsims, nbatches):
     econ_dir = RESULT_DIRS["econ_dir"]
 
     init_metric_df = pd.read_csv(path_join(econ_dir, metric_filepaths[0]))
-    sim_cols = [f"sim_{i}" for i in range(1, nsims+1)]
+    sim_cols = [f"sim_{i}" for i in range(1, nsims + 1)]
     metric_df = pd.DataFrame(
-        np.zeros((init_metric_df.shape[0], nsims), dtype=np.float64),
-        columns=sim_cols
+        np.zeros((init_metric_df.shape[0], nsims), dtype=np.float64), columns=sim_cols
     )
 
     # TODO: Why 0:19? See also indexing with steps of 19 in for loop below?
-    metric_df = pd.concat((init_metric_df[init_metric_df.columns[0:19]], metric_df), axis=1)
+    metric_df = pd.concat(
+        (init_metric_df[init_metric_df.columns[0:19]], metric_df), axis=1
+    )
 
     for metric_f in metrics:
-        file_list = [fn for fn in metric_filepaths if metric_f.__name__  in fn]
-        for (idx_met, metrics_file) in enumerate(file_list):
-
+        file_list = [fn for fn in metric_filepaths if metric_f.__name__ in fn]
+        for idx_met, metrics_file in enumerate(file_list):
             met_file = path_join(econ_dir, metrics_file)
             met_temp = pd.read_csv(met_file)
-            metric_df.iloc[:, idx_met*nbatches+19:idx_met*nbatches+19+nbatches] = met_temp.values[:, 19:nbatches+19]
+            metric_df.iloc[
+                :, idx_met * nbatches + 19 : idx_met * nbatches + 19 + nbatches
+            ] = met_temp.values[:, 19 : nbatches + 19]
             os.remove(met_file)
 
-        save_fn = file_list[0][:-11]+".csv"  # TODO: Nicer handling of this "-11"
+        save_fn = file_list[0][:-11] + ".csv"  # TODO: Nicer handling of this "-11"
         out_file = path_join(econ_dir, save_fn)
         metric_df.to_csv(out_file, index=False)
 
@@ -177,16 +179,22 @@ def post_process_costs(result, nbatches, nsims):
     """
     for iv_id in range(len(result[0])):
         init_cost_df = pd.read_csv(result[0][iv_id])
-        sim_cols = ["year", "component"] + ["draw"+str(i) for i in range(1, nsims+1)]
+        sim_cols = ["year", "component"] + [
+            "draw" + str(i) for i in range(1, nsims + 1)
+        ]
 
-        cost_df = pd.DataFrame(np.zeros((init_cost_df.shape[0],2+nsims)), columns = sim_cols)
-        cost_df.loc[:,["year", "component"]] = init_cost_df[["year", "component"]]
+        cost_df = pd.DataFrame(
+            np.zeros((init_cost_df.shape[0], 2 + nsims)), columns=sim_cols
+        )
+        cost_df.loc[:, ["year", "component"]] = init_cost_df[["year", "component"]]
 
-        save_fn = result[0][iv_id].split("id")[0][:-6]+".csv"
+        save_fn = result[0][iv_id].split("id")[0][:-6] + ".csv"
 
-        for (idx_r, res) in enumerate(result):
+        for idx_r, res in enumerate(result):
             cost_temp = pd.read_csv(res[iv_id])
-            cost_df.iloc[:, idx_r*nbatches+2:idx_r*nbatches+2+nbatches] = cost_temp.values[:, 2:nbatches+2]
+            cost_df.iloc[:, idx_r * nbatches + 2 : idx_r * nbatches + 2 + nbatches] = (
+                cost_temp.values[:, 2 : nbatches + 2]
+            )
             os.remove(res[iv_id])
 
         cost_df.to_csv(save_fn, index=False)

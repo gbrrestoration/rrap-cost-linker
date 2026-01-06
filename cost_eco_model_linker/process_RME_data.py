@@ -301,24 +301,6 @@ def create_economics_metric_files(
     data_store = pd.concat((data_store, store_sims), axis=1)
     store_ecol_ids = np.zeros((nsims, len(intervention_ids)), dtype=int)
 
-    # Setup key table structure used by economics modelling
-    id_key_df_store = pd.DataFrame(
-        columns=[
-            "ID",
-            "intervention_years",
-            "rep",
-            "number_of_1YO_corals",
-            "distance_to_port_NM",
-            "furthest_representative_reef",
-            "closest_representative_reef",
-            "results_filename",
-            "number_of_species",
-            "start_year",
-            "end_year",
-            "climate_model",
-        ]
-    )
-
     # Base filename for saving metrics
     ecol_uncert = uncertainty_dict["ecol_uncert"]
     expert_uncert = uncertainty_dict["expert_uncert"]

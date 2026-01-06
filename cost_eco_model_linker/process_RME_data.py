@@ -22,41 +22,41 @@ def load_reef_data():
     return gp.read_file(path_join(THIS_DIR, "datasets", "reefmod_gbr.gpkg"))
 
 
-def load_regions_data(economics_spatial_filepath):
+def load_regions_data(economics_spatial_filepath: str):
     """
     Loads key economics spatial data.
 
     Parameters
     ----------
-        economics_spatial_filepath : string
-            String giving the path to economics spatial data.
+    economics_spatial_filepath : string
+        String giving the path to economics spatial data.
 
     Returns
     -------
-        regions_data : dataframe
+    regions_data : dataframe
     """
     regions_data = pd.read_csv(economics_spatial_filepath)  # Economic spatial data key
 
     return regions_data
 
 
-def load_result_files(rme_files_path):
+def load_result_files(rme_files_path: str):
     """
     Loads results files generated from running scenarios in ReefModEngine.jl.
 
     Parameters
     ----------
-        rme_files_path : string
-            String giving the path to resultset folder.
+    rme_files_path : string
+        String giving the path to resultset folder.
 
     Returns
     -------
-        results_data : dict
-            Dict containing numpy arrays of results data from running ReefModEngine.jl.
-        scens_df : dataframe
-            Describes scenario parameters year-by-year, including rep, year and intervention levels.
-        iv_dict : dict
-            Contains other key scenario info, such as whether the scenario is counterfactual or intervention.
+    results_data : dict
+        Dict containing numpy arrays of results data from running ReefModEngine.jl.
+    scens_df : dataframe
+        Describes scenario parameters year-by-year, including rep, year and intervention levels.
+    iv_dict : dict
+        Contains other key scenario info, such as whether the scenario is counterfactual or intervention.
     """
 
     # intervention scenarios table
@@ -70,7 +70,7 @@ def load_result_files(rme_files_path):
     return results_data, scens_df, iv_dict
 
 
-def create_base_economics_dataframe(regions_data, reef_spatial_data, years):
+def create_base_economics_dataframe(regions_data: pd.DataFrame, reef_spatial_data: pd.DataFrame, years: list):
     """
     Creates base structure for metrics summary files input to economics modelling.
 
@@ -115,7 +115,7 @@ def create_base_economics_dataframe(regions_data, reef_spatial_data, years):
     return data_store, regions_data
 
 
-def area_weighted_rti(metrics_dict, metrics_df):
+def area_weighted_rti(metrics_dict: dict, metrics_df: pd.DataFrame):
     """
     Processes metrics dict into continuous reef condition weighted by reef area.
 
@@ -136,7 +136,7 @@ def area_weighted_rti(metrics_dict, metrics_df):
     )
 
 
-def rci(metrics_dict, metrics_df, rci_threshold=0.6):
+def rci(metrics_dict: dict, metrics_df: pd.DataFrame, rci_threshold=0.6):
     """
     Processes metrics dict into area at threshold RCI and above.
 
@@ -156,7 +156,7 @@ def rci(metrics_dict, metrics_df, rci_threshold=0.6):
     return np.transpose(rci * np.array(metrics_df["total_area_nine_zones"]), (1, 0))
 
 
-def coral_area_saved(metrics_dict, metrics_df):
+def coral_area_saved(metrics_dict: dict, metrics_df: pd.DataFrame):
     """
     Processes metrics dict into total area of coral cover in hectares.
 
@@ -175,7 +175,7 @@ def coral_area_saved(metrics_dict, metrics_df):
     )
 
 
-def rfi(metrics_dict, metrics_df, rfi_thresholds=[0.74, 29.91]):
+def rfi(metrics_dict: dict, metrics_df: pd.DataFrame, rfi_thresholds=[0.74, 29.91]):
     """
     Processes metrics dict into area at threshold RFI and above.
     Minimum fish biomass is 0.74 kg km2. This was the minimum observation in the Graham and Nash,
@@ -197,7 +197,7 @@ def rfi(metrics_dict, metrics_df, rfi_thresholds=[0.74, 29.91]):
     return np.transpose(rfi, (1, 0))
 
 
-def raw_rci(metrics_dict, metrics_df):
+def raw_rci(metrics_dict: dict, metrics_df: pd.DataFrame):
     """
     Processes metrics dict into raw RCI for table storage.
 
@@ -211,7 +211,7 @@ def raw_rci(metrics_dict, metrics_df):
     return np.transpose(metrics_dict["RCI"], (1, 0))
 
 
-def raw_rti(metrics_dict, metrics_df):
+def raw_rti(metrics_dict: dict, metrics_df: pd.DataFrame):
     """
     Processes metrics dict into raw RTI for table storage.
 
@@ -226,8 +226,8 @@ def raw_rti(metrics_dict, metrics_df):
 
 
 def create_economics_metric_files(
-    rme_files_path,
-    nsims,
+    rme_files_path: str,
+    nsims: int,
     stores,
     nbatches=None,
     uncertainty_dict=None,

@@ -296,6 +296,7 @@ def calculate_costs(
     prod_model_fp = f"{prod_model_filepath}{_iter_id}.xlsx"
     shutil.copy(prod_model_filepath + ".xlsx", prod_model_fp)
 
+    common_dir = os.path.abspath(path_join(iv_keys_dir, os.pardir))
     cost_filepaths = [""] * len(np.unique(ID_key.ID))
 
     for id_idx, scen_id in enumerate(np.unique(ID_key.ID)):
@@ -400,7 +401,7 @@ def calculate_costs(
             )
 
         cost_filepath = path_join(
-            THIS_DIR,
+            common_dir,
             "cost_outputs",
             f"ID{scen_id}intervention_mc_cost_data_iter_id{iter_id}.csv",
         )

@@ -438,6 +438,7 @@ def create_economics_metric_files(
         )
 
         if iv_idx > 0:
+            # Keep first dataframe to add other results to
             id_key_df_store = id_key_df
         else:
             id_key_df_store = pd.concat([id_key_df_store, id_key_df])
@@ -450,6 +451,6 @@ def create_economics_metric_files(
         pd.DataFrame(
             store_ecol_ids[nbatches * i_core : nbatches * (i_core + 1), :],
             columns=[str(id) for id in intervention_ids],
-        ).to_csv(f"ecol_id_filename{str(i_core)}.csv", index=False)
+        ).to_csv(f"{ecol_id_filename + str(i_core)}.csv", index=False)
 
     return os.path.basename(rme_files_path), metric_filepaths

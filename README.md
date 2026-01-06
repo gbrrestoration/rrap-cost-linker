@@ -56,7 +56,7 @@ Assuming the current directory is the repository root:
 $ uv add --group lint ruff
 
 # Add ipython for better REPL experience
-$ uv add --group dev ipython ipdb
+$ uv add --group dev ipython ipdb py-spy
 
 # Add this package for development
 $ uv pip install -e .

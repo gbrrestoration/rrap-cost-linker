@@ -21,6 +21,7 @@ dependencies = [
 dev = [
     "ipdb>=0.13.13",
     "ipython>=9.6.0",
+    "py-spy>=0.4.1",
 ]
 lint = [
     "ruff>=0.14.1",

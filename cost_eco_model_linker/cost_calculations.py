@@ -76,14 +76,14 @@ def initialise_cost_df(years, nsims):
 
     Parameters
     ----------
-        years : np.array
-            Intervention years
-        nsims : int
-            Total number of simulations (from metrics sampling)
+    years : np.array
+        Intervention years
+    nsims : int
+        Total number of simulations (from metrics sampling)
 
     Returns
     -------
-        cost_df : dataframe
+    cost_df : dataframe
     """
     # Dataframe for saving cost data to
     n_years = len(years)
@@ -155,17 +155,17 @@ def update_factors(factors_df_dep, factors_df_prod, ID_key, ecol_idx, nsims):
 
     Parameters
     ----------
-        factors_df_dep : dataframe
-            Factors dataframe for the deployment cost model.
-        factors_df_prod : dataframe
-            Factors dataframe for the production cost model
-        ID_key : dataframe
-            Intervention specification dataframe containing intervention parameters.
-        ecol_idx : int
-            Indices mapping scenario IDs in the RME results to samples in nsims.
-        nsims : int
-            Number of simulations drawn (may be smaller than dataframe size to get correct number of samples
-            for Sobol Sampling).
+    factors_df_dep : dataframe
+        Factors dataframe for the deployment cost model.
+    factors_df_prod : dataframe
+        Factors dataframe for the production cost model
+    ID_key : dataframe
+        Intervention specification dataframe containing intervention parameters.
+    ecol_idx : int
+        Indices mapping scenario IDs in the RME results to samples in nsims.
+    nsims : int
+        Number of simulations drawn (may be smaller than dataframe size to get correct number of samples
+        for Sobol Sampling).
     """
     # Sum over reefsets for the same intervention and year to give total number of corals outplanted in each environmental sample (rep)
     temp_id_df = (

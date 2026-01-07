@@ -70,8 +70,8 @@ def para_sample_econ(
 
     # Post process metrics to be in single file
     for filepaths in metric_filepaths:
-        for filetype in ["intervention", "counterfactual"]:
-            file_list = [fn for fn in filepaths if filetype in fn]
+        for sim_type in ["intervention", "counterfactual"]:
+            file_list = [fn for fn in filepaths if sim_type in fn]
             post_process_metrics(stores, file_list, metrics, nsims)
 
     os.remove(path_join(stores.econ_dir, "sim_template.parq"))
@@ -122,10 +122,10 @@ def post_process_metrics(
 
         metric_out = pd.concat((init_metric_df, metric_df), axis=1)
 
-        fn = file_list[0].split("_batch")[0]  # Extract common part of filename
-        save_fn = f"{fn}.csv"
-        out_file = path_join(econ_dir, save_fn)
-        metric_out.to_csv(out_file, index=False)
+        # Extract common part of filename
+        fn = f"{file_list[0].split('_batch')[0]}.parq"
+        out_file = path_join(econ_dir, fn)
+        metric_out.to_parquet(out_file, index=False)
 
         for fn in file_list:
             os.remove(path_join(econ_dir, fn))

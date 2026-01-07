@@ -42,7 +42,9 @@ def default_uncertainty_dict() -> dict:
     }
 
 
-def indicator_params(result_set, scen_ids, uncertainty_dict=default_uncertainty_dict(), juv_max_years=[0,18], maxcoraljuv=[]):
+def indicator_params(
+    result_set, scen_ids, uncertainty_dict=None, juv_max_years=None, max_coral_juv=None
+):
     """
     Calculates key parameters for shelter volume and RCI calculations given uncertainty sampling choices.
 
@@ -56,22 +58,28 @@ def indicator_params(result_set, scen_ids, uncertainty_dict=default_uncertainty_
             Contains information of which types of uncertainty to sample when processing metrics.
         juv_max_years : list
             Indices of years to calculate Juveniles max baseline over.
-        maxcoraljuv : np.float
+        max_coral_juv : list[float]
             Max juveniles baseline (can be included instead of using hindcasting baseline).
 
     Returns
     -------
-        maxcoraljuv : np.float
+        max_coral_juv : np.float
             Maximum juveniles baseline.
         sheltervolume_parameters : np.array
             Parameters for sheltervolume regression models.
         rci_crit : np.array
             Array of thresholds describing reef condition categories.
     """
+    if uncertainty_dict is None:
+        uncertainty_dict = default_uncertainty_dict()
+    if juv_max_years is None:
+        juv_max_years = [0, 18]
 
     # MAXIMUM JUVENILES
-    if maxcoraljuv==[]:
-        maxcoraljuv = np.max(result_set["nb_coral_juv"][scen_ids, :, juv_max_years[0]:juv_max_years[1]])
+    if max_coral_juv is None:
+        max_coral_juv = np.max(
+            result_set["nb_coral_juv"][scen_ids, :, juv_max_years[0] : juv_max_years[1]]
+        )
 
     ## SHELTER VOLUME UNCERTAINTY
     if uncertainty_dict["shelt_uncert"] == 0:

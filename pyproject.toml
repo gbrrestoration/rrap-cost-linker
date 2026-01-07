@@ -10,6 +10,8 @@ dependencies = [
     "netcdf4>=1.7.2",
     "numpy>=2.2.4",
     "pandas>=2.2.3",
+    "pyarrow>=22.0.0",
+    "python-dotenv>=1.2.1",
     "pywin32>=310",
     "pyyaml>=6.0.2",
     "salib>=1.5.2",
@@ -21,6 +23,7 @@ dependencies = [
 dev = [
     "ipdb>=0.13.13",
     "ipython>=9.6.0",
+    "py-spy>=0.4.1",
 ]
 lint = [
     "ruff>=0.14.1",

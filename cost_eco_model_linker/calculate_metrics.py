@@ -48,7 +48,7 @@ def indicator_params(result_set, scen_ids, uncertainty_dict=default_uncertainty_
     Parameters
     ----------
         result_set : dict
-            ReefModEngne.jl resultset structure.
+            ReefModEngine.jl resultset structure.
         scen_ids : np.array
             List of scenario IDs to consider (e.g. only sample counterfactual/intervention etc.).
         uncertainty_dict : dict
@@ -139,7 +139,7 @@ def reef_condition_rme(results_data, scen_ids, ecol_uncert, sheltervolume_parame
     Parameters
     ----------
         results_data : dict
-            ReefModEngne.jl resultset structure.
+            ReefModEngine.jl resultset structure.
         scen_ids : np.array
             List of scenario IDs to consider (e.g. only sample counterfactual/intervention etc.).
         ecol_uncert : int (0 or 1)
@@ -188,7 +188,7 @@ def reef_condition_rme(results_data, scen_ids, ecol_uncert, sheltervolume_parame
     # Extract constants and variables
     nsims, ngroups, nreefs, nyrs  = coral_cover_per_taxa.shape
 
-    # The ollowing code is for calculating SV from number of corals, which is not currently possible with default
+    # The following code is for calculating SV from number of corals, which is not currently possible with default
     # metrics saved in ReefModEngine.jl runs
 
     # juv_sizes = 1
@@ -288,7 +288,7 @@ def extract_metrics(results_data, scen_ids, nsims, uncertainty_dict=None):
     Parameters
     ----------
     result_set : dict
-        ReefModEngne.jl resultset structure.
+        ReefModEngine.jl resultset structure.
     scen_ids : np.array
         List of scenario IDs to consider (e.g. only sample counterfactual/intervention etc.).
     nsims : int

@@ -56,7 +56,7 @@ Assuming the current directory is the repository root:
 $ uv add --group lint ruff
 
 # Add ipython for better REPL experience
-$ uv add --group dev ipython ipdb
+$ uv add --group dev ipython ipdb py-spy
 
 # Add this package for development
 $ uv pip install -e .
@@ -66,36 +66,43 @@ This project uses the Ruff python formatter.
 
 For Visual Studio Code users, install the `Ruff` Python formatter extension.
 
+If the `uv` environment has changed, sync all dependencies with:
+
+```shell
+$ uv sync
+```
+
 ### Sampled metrics output files
 
 Two configuration files are required for the cost model sampling component of this repository.
 
 - `src/config.csv` : Doesn't need to be manually created by the user. Designate names, types and positions of cost model parameters.
-- `src/config.json` : Needs to be manually created by the user. Specifies "deploy_model_filepath" and "deploy_prod_filepath", which are the filepaths to the deployment and production cost models respectively. The deployment and production models versions know to work  with the current version of this repo are, respectively, `3.5.5` and `3.7.0`.
-    ```json
-    {
-        "deploy_model_filepath": <"path to 3.5.5 CA Deployment Model">,
-        "prod_model_filepath": <"path to 3.7.0 CA Production Model">
-    }
-    ```
 
 ## Quickstart
 
-After creating a `config.json` file as explained above, the metric data files can be created with:
-
 ```
-import src.cost_calculations as cc
-import src.process_RME_data as prd
+import cost_eco_model_linker as ceml
 
 # Filepath to RME runs to process
-rme_files_path = "path to ReefModEngine.jl results"
+rme_files_path = "./data/eco_linker_example"
+deployment_model = "./3.5.5 CA Deployment Model"
+production_model = "./3.7.0 CA Production Model"
+output_path = "./results"
 
 # Number of sims for metrics sampling (default includes ecological and expert uncertainty in RCI calcs)
-nsims = 300
+nsims = 10
 
-# Create metric data files for economics modelling and extract filename for intervention key
-# nbatches = nsims and ncores = 1 if not using parallelisation
-int_keys_fn, filepaths = prd.create_economics_metric_files(rme_files_path, nsims, nsims, ncores=1)
+ceml.evaluate(rme_files_path, nsims, deployment_model, production_model, output_path)
+
+# Alternatively, to perform the above in parallel
+nsims = 10
+ncores = 4
+
+# Note: `__main__` namespace check is required for multiprocessing to work correctly.
+if __name__ == "__main__":
+    ceml.parallel_evaluate(
+        rme_files_path, nsims, ncores, deployment_model, production_model, output_path
+    )
 ```
 
 

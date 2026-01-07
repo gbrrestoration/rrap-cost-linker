@@ -137,12 +137,10 @@ def post_process_costs(result, nsims):
 
     Parameters
     ----------
-        result : list
-            List of filenames for saved parallel cost data runs.
-        nbatches : int
-            Number of draws run on each core.
-        nsims : int
-            Total number of draws to sample cost models, should match ecological metrics sampling.
+    result : list
+        List of filenames for saved parallel cost data runs.
+    nsims : int
+        Total number of draws to sample cost models, should match ecological metrics sampling.
     """
     for iv_id in range(len(result[0])):
         init_cost_df = pd.read_csv(result[0][iv_id])

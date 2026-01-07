@@ -1,12 +1,12 @@
 import os
 from os.path import join as path_join
 
-import shutil
+import shutil, tempfile
 
 import numpy as np
-import json
 import pandas as pd
 
+from .setup_results import OutputStores
 from .sampling import (
     problem_spec,
     convert_factor_types,
@@ -242,22 +242,23 @@ def update_setupcost_factors(factors_df_dep, factors_df_prod, ID_key, ecol_idx, 
 
 
 def calculate_costs(
-    iv_keys_dir,
-    ID_key_fn,
-    nsims,
-    deploy_model_filepath,
-    prod_model_filepath,
-    cont_p=0.25,
-    iter_id=0,
+    stores: OutputStores,
+    ID_key_fn: str,
+    nsims: int,
+    deploy_model_filepath: str,
+    prod_model_filepath: str,
+    cont_p: float = 0.25,
+    iter_id: int = 0,
 ):
     """
     Sample costs for a set of interventions specified in ID_key, sampling nsims.
 
     Parameters
     ----------
-    ID_key : dataframe
-        Dataframe created by running create_economics_metric_files connecting economics metric files to
-        intervention scenario IDs and parameters.
+    stores : OutputStores
+        Data class holding output directory locations
+    ID_key_fn : str
+        Target filename for output.
     nsims : int
         Total number of draws to sample cost models, should match ecological metrics sampling.
     deploy_model_filepath : string
@@ -269,6 +270,9 @@ def calculate_costs(
     iter_id : int
         ID used for parallel sampling to keep track of batches for ordered recombination.
     """
+    iv_keys_dir = stores.intervention_keys_dir
+    cost_dir = stores.cost_dir
+
     iv_ID_key = f"ID_key_{ID_key_fn}"
     rep_idx_key = f"rep_idx_{ID_key_fn}"
     _iter_id = str(iter_id)
@@ -281,14 +285,15 @@ def calculate_costs(
         path_join(iv_keys_dir, f"intervention_{rep_idx_key}_{run_id}.csv")
     )
 
+    tmp_dir = tempfile.mkdtemp(prefix="ceml_")
+
     # Copy files for independent run
-    deploy_model_fp = f"{deploy_model_filepath}{_iter_id}.xlsx"
+    deploy_model_fp = path_join(tmp_dir, f"{deploy_model_filepath}{_iter_id}.xlsx")
     shutil.copy(deploy_model_filepath + ".xlsx", deploy_model_fp)
 
-    prod_model_fp = f"{prod_model_filepath}{_iter_id}.xlsx"
+    prod_model_fp = path_join(tmp_dir, f"{prod_model_filepath}{_iter_id}.xlsx")
     shutil.copy(prod_model_filepath + ".xlsx", prod_model_fp)
 
-    common_dir = os.path.abspath(path_join(iv_keys_dir, os.pardir))
     cost_filepaths = [""] * len(np.unique(ID_key.ID))
 
     for id_idx, scen_id in enumerate(np.unique(ID_key.ID)):
@@ -393,8 +398,7 @@ def calculate_costs(
             )
 
         cost_filepath = path_join(
-            common_dir,
-            "cost_outputs",
+            cost_dir,
             f"ID{scen_id}intervention_mc_cost_data_iter_id{iter_id}.csv",
         )
 

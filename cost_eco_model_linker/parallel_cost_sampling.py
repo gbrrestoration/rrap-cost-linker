@@ -3,7 +3,7 @@ from os.path import join as path_join
 
 import math
 
-from .setup_results import RESULT_DIRS, OutputStores
+from .setup_results import OutputStores
 from . import process_RME_data as prd
 from . import cost_calculations as cc
 import pandas as pd
@@ -72,12 +72,12 @@ def para_sample_econ(
     for filepaths in metric_filepaths:
         for filetype in ["intervention", "counterfactual"]:
             file_list = [fn for fn in filepaths if filetype in fn]
-            post_process_metrics(file_list, metrics, nsims, nbatches)
+            post_process_metrics(stores, file_list, metrics, nsims, nbatches)
 
     return int_keys_fn, nbatches
 
 
-def post_process_metrics(metric_filepaths, metrics, nsims, nbatches):
+def post_process_metrics(stores, metric_filepaths, metrics, nsims, nbatches):
     """
     When running multiple cores for cost sampling, metrics calculations are also broken into batches
     to avoid memory issues when creating large metrics datacubes (have shape nsims*nyears*nreefs)
@@ -86,6 +86,8 @@ def post_process_metrics(metric_filepaths, metrics, nsims, nbatches):
 
     Parameters
     ----------
+    stores : OutputStore
+        Data class defining output directories
     metric_filepaths : list{string}
         List of all filepaths where metrics are saved.
     metrics : list{function}
@@ -99,7 +101,7 @@ def post_process_metrics(metric_filepaths, metrics, nsims, nbatches):
     -------
     None
     """
-    econ_dir = RESULT_DIRS["econ_dir"]
+    econ_dir = stores.econ_dir
 
     init_metric_df = pd.read_csv(path_join(econ_dir, metric_filepaths[0]))
     sim_cols = [f"sim_{i}" for i in range(1, nsims + 1)]

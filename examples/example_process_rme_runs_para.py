@@ -43,4 +43,4 @@ if __name__ == "__main__":
     pool.join()
 
     # Post-process saved samples to be in single file
-    pc.post_process_costs(result, nbatches, nsims)
+    pc.post_process_costs(result, nsims)

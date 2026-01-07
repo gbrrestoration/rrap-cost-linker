@@ -181,19 +181,19 @@ def _sample_cost(wb_file_path, factors_df, factor_spec, calculate_cost):
 
     Parameters
     ----------
-        wb_file_path : str
-            Filepath to a cost model as an excel workbook
-        factors_df : dataframe
-            Dataframe of factors to input in the cost model
-        factor_spec : dataframe
-            factor specification, as loaded from the config.csv
-        calculate_cost: function
-            Function to use to sample cost
+    wb_file_path : str
+        Filepath to a cost model as an excel workbook
+    factors_df : dataframe
+        Dataframe of factors to input in the cost model
+    factor_spec : dataframe
+        factor specification, as loaded from the config.csv
+    calculate_cost: function
+        Function to use to sample cost
 
     Returns
     -------
-        factors_df : dataframe
-            Updated sampled factor dataframe with costs added
+    factors_df : dataframe
+        Updated sampled factor dataframe with costs added
     """
     # win32com Excel interface can only open files using their absolute paths
     wb_file_path = os.path.abspath(wb_file_path)
@@ -223,17 +223,17 @@ def sample_deployment_cost(wb_file_path, factors_df, factor_spec):
 
     Parameters
     ----------
-        wb_file_path : str
-            Filepath to a cost model as an excel workbook
-        factors_df : dataframe
-            Dataframe of factors to input in the cost model
-        factor_spec : dataframe
-            factor specification, as loaded from the config.csv
+    wb_file_path : str
+        Filepath to a cost model as an excel workbook
+    factors_df : dataframe
+        Dataframe of factors to input in the cost model
+    factor_spec : dataframe
+        factor specification, as loaded from the config.csv
 
     Returns
     -------
-        factors_df : dataframe
-            Updated sampled factor dataframe with costs added
+    factors_df : dataframe
+        Updated sampled factor dataframe with costs added
     """
     return _sample_cost(
         wb_file_path, factors_df, factor_spec, calculate_deployment_cost
@@ -246,17 +246,17 @@ def sample_production_cost(wb_file_path, factors_df, factor_spec):
 
     Parameters
     ----------
-        wb_file_path : Workbook file path
-            A cost model as an excel workbook
-        factors_df : dataframe
-            Dataframe of factors to input in the cost model
-        factor_spec : dataframe
-            Factor specification, as loaded from the config.csv
+    wb_file_path : Workbook file path
+        A cost model as an excel workbook
+    factors_df : dataframe
+        Dataframe of factors to input in the cost model
+    factor_spec : dataframe
+        Factor specification, as loaded from the config.csv
 
     Returns
     -------
-        factors_df : dataframe
-            Updated sampled factor dataframe with costs added
+    factors_df : dataframe
+        Updated sampled factor dataframe with costs added
     """
     return _sample_cost(
         wb_file_path, factors_df, factor_spec, calculate_production_cost

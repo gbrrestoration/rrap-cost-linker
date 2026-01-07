@@ -17,14 +17,6 @@ from .sampling import (
 THIS_DIR = os.path.dirname(__file__)
 
 
-def load_config():
-    """
-    Loads config file containing paths to the cost models.
-    """
-    with open("config.json", "r") as file:
-        return json.load(file)
-
-
 def get_NK(nsims, n_factors):
     """
     Calculate number of input Sobol samples, N, given number of total simulations required and number of factors.

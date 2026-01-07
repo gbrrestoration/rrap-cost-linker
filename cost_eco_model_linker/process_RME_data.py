@@ -364,8 +364,13 @@ def create_economics_metric_files(
         # Process batches
         batch_files = []
 
+        # Shared template for all simulations
+        data_store.to_parquet(
+            path_join(stores.econ_dir, "sim_template.parq"), index=False
+        )
+
         for batch_idx, batch_sel in enumerate(batch_chunks):
-            ds = data_store.copy()
+            ds = pd.DataFrame()
 
             # Extract metrics for intervention and counterfactual
             metrics_data_iv, ecol_ids = extract_metrics(
@@ -389,27 +394,32 @@ def create_economics_metric_files(
             # Prepare simulation columns for this batch
             sim_cols = [f"sim_{b + 1}" for b in batch_sel]
 
-            # Create a queue of write tasks
-            # write_queue = []
-
             # Calculate and save metrics for each metric function
             for met_func in metrics:
                 fn_suffix = f"{base_met_filename}{met_func.__name__}_batch{batch_idx}"
 
                 # Intervention results
-                iv_results = met_func(metrics_data_iv, ds)
+                iv_results = met_func(metrics_data_iv, data_store)
                 iv_filename = f"ID{iv_id}_intervention{fn_suffix}.parq"
                 ds[sim_cols] = iv_results
 
-                ds.to_parquet(path_join(stores.econ_dir, iv_filename), index=False)
+                ds.to_parquet(
+                    path_join(stores.econ_dir, iv_filename),
+                    index=False,
+                    compression=None,
+                )
                 batch_files.append(iv_filename)
 
                 # Counterfactual results (reuse the same dataframe)
-                cf_results = met_func(metrics_data_cf, ds)
+                cf_results = met_func(metrics_data_cf, data_store)
                 cf_filename = f"ID{iv_id}_counterfactual{fn_suffix}.parq"
                 ds[sim_cols] = cf_results
 
-                ds.to_parquet(path_join(stores.econ_dir, cf_filename), index=False)
+                ds.to_parquet(
+                    path_join(stores.econ_dir, cf_filename),
+                    index=False,
+                    compression=None,
+                )
                 batch_files.append(cf_filename)
 
         # Finalize intervention key with metadata

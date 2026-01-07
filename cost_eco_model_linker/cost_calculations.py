@@ -1,7 +1,8 @@
 import os
 from os.path import join as path_join
 
-import shutil, tempfile
+import shutil
+import tempfile
 
 import numpy as np
 import pandas as pd
@@ -294,15 +295,16 @@ def calculate_costs(
     prod_model_fp = path_join(tmp_dir, f"{prod_model_filepath}{_iter_id}.xlsx")
     shutil.copy(prod_model_filepath + ".xlsx", prod_model_fp)
 
-    cost_filepaths = [""] * len(np.unique(ID_key.ID))
+    unique_ids = np.unique(ID_key.ID)
+    cost_filepaths = [""] * len(unique_ids)
 
-    for id_idx, scen_id in enumerate(np.unique(ID_key.ID)):
-        scen_idx = (
-            ID_key.ID == scen_id
-        )  # Intervention scenario ID to link costs to ecological model outcomes
+    for id_idx, scen_id in enumerate(unique_ids):
+        # Intervention scenario ID to link costs to ecological model outcomes
+        scen_idx = ID_key.ID == scen_id
         int_years = np.unique(ID_key.intervention_years[scen_idx])  # Intervention years
 
-        # Ecological rep sampling indices (- min because the indices should be relative to the vector selected
+        # Ecological rep sampling indices
+        # (`min()` because the indices should be relative to the vector selected
         # for the intervention id)
         ecol_ids = ecol_ids_df[str(scen_id)] - min(ecol_ids_df[str(scen_id)])
 

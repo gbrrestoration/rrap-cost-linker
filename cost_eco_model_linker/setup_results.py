@@ -37,13 +37,14 @@ def setup_dirs(base_dir) -> OutputStores:
     OutputStores
         Named collection of output directory paths.
     """
+    config = RESULT_DIRS
 
     env_file = path_join("./.env")
     if os.path.isfile(env_file):
-        config = {**dotenv_values(env_file)}
-    else:
-        # Use defaults if none provided
-        config = RESULT_DIRS
+        user_config = {**dotenv_values(env_file)}
+
+        # Merge dicts so that default values are used if not provided
+        config = RESULT_DIRS | user_config
 
     for k, dir_name in config.items():
         full_path = path_join(base_dir, dir_name)

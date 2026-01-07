@@ -5,6 +5,7 @@ import multiprocess as mp
 
 from . import process_RME_data as prd
 from .parallel_cost_sampling import post_process_metrics
+from .calculate_metrics import default_uncertainty_dict
 from . import (
     setup_dirs,
     create_economics_metric_files,
@@ -21,29 +22,48 @@ def evaluate(
     prod_model_fn: str,
     results_dir: str,
     metrics: list = None,
+    uncertainty_dict: dict = None,
 ) -> list[str]:
     """
     Evaluate costs of intervention scenarios.
 
     Parameters
     ----------
-    rme_files_path : str, Path to ReefMod Engine results
-    nsims : int, number of simulations to evaluate
-    deploy_model_fn : str, Path to deployment (spreadsheet) model (including filename but excluding file extension)
-    prod_model_fn : str, Path to production (spreadsheet) model (including filename but excluding file extension)
-    results_dir : path to place results
+    rme_files_path : str
+        Path to ReefMod Engine results.
+    nsims : int
+        Number of simulations to evaluate.
+    deploy_model_fn : str
+        Path to deployment spreadsheet model, including filename but excluding file extension.
+    prod_model_fn : str
+        Path to production spreadsheet model, including filename but excluding file extension.
+    results_dir : str
+        Path to directory for storing results.
+    metrics : list, optional
+        List of metrics to calculate. Default is None.
+    uncertainty_dict : dict, optional
+        Dictionary specifying uncertainty parameters. Default is None.
 
     Returns
-    list, result paths
+    -------
+    list[str]
+        Paths to result files.
     """
     stores = setup_dirs(results_dir)
 
+    # Set defaults
     if metrics is None:
         metrics = [prd.rci, prd.raw_rti, prd.rfi]
+    if uncertainty_dict is None:
+        uncertainty_dict = default_uncertainty_dict()
 
     # Create metric data files for economics modelling and extract filename for intervention key
     int_keys_fn, metric_fps = create_economics_metric_files(
-        rme_files_path, nsims, stores, metrics=metrics
+        rme_files_path,
+        nsims,
+        stores,
+        metrics=metrics,
+        uncertainty_dict=uncertainty_dict,
     )
 
     # Post process metrics to be in single file
@@ -69,12 +89,25 @@ def parallel_evaluate(
     deploy_model_fn: str,
     prod_model_fn: str,
     results_dir: str,
+    metrics: list = None,
+    uncertainty_dict: dict = None,
 ):
     stores = setup_dirs(results_dir)
 
+    # Set defaults
+    if metrics is None:
+        metrics = [prd.rci, prd.raw_rti, prd.rfi]
+    if uncertainty_dict is None:
+        uncertainty_dict = default_uncertainty_dict()
+
     # Create economics metrics input files, get number of batches needed to complete nsims over ncores
     int_keys_fn, nbatches = para_sample_econ(
-        rme_files_path, nsims, stores, ncores=ncores
+        rme_files_path,
+        nsims,
+        stores,
+        ncores=ncores,
+        metrics=metrics,
+        uncertainty_dict=uncertainty_dict,
     )
 
     # Run cost sampling in parallel on ncores

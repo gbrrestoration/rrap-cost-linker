@@ -229,7 +229,7 @@ def create_economics_metric_files(
     metrics=None,
     max_dist=25.0,
     economics_spatial_filepath=None,
-):
+) -> tuple[str, list[str]]:
     """
     Main function for creating metric file summaries for input to economics modelling.
 

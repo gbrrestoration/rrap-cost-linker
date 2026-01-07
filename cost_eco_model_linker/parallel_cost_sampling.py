@@ -127,43 +127,6 @@ def post_process_metrics(metric_filepaths, metrics, nsims, nbatches):
         metric_df.to_csv(out_file, index=False)
 
 
-def calc_costs_para(
-    int_keys_fn,
-    n_sims,
-    deploy_model_filepath,
-    prod_model_filepath,
-    iter_id,
-    cont_p=0.25,
-):
-    """
-    Wrapper function to allow cost model sampling in parallel over ncores.
-
-    Parameters
-    ----------
-    ID_key : dataframe
-        Dataframe created by running create_economics_metric_files connecting economics metric files to
-        intervention scenario IDs and parameters.
-    nsims : int
-        Total number of draws to sample cost models, should match ecological metrics sampling.
-    deploy_model_filepath : string
-        Path to deployment cost model.
-    prod_model_filepath : string
-        Path to production cost model.
-    cont_p : float
-        Contingency cost proportion.
-    iter_id : int
-        Iteration ID
-    """
-    return cc.calculate_costs(
-        int_keys_fn,
-        n_sims,
-        deploy_model_filepath,
-        prod_model_filepath,
-        cont_p=cont_p,
-        iter_id=iter_id,
-    )
-
-
 def post_process_costs(result, nbatches, nsims):
     """
     Save cost samples run in parallel in a single file which is in the correct format for the economics modelling.

@@ -1,5 +1,5 @@
 import os
-import win32com.client
+from win32com import client as w32client
 from SALib import ProblemSpec
 import numpy as np
 import pandas as pd
@@ -199,7 +199,10 @@ def _sample_cost(wb_file_path, factors_df, factor_spec, calculate_cost):
     wb_file_path = os.path.abspath(wb_file_path)
 
     # Open workbook
-    xlapp = win32com.client.gencache.EnsureDispatch('Excel.Application')
+    xlapp = w32client.DispatchEx("Excel.Application")
+    xlapp.Interactive = False
+    xlapp.Visible = False
+    xlapp.DisplayAlerts = False
     wb = xlapp.Workbooks.Open(wb_file_path)
 
     total_cost = np.zeros((factors_df.shape[0], 2))
@@ -209,7 +212,8 @@ def _sample_cost(wb_file_path, factors_df, factor_spec, calculate_cost):
     factors_df.loc[:, "Cost"] = total_cost[:, 0]
     factors_df.loc[:, "setupCost"] = total_cost[:, 1]
 
-    wb.Close(True)  # Close workbook
+    wb.Close(SaveChanges=False)  # Close workbook
+    xlapp.Quit()
     return factors_df
 
 

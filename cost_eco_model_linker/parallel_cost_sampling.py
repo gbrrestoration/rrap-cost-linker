@@ -131,7 +131,7 @@ def post_process_metrics(
             os.remove(path_join(econ_dir, fn))
 
 
-def post_process_costs(result, nbatches, nsims):
+def post_process_costs(result, nsims):
     """
     Save cost samples run in parallel in a single file which is in the correct format for the economics modelling.
 
@@ -157,11 +157,11 @@ def post_process_costs(result, nbatches, nsims):
 
         save_fn = result[0][iv_id].split("id")[0][:-6] + ".csv"
 
-        for idx_r, res in enumerate(result):
+        for res in result:
             cost_temp = pd.read_csv(res[iv_id])
-            cost_df.iloc[:, idx_r * nbatches + 2 : idx_r * nbatches + 2 + nbatches] = (
-                cost_temp.values[:, 2 : nbatches + 2]
-            )
+            target_cols = cost_temp.columns[2:]  # column id 2 is where data begins
+
+            cost_df[target_cols] = cost_temp[target_cols]
             os.remove(res[iv_id])
 
         cost_df.to_csv(save_fn, index=False)

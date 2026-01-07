@@ -88,7 +88,8 @@ def parallel_evaluate(
             prod_model_fn,
             0.25,  # cont_p
         )
+
         result = pool.map(wrapper, range(nbatches + 1))
 
     # Post-process saved samples to be in single file
-    post_process_costs(result, nbatches, nsims)
+    post_process_costs(result, nsims)

@@ -72,12 +72,16 @@ def para_sample_econ(
     for filepaths in metric_filepaths:
         for filetype in ["intervention", "counterfactual"]:
             file_list = [fn for fn in filepaths if filetype in fn]
-            post_process_metrics(stores, file_list, metrics, nsims, nbatches)
+            post_process_metrics(stores, file_list, metrics, nsims)
+
+    os.remove(path_join(stores.econ_dir, "sim_template.parq"))
 
     return int_keys_fn, nbatches
 
 
-def post_process_metrics(stores, metric_filepaths, metrics, nsims, nbatches):
+def post_process_metrics(
+    stores: OutputStores, metric_filepaths: list[str], metrics: list, nsims: int
+):
     """
     When running multiple cores for cost sampling, metrics calculations are also broken into batches
     to avoid memory issues when creating large metrics datacubes (have shape nsims*nyears*nreefs)
@@ -94,8 +98,6 @@ def post_process_metrics(stores, metric_filepaths, metrics, nsims, nbatches):
         List of metric functions which were calculated.
     nsims : int
         Total number of simulations runs
-    nbatches : int
-        Number of samples per core run
 
     Returns
     -------
@@ -103,39 +105,30 @@ def post_process_metrics(stores, metric_filepaths, metrics, nsims, nbatches):
     """
     econ_dir = stores.econ_dir
 
-    init_metric_df = pd.read_parquet(path_join(econ_dir, metric_filepaths[0]))
+    init_metric_df = pd.read_parquet(path_join(econ_dir, "sim_template.parq"))
     sim_cols = [f"sim_{i}" for i in range(1, nsims + 1)]
     metric_df = pd.DataFrame(
         np.zeros((init_metric_df.shape[0], nsims), dtype=np.float64), columns=sim_cols
     )
 
-    # 0 - 19 are the shared data columns
-    shared_cols_start = 0
-    shared_cols_end = 19
-    sim_cols_start = shared_cols_end + 1
-    metric_df = pd.concat(
-        (
-            init_metric_df[init_metric_df.columns[shared_cols_start:shared_cols_end]],
-            metric_df,
-        ),
-        axis=1,
-    )
-
     for metric_f in metrics:
-        file_list = [fn for fn in metric_filepaths if metric_f.__name__ in fn]
+        file_list = [fn for fn in metric_filepaths if f"_{metric_f.__name__}_" in fn]
         for metrics_file in file_list:
             met_file = path_join(econ_dir, metrics_file)
             met_temp = pd.read_parquet(met_file)
 
-            metric_data_cols = met_temp.iloc[:, sim_cols_start:-1].columns
+            metric_data_cols = met_temp.columns
             metric_df[metric_data_cols] = met_temp[metric_data_cols]
 
-            os.remove(met_file)
+        metric_out = pd.concat((init_metric_df, metric_df), axis=1)
 
         fn = file_list[0].split("_batch")[0]  # Extract common part of filename
         save_fn = f"{fn}.csv"
         out_file = path_join(econ_dir, save_fn)
-        metric_df.to_csv(out_file, index=False)
+        metric_out.to_csv(out_file, index=False)
+
+        for fn in file_list:
+            os.remove(path_join(econ_dir, fn))
 
 
 def post_process_costs(result, nbatches, nsims):

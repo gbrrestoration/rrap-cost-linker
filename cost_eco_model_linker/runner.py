@@ -60,12 +60,17 @@ def parallel_evaluate(
     )
 
     # Run cost sampling in parallel on ncores
-    if __name__ == "__main__":
-        with mp.Pool(ncores) as pool:
-            wrapper = partial(
-                calc_costs_para, int_keys_fn, nbatches, deploy_model_fn, prod_model_fn
-            )
-            result = pool.map(wrapper, range(ncores))
+    with mp.Pool(ncores) as pool:
+        wrapper = partial(
+            calculate_costs,
+            stores,
+            int_keys_fn,
+            nbatches,
+            deploy_model_fn,
+            prod_model_fn,
+            0.25,  # cont_p
+        )
+        result = pool.map(wrapper, range(nbatches + 1))
 
-        # Post-process saved samples to be in single file
-        post_process_costs(result, nbatches, nsims)
+    # Post-process saved samples to be in single file
+    post_process_costs(result, nbatches, nsims)

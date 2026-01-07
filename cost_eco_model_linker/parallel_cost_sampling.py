@@ -103,28 +103,37 @@ def post_process_metrics(stores, metric_filepaths, metrics, nsims, nbatches):
     """
     econ_dir = stores.econ_dir
 
-    init_metric_df = pd.read_csv(path_join(econ_dir, metric_filepaths[0]))
+    init_metric_df = pd.read_parquet(path_join(econ_dir, metric_filepaths[0]))
     sim_cols = [f"sim_{i}" for i in range(1, nsims + 1)]
     metric_df = pd.DataFrame(
         np.zeros((init_metric_df.shape[0], nsims), dtype=np.float64), columns=sim_cols
     )
 
-    # TODO: Why 0:19? See also indexing with steps of 19 in for loop below?
+    # 0 - 19 are the shared data columns
+    shared_cols_start = 0
+    shared_cols_end = 19
+    sim_cols_start = shared_cols_end + 1
     metric_df = pd.concat(
-        (init_metric_df[init_metric_df.columns[0:19]], metric_df), axis=1
+        (
+            init_metric_df[init_metric_df.columns[shared_cols_start:shared_cols_end]],
+            metric_df,
+        ),
+        axis=1,
     )
 
     for metric_f in metrics:
         file_list = [fn for fn in metric_filepaths if metric_f.__name__ in fn]
-        for idx_met, metrics_file in enumerate(file_list):
+        for metrics_file in file_list:
             met_file = path_join(econ_dir, metrics_file)
-            met_temp = pd.read_csv(met_file)
-            metric_df.iloc[
-                :, idx_met * nbatches + 19 : idx_met * nbatches + 19 + nbatches
-            ] = met_temp.values[:, 19 : nbatches + 19]
+            met_temp = pd.read_parquet(met_file)
+
+            metric_data_cols = met_temp.iloc[:, sim_cols_start:-1].columns
+            metric_df[metric_data_cols] = met_temp[metric_data_cols]
+
             os.remove(met_file)
 
-        save_fn = file_list[0][:-11] + ".csv"  # TODO: Nicer handling of this "-11"
+        fn = file_list[0].split("_batch")[0]  # Extract common part of filename
+        save_fn = f"{fn}.csv"
         out_file = path_join(econ_dir, save_fn)
         metric_df.to_csv(out_file, index=False)
 

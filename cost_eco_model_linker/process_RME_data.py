@@ -235,123 +235,117 @@ def create_economics_metric_files(
 
     Parameters
     ----------
-    rme_files_path : string
-        String giving the path to resultset folder.
+    rme_files_path : str
+        Path to resultset folder.
     nsims : int
-        Number of simulations to sampling (including uncertainty types as specified)
-    nbatches : int
-        Number of batches
-    uncertainty_dict : dict
-        Contains information on what uncertainty types to sample.
-    max_dist : float
-        Maximum distance between reefs within a "cluster". Total distance to port is calculated as distance
-        to port for closest reef cluster + distance between each additional further cluster where distance between
-        clusters is calculated as distance between the reefs furthest from port in each cluster.
-    economics_spatial_filepath : string
-        Filepath for economics spatial data (econ_spatial.csv)
-    econ_storage_path : string
-        Where to store output economics metrics files.
+        Number of simulations to sample (including uncertainty types as specified).
+    stores : object
+        Storage paths object with econ_dir and intervention_keys_dir attributes.
+    nbatches : int, optional
+        Number of batches. If None, defaults to nsims (single batch).
+    uncertainty_dict : dict, optional
+        Information on uncertainty types to sample.
+    ncores : int, default=1
+        Number of cores for output file generation.
+    metrics : list, optional
+        List of metric functions to calculate. Defaults to [rci, raw_rti, rfi].
+    max_dist : float, default=25.0
+        Maximum distance (NM) between reefs within a cluster for distance calculations.
+    economics_spatial_filepath : str, optional
+        Path to economics spatial data (econ_spatial.csv).
 
     Returns
     -------
-    id_filename : string
-        Filename for ID key file, which links economics metrics
+    run_id : str
+        Base filename identifier for this run.
+    metric_filepaths : list
+        List of generated metric file paths for each intervention.
     """
+    # Set defaults
     if economics_spatial_filepath is None:
         economics_spatial_filepath = path_join(THIS_DIR, "datasets", "econ_spatial.csv")
-
     if uncertainty_dict is None:
         uncertainty_dict = default_uncertainty_dict()
-
     if metrics is None:
         metrics = [rci, raw_rti, rfi]
 
-    econ_storage_path = stores.econ_dir
+    nbatches = nsims if nbatches is None else nbatches
 
-    # If nbatches not provided, set to nsims (calculate in one go rather than in sets of nbatches)
-    nbatches = nbatches if nbatches is not None else nsims
-
-    # Load all relevant data
+    # Load all required data
     regions_data = load_regions_data(economics_spatial_filepath)
-
-    # Scenario dataframe and metric results from RME runs
     results_data, scens_df, iv_dict = load_result_files(rme_files_path)
-
-    # Load reef spatial data to cross check reef UNIQUE_ID with GBRMPA_ID
     reef_spatial_data = load_reef_data()
 
-    # Create base dataframe for storing metric results for economics model
+    # Extract time information
     years = results_data["timesteps"][:]
-    start_year = years[0]
-    end_year = years[-1]
+    start_year, end_year = years[0], years[-1]
 
-    # Get unique intervention IDs from result set (a unique intervention scenario run in ReefModEngine.jl)
+    # Get unique intervention IDs
     intervention_ids = np.unique(scens_df["intervention id"])
 
-    # Extract ids for cf and intervention runs
-    unique_iv_scens = np.where(~np.array(iv_dict["counterfactual"]).astype(bool))[0]
-    unique_cf_scens = np.where(np.array(iv_dict["counterfactual"]).astype(bool))[0]
+    # Separate intervention and counterfactual scenario indices
+    is_counterfactual = np.array(iv_dict["counterfactual"], dtype=bool)
+    unique_iv_scens = np.where(~is_counterfactual)[0]
+    unique_cf_scens = np.where(is_counterfactual)[0]
 
-    # Setup key storage for metrics datafiles and ecological sample ids
-    data_store, regions_data = create_base_economics_dataframe(
+    # Create base dataframe structure (without sim columns yet)
+    base_data_store, regions_data = create_base_economics_dataframe(
         regions_data, reef_spatial_data, years
     )
 
-    # Add columns to store sampled metrics
-    sim_cols = [f"sim_{i}" for i in range(1, nsims + 1)]
-    store_sims = pd.DataFrame(
-        np.zeros((data_store.shape[0], len(sim_cols))), columns=sim_cols
-    )
-    data_store = pd.concat((data_store, store_sims), axis=1)
+    # Setup storage for ecological sample IDs
     store_ecol_ids = np.zeros((nsims, len(intervention_ids)), dtype=int)
 
-    # Base filename for saving metrics
+    # Generate batch indices
+    if nsims != nbatches:
+        nmembers = int(np.ceil(nsims / nbatches))
+        batch_chunks = list(batched(range(nsims), nmembers))
+    else:
+        batch_chunks = [
+            list(range(nsims)),
+        ]
+
+    # Setup filenames for outputs
     ecol_uncert = uncertainty_dict["ecol_uncert"]
     expert_uncert = uncertainty_dict["expert_uncert"]
     base_met_filename = f"_uncertainty_ecol{ecol_uncert}_indicator{expert_uncert}_var_"
 
-    # Save intervention key for generating cost data file for saved intervention and cf files
     run_id = os.path.basename(rme_files_path) + "_run"
     id_filename = path_join(
-        stores.intervention_keys_dir, "intervention_ID_key_" + run_id
+        stores.intervention_keys_dir, f"intervention_ID_key_{run_id}"
     )
     ecol_id_filename = path_join(
-        stores.intervention_keys_dir, "intervention_rep_idx_" + run_id
+        stores.intervention_keys_dir, f"intervention_rep_idx_{run_id}"
     )
-    metric_filepaths = [""] * len(intervention_ids)
 
-    # Calculate number of members per batch to get desired number of batches
-    n_members = int(np.ceil(nsims / nbatches))
-    chunks = list(batched(range(nsims), n_members))
+    # Storage for results
+    metric_filepaths = []
+    id_key_dfs = []
 
-    # Instantiating variable used to collate dataframes
-    id_key_df_store = None
-
-    # Save a csv for each unique intervention, one for cf and one for iv runs
+    # Process each intervention
     for iv_idx, iv_id in enumerate(intervention_ids):
-        store_metric_filepaths = [""] * len(metrics) * ncores * 2
-        filecount = 0
+        # Filter scenarios for this intervention
+        scens_df_iv = scens_df[scens_df["intervention id"] == iv_id].copy()
+        n_reps = scens_df_iv["rep"].max()
 
-        # Get scenario table for intervention
-        scens_idx = scens_df["intervention id"] == iv_id
-        scens_df_iv = scens_df[scens_idx]
-        n_reps = max(scens_df_iv["rep"])
-
-        reefset_names = np.unique(scens_df_iv["reefset"])
+        # Get intervention reefs
+        reefset_names = scens_df_iv["reefset"].unique()
         iv_reefs = sum([iv_dict[reefset_name] for reefset_name in reefset_names], [])
 
-        # Year relative starts at 0 on the first year of intervention
-        data_store.loc[:, "year_relative"] = data_store["year_absolute"] - (
-            min(scens_df_iv["year"]) + 1
+        # Calculate relative year (0 on first intervention year)
+        intervention_start = scens_df_iv["year"].min()
+        data_store = base_data_store.copy()
+        data_store["year_relative"] = data_store["year_absolute"] - (
+            intervention_start + 1
         )
 
-        # Scenario ids for CF and counterfactual
+        # Get scenario indices for this intervention and its counterfactual
         scen_id_start = iv_idx * n_reps
         scen_id_end = scen_id_start + n_reps
         iv_scens = unique_iv_scens[scen_id_start:scen_id_end]
         cf_scens = unique_cf_scens[scen_id_start:scen_id_end]
 
-        # Setup structure for intervention key - links intervention ID and filename to cost model data
+        # Create intervention key dataframe
         scen_cols = ["intervention id", "year", "rep", "number of corals"]
         id_key_df = scens_df_iv[scen_cols].assign(
             distance_to_port_NM=0.0,
@@ -359,18 +353,21 @@ def create_economics_metric_files(
             closest_representative_reef="",
         )
 
-        # Add distance to port data to save in intervention key
+        # Calculate and store distance to port
         rep_reefs_sort, total_dist = find_max_reef_distance(
             reef_spatial_data, regions_data, iv_reefs, max_dist=max_dist
         )
+        id_key_df["furthest_representative_reef"] = rep_reefs_sort[-1]
+        id_key_df["closest_representative_reef"] = rep_reefs_sort[0]
+        id_key_df["distance_to_port_NM"] = total_dist
 
-        # Store furthest and closest reefs in representative clusters
-        id_key_df.loc[:, "furthest_representative_reef"] = rep_reefs_sort[-1]
-        id_key_df.loc[:, "closest_representative_reef"] = rep_reefs_sort[0]
-        id_key_df.loc[:, "distance_to_port_NM"] = total_dist
+        # Process batches
+        batch_files = []
 
-        for i_core, batch_sel in enumerate(chunks):
-            # Extract metrics for intervention and counterfactual scenarios
+        for batch_idx, batch_sel in enumerate(batch_chunks):
+            ds = data_store.copy()
+
+            # Extract metrics for intervention and counterfactual
             metrics_data_iv, ecol_ids = extract_metrics(
                 results_data,
                 iv_scens,
@@ -384,47 +381,40 @@ def create_economics_metric_files(
                 uncertainty_dict=uncertainty_dict,
             )
 
-            # Result sampling ids to ignore counterfactuals in cost sampling
-            ecol_ids[ecol_ids >= max(id_key_df["rep"])] = ecol_ids[
-                ecol_ids >= max(id_key_df["rep"])
-            ] - max(id_key_df["rep"])
-
+            # Adjust ecological IDs to ignore counterfactuals in cost sampling
+            max_rep = id_key_df["rep"].max()
+            ecol_ids[ecol_ids >= max_rep] -= max_rep
             store_ecol_ids[batch_sel, iv_idx] = ecol_ids
 
-            target_cols = [f"sim_{b + 1}" for b in batch_sel]
-            fn_prefix = f"ID{iv_id}"
+            # Prepare simulation columns for this batch
+            sim_cols = [f"sim_{b + 1}" for b in batch_sel]
+
+            # Create a queue of write tasks
+            # write_queue = []
+
+            # Calculate and save metrics for each metric function
             for met_func in metrics:
-                fn_suffix = f"{base_met_filename}{met_func.__name__}_batch{i_core}"
+                fn_suffix = f"{base_met_filename}{met_func.__name__}_batch{batch_idx}"
 
-                # Write intervention results to file
-                data_store.loc[:, target_cols] = met_func(metrics_data_iv, data_store)
-                store_metric_filepaths[filecount] = (
-                    f"{fn_prefix}_intervention{fn_suffix}.csv"
-                )
-                data_store.to_csv(
-                    path_join(econ_storage_path, store_metric_filepaths[filecount]),
-                    index=False,
-                )
+                # Intervention results
+                iv_results = met_func(metrics_data_iv, ds)
+                iv_filename = f"ID{iv_id}_intervention{fn_suffix}.parq"
+                ds[sim_cols] = iv_results
 
-                # Overwrite results dataframe with counterfactual results and save to file
-                data_store.loc[:, target_cols] = met_func(metrics_data_cf, data_store)
-                store_metric_filepaths[filecount + 1] = (
-                    f"{fn_prefix}_counterfactual{fn_suffix}.csv"
-                )
-                data_store.to_csv(
-                    path_join(econ_storage_path, store_metric_filepaths[filecount + 1]),
-                    index=False,
-                )
+                ds.to_parquet(path_join(stores.econ_dir, iv_filename), index=False)
+                batch_files.append(iv_filename)
 
-                filecount += 2
+                # Counterfactual results (reuse the same dataframe)
+                cf_results = met_func(metrics_data_cf, ds)
+                cf_filename = f"ID{iv_id}_counterfactual{fn_suffix}.parq"
+                ds[sim_cols] = cf_results
 
-        # Drop data columns to allow those for next intervention to be added
-        data_store = data_store.drop(sim_cols, axis=1)
+                ds.to_parquet(path_join(stores.econ_dir, cf_filename), index=False)
+                batch_files.append(cf_filename)
 
-        # Add key data for cost modelling
-        # Uses key table structure used by economics modelling
+        # Finalize intervention key with metadata
         id_key_df = id_key_df.assign(
-            results_filename=f"ID{str(iv_id)}_{base_met_filename}",
+            results_filename=f"ID{iv_id}_{base_met_filename}",
             number_of_species=6,
             start_year=start_year,
             end_year=end_year,
@@ -437,20 +427,19 @@ def create_economics_metric_files(
             }
         )
 
-        if iv_idx > 0:
-            # Keep first dataframe to add other results to
-            id_key_df_store = id_key_df
-        else:
-            id_key_df_store = pd.concat([id_key_df_store, id_key_df])
+        id_key_dfs.append(id_key_df)
+        metric_filepaths.append(batch_files)
 
-        metric_filepaths[iv_idx] = store_metric_filepaths
+    # Combine all intervention keys
+    id_key_df_all = pd.concat(id_key_dfs, ignore_index=True)
 
-    for i_core in range(ncores):
-        id_key_df_store.to_csv(f"{id_filename}{str(i_core)}.csv", index=False)
+    # Save intervention key and ecological ID files (one per core)
+    for core_idx in range(ncores):
+        id_key_df_all.to_csv(f"{id_filename}{core_idx}.csv", index=False)
 
         pd.DataFrame(
-            store_ecol_ids[nbatches * i_core : nbatches * (i_core + 1), :],
-            columns=[str(id) for id in intervention_ids],
-        ).to_csv(f"{ecol_id_filename + str(i_core)}.csv", index=False)
+            store_ecol_ids[nbatches * core_idx : nbatches * (core_idx + 1), :],
+            columns=[str(id_val) for id_val in intervention_ids],
+        ).to_csv(f"{ecol_id_filename}{core_idx}.csv", index=False)
 
     return os.path.basename(rme_files_path), metric_filepaths

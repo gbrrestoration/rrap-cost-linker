@@ -1,3 +1,5 @@
+from dotenv import dotenv_values
+
 import os
 from os.path import join as path_join
 
@@ -23,14 +25,29 @@ class OutputStores:
 
 def setup_dirs(base_dir) -> OutputStores:
     """
-    Prep directories to store outputs at user-defined location.
+    Create output directories at specified location.
+
+    Parameters
+    ----------
+    base_dir : str
+        Base directory for all output folders.
+
+    Returns
+    -------
+    OutputStores
+        Named collection of output directory paths.
     """
-    # Create output directories (at current location by default)
-    output_paths = []
-    for d in RESULT_DIRS.values():
-        output_paths.append(path_join(base_dir, d))
-        os.makedirs(path_join(base_dir, d), exist_ok=True)
 
-    stores = OutputStores(*output_paths)
+    env_file = path_join("./.env")
+    if os.path.isfile(env_file):
+        config = {**dotenv_values(env_file)}
+    else:
+        # Use defaults if none provided
+        config = RESULT_DIRS
 
-    return stores
+    for k, dir_name in config.items():
+        full_path = path_join(base_dir, dir_name)
+        os.makedirs(full_path, exist_ok=True)
+        config[k] = full_path
+
+    return OutputStores(**config)

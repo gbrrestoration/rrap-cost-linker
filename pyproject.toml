@@ -36,11 +36,6 @@ lint = [
     "ruff>=0.14.1",
 ]
 
-[tool.uv.workspace]
-members = [
-    "docs",
-]
-
 [project.scripts]
 # Build the HTML documentation
 docs-build = "sphinx-build -b html docs/source docs/build"

@@ -6,43 +6,37 @@ the intervention cost models using the cost_model_queries package.
 
 [![Documentation Status](https://readthedocs.org/projects/cost-eco-model-linker/badge/?version=latest)](https://cost-eco-model-linker.readthedocs.io/en/latest/?badge=latest)
 
+**Note: This package only works on Windows for now**
+
 ## Quick setup
 
+Once the repository is cloned, simply run:
+
 ```shell
-# Initialize project
-$ uv init
+# Initialize project environment and install all dependencies
+$ uv sync
 
-# Create project environment
-$ uv venv
-
-# Activate project environment
-# this command will differ slightly on *nix
-$ .venv/Scripts/activate
-
-# This should install dependencies and change the initial prompt to:
+# This should change the initial prompt to:
 (cost-eco-model-linker) $
-
-# Now if you run `python`, the python install for the environment will be launched
-(cost-eco-model-linker) $ python
-Python 3.12.10 (main, Apr  9 2025, 04:06:22) [MSC v.1943 64 bit (AMD64)] on win32
-Type "help", "copyright", "credits" or "license" for more information.
-Ctrl click to launch VS Code Native REPL
->>>
 ```
 
 ## Development setup
 
-Assuming the current directory is the repository root:
+Assuming the current directory is the project root:
 
 ```shell
 # Add formatter and linter
-$ uv add --group lint ruff
+(cost-eco-model-linker) $ uv sync --group lint
 
 # Add dev packages
-$ uv add --group dev ipython ipdb py-spy
+(cost-eco-model-linker) $ uv sync --group dev
+```
 
+If working on integrating `cost-eco-model-linker` with another package:
+
+```shell
 # Add this package for development
-$ uv pip install -e .
+$ uv pip install -e <path to cost-eco-model-linker repository>
 ```
 
 This project uses the Ruff python formatter.
@@ -149,3 +143,21 @@ ecological modelling.**
 
 ## Pipeline
 ![economics_modelling_flowchart](economics_flow_chart.png)
+
+## Documentation
+
+Generate API stubs:
+
+```shell
+uv run sphinx-apidoc -o docs/source/api cost_eco_model_linker
+```
+
+Build docs (from repository root):
+
+```shell
+# Build static html files
+uv run sphinx-build docs/source docs/build
+
+# To launch web server that hot-reloads on change:
+sphinx-autobuild docs/source docs/build/html
+```

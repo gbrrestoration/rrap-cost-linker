@@ -1,27 +1,47 @@
-# Configuration file for the Sphinx documentation builder.
-#
-# For the full list of built-in configuration values, see the documentation:
-# https://www.sphinx-doc.org/en/master/usage/configuration.html
+project = "cost-eco-model-linker"
+author = "Rose Crocker"
+release = "0.0.1"
 
-# -- Project information -----------------------------------------------------
-# https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
+extensions = [
+    "myst_parser",
+    "autoapi.extension",
+    "sphinx.ext.napoleon",
+    "sphinx.ext.viewcode",
+]
 
-project = 'Cost-eco-model-linker'
-copyright = '2025, Rose Crocker'
-author = 'Rose Crocker'
-release = '0.0.1'
+autoapi_type = "python"
+autoapi_dirs = ["../../cost_eco_model_linker"]
+autoapi_keep_files = True
+autoapi_options = [
+    "members",
+    "undoc-members",
+    "show-inheritance",
+    "show-module-summary",
+]
 
-# -- General configuration ---------------------------------------------------
-# https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
+templates_path = ["_templates"]
 
-extensions = ['autoapi.extension']
+myst_enable_extensions = [
+    "amsmath",
+    "attrs_inline",
+    "colon_fence",
+    "deflist",
+    "dollarmath",
+    "fieldlist",
+    "html_admonition",
+    "html_image",
+    "linkify",
+    "replacements",
+    "smartquotes",
+    "strikethrough",
+    "substitution",
+    "tasklist",
+]
 
-templates_path = ['_templates']
+source_suffix = {
+    ".rst": "restructuredtext",
+    ".md": "markdown",
+}
 
-autoapi_dirs = ['../../src']
-
-# -- Options for HTML output -------------------------------------------------
-# https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
-
-html_theme = 'alabaster'
-html_static_path = ['_static']
+html_theme = "furo"
+html_static_path = ["_static"]

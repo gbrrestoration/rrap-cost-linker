@@ -12,11 +12,9 @@ dependencies = [
     "pandas>=2.2.3",
     "pyarrow>=22.0.0",
     "python-dotenv>=1.2.1",
-    "pywin32>=310",
+    "pywin32>=310; sys_platform == 'win32'",
     "pyyaml>=6.0.2",
     "salib>=1.5.2",
-    "sphinx>=8.2.3",
-    "sphinx-autoapi>=3.6.0",
 ]
 
 [dependency-groups]
@@ -24,7 +22,26 @@ dev = [
     "ipdb>=0.13.13",
     "ipython>=9.6.0",
     "py-spy>=0.4.1",
+    "furo>=2024.8.6",
+    "myst-parser>=2.0",
+    "sphinx>=8.2.3",
+    "sphinx-autoapi>=3.6.0",
+    "sphinx-design>=0.5.0",
+    "sphinx-rtd-theme>=3.0.2",
+    "sphinx-autodoc-typehints>=3.5.2",
+    "sphinx-autobuild>=2025.8.25",
+    "linkify-it-py>=2.0.3",
 ]
 lint = [
     "ruff>=0.14.1",
 ]
+
+[project.scripts]
+# Build the HTML documentation
+docs-build = "sphinx-build -b html docs/source docs/build"
+
+# Clean the build directory and then build
+docs-clean = { composite = ["rm -rf docs/build", "docs-build"] }
+
+# Build and open the docs in your browser (requires sphinx-autobuild)
+docs-dev = "sphinx-autobuild docs/source docs/build/html"

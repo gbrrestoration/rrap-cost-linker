@@ -4,7 +4,8 @@ A python library for generating input files for the CREAM economics analysis sui
 results from [ReefModEngine.jl](https://github.com/open-AIMS/ReefModEngine.jl) and sampling
 the intervention cost models using the cost_model_queries package.
 
-[![Documentation Status](https://readthedocs.org/projects/cost-eco-model-linker/badge/?version=latest)](https://cost-eco-model-linker.readthedocs.io/en/latest/?badge=latest)
+[![Documentation](https://img.shields.io/badge/docs-latest-blue)](https://open-aims.github.io/cost-eco-model-linker/)
+
 
 **Note: This package only works on Windows for now**
 

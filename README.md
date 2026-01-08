@@ -6,6 +6,8 @@ the intervention cost models using the cost_model_queries package.
 
 [![Documentation Status](https://readthedocs.org/projects/cost-eco-model-linker/badge/?version=latest)](https://cost-eco-model-linker.readthedocs.io/en/latest/?badge=latest)
 
+**Note: This package only works on Windows for now**
+
 ## Quick setup
 
 Once the repository is cloned, simply run:

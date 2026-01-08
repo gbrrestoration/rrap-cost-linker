@@ -1,0 +1,63 @@
+# Metrics
+
+The available metrics include the Reef Condition Index (RCI), the Reef Tourism Index (RTI) and
+Reef Fishing Index (RFI). There are also several versions of the RCI available, including raw
+RCI and RCI, which measures the total reef area in good or very good condition.
+
+## Raw RCI
+
+The RCI can be calculated using `process_RME_data.raw_rci()`. This metric comprises 5 reef metrics:
+
+- Relative coral cover
+- Relative shelter volume
+- Relative abundance of juveniles
+- Complementary relative crown of thorns population (relative to outbreak levels)
+- Complementary rubble cover
+
+These values are categorised as within Very Good, Good, Fair, Poor or Very Poor condition depending on their
+values and a set of categories compiled by expert elicitation. The expert elicitation process was carried out at a workshop in October 2021 with 8 coral reef experts elicited,
+resulting in the summary table below.
+```{csv-table} Expert elicitated reef condition metrics
+:header-rows: 1
+:file: Heneghan_RCI.csv
+```
+
+The raw RCI is calculated by assessing the condition of a reef at each timestep for each metric according
+to the above categories. The reef is assigned the condition of the highest category for which 3 or more metrics satisfy
+that category's threshold. The category thresholds can be used as means across all 8 experts without uncertainty.
+Alternatively, the raw expert condition categories of data collected from the 8 experts can be sampled
+when calculating metrics by setting `expert_uncert=1`.
+
+## RTI
+
+The RTI, or Reef Tourism Index, is a continuous version of the RCI condition categories. RTI can be calculated using
+`process_RME_data.raw_rti()`.
+
+## RFI
+
+The RFI or Reef Fishing Index, estimates the total fish biomass in kg km^2, based on a linear regression of total
+cover. This is based on digitisation of Fig 4A and 6B in [Graham and Nash, 2012](https://doi.org/10.1007/s00338-012-0984-y).
+The RFI can be calculated using `process_RME_data.rfi()`.
+
+## RCI
+
+The RCI looks at the total area of reef for which the condition is within the Good or Very
+Good categories. RCI can be calculated using `process_RME_data.rci()`.
+
+## Uncertainty sampling
+
+If `ecol_uncert=1`, ecological uncertainty is sampled in the results by sampling climate
+model repetitions for a particular set of results (stochastic samples within one or more
+climate model). If `ecol_uncert=0` the mean over all ecological reps is instead used.
+`ecol_uncert=0` also uses the mean across all climate reps.
+
+If `expert_uncert=1`, expert uncertainty is incorporated in the results
+by sampling a set of expert opinions on what thresholds of the 5 metrics incorporated in
+the Reef Condition Index should be considered as "Poor", "Good", "Very Good", etc.
+condition. If `expert_uncert=0` the mean of the 7 experts opinions is used
+(see `./datasets/ExpertReefCondition_AllResults.csv`).
+
+Currently, shelter volume uncertainty sampling has not been incorporated (`shelt_uncert=0`
+is the default), as it needs access to number of corals in each taxa and size class in the
+`ReefModEngine.jl` resultset. This is currently not available in the result sets from
+`ReefModEngine.jl`, but could be incorporated in future versions.

@@ -4,6 +4,8 @@ A Python library for generating input files for the [CREAM](https://github.com/g
 
 The package repository is [here](https://github.com/open-AIMS/cost-eco-model-linker).
 
+**Note: This package only works on Windows for now**
+
 ## Purpose
 
 This package brings together results from ecological modelling and cost modelling to

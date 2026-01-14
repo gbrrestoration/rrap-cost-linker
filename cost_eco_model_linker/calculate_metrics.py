@@ -111,9 +111,9 @@ def indicator_params(result_set, scen_ids, uncertainty_dict=default_uncertainty_
                         G[experts[4]:G_len:num_experts, 4]])
 
     ## RTI LINEAR REGRESSION UNCERTAINTY
-    rti_intercept = -0.871 # Intercept of rci to rti linear equation
+    rti_intercept = 0.1564301 # Intercept of rci to rti linear equation
     if uncertainty_dict["rti_uncert"] != 0:
-        rti_intercept += np.random.normal(0, 0.0036) # Intercept of rci to rti linear equation
+        rti_intercept += np.random.normal(0, 0.00036) # Intercept of rci to rti linear equation
 
     ## RFI BUILT FROM DIGITISING FIG 4A AND FIG 6B FROM Graham and Nash, 2012 https://doi.org/10.1007/s00338-012-0984-y
 
@@ -266,9 +266,13 @@ def reef_condition_rme(results_data, scen_ids, ecol_uncert, sheltervolume_parame
 def rti_rme(ecol_indicators, rti_intercept):
     # Calculate RTI, which is just the RCI made continuous (coefficients calculated previously,
     # by fitting linear regression of discrete RCI to the 6 ecological indicators underpinning it
-    all_reeftourism = rti_intercept + 0.7678 *ecol_indicators["total_cover"]
-    + 0.2945*ecol_indicators["shelter_volume"] + 0.8371*ecol_indicators["coraljuv_relative"]
-    + 0.2822*ecol_indicators["COTSrel_complementary"] + 0.7764*ecol_indicators["rubble_complementary"]
+
+
+    all_reeftourism = rti_intercept + 1.6457*ecol_indicators["total_cover"]
+
+    #0.7678 *ecol_indicators["total_cover"]
+    #+ 0.2945*ecol_indicators["shelter_volume"] + 0.8371*ecol_indicators["coraljuv_relative"]
+    #+ 0.2822*ecol_indicators["COTSrel_complementary"] + 0.7764*ecol_indicators["rubble_complementary"]
 
     all_reeftourism[all_reeftourism > 0.9] = 0.9
     all_reeftourism[all_reeftourism < 0.1] = 0.1
@@ -300,6 +304,8 @@ def indicator_master(result_set, scen_ids, nsims, uncertainty_dict=default_uncer
             Structure containing each of the metrics comprising the RCI, each arrays of size (nsims, nreefs, nyears).
     """
     maxcoraljuv, sheltervolume_parameters, rci_crit, rti_intercept, intercept1, intercept2, slope1, slope2 = indicator_params(result_set, scen_ids, uncertainty_dict=uncertainty_dict)
+
+
 
     # Calculate RCI and ecological indicators
     ecol_indicators, ecol_sample_ids = reef_condition_rme(result_set, scen_ids, uncertainty_dict["ecol_uncert"], sheltervolume_parameters, rci_crit, maxcoraljuv, nsims)

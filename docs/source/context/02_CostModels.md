@@ -13,8 +13,8 @@ Updated models:
 This documentation links information and assumptions of cost models and ecological models
 (ReefMod, ADRIA, ~CScapeC~scape, CoCoNet) and required by the economic models (CREAM).
 
-## 2.1	Aquaculture
-### 2.1.1	Changes to previous generation of cost models:
+## 2.1 Aquaculture
+### 2.1.1 Changes to previous generation of cost models:
 
 -	Cost model separated into two components: production and deployment models. Production \
 and deployment occur in same year.
@@ -34,7 +34,7 @@ CAPEX_scale for production expansion for second batch less than CAPEX for first 
 Expansion costs cover tanks required, but don’t include construction costs for buildings to house them.
 -	All costs are estimated in A$2024 real value (best approximation).
 
-### 2.1.2	Cost model information:
+### 2.1.2 Cost model information:
 
 -	The reefs used to harvest and deploy coral species are in close proximity.
 -	Species vs functional groups: each species and regional species variant must have \
@@ -54,7 +54,7 @@ separate tank; information required to determine the number of tanks: \
 -	Assumed survival rate of larval settlers into 1-YOEC: 80% upper estimate; 60% lower estimate. 1YOEC are defined as corals after first year post-deployment – direct input into ecological model.
 -	For the deployment model, the Large vessels, such as the Large Tourism vessels, are the best estimate for cost of transport for now.
 
-### 2.1.3	Assumptions:
+### 2.1.3 Assumptions:
 
 -	Maintenance cost assumed to be factored into production cost via contracts.
 -	Decommissioning cost assumed to be zero (devices will not be removed).
@@ -64,8 +64,8 @@ separate tank; information required to determine the number of tanks: \
 -	All costs are estimated in A$2023 real value (best approximation).
 -	Any other assumptions inherent in cost model [outside the scope of this study and not captured here].
 
-## 2.2	Larval slicks
-### 2.2.1	Changes to previous cost models:
+## 2.2 Larval slicks
+### 2.2.1 Changes to previous cost models:
 
 -	Contingencies are removed from calculation (optional feature during post processing).
 -	2.5% sustaining capex removed from calculation (i.e., no maintenance costs included). Model assumes that after 10 spawning events (5 years given assumed 2 spawnings per year) initial CAPEX gets replaced in full.
@@ -73,7 +73,7 @@ separate tank; information required to determine the number of tanks: \
 -	No volunteer vessels are deployed.
 -	All costs are estimated in A$2024 real value (best approximation).
 
-### 2.2.2	Cost model information:
+### 2.2.2 Cost model information:
 
 -	Settings ‘new domain’: if set to ‘yes’ assumes 1 months’ worth of research is costed; default would be ‘no’.
 -	Larval harvesting and deployment occur in spatial proximity (same reef).
@@ -101,7 +101,7 @@ separate tank; information required to determine the number of tanks: \
     * [NOT COSTED] Storage locker/s
 
 
-# 2.2.3	Assumptions:
+### 2.2.3 Assumptions:
 -	Haulage of freight equipment to nearest port and back to storage assumed to be constant independent of location of storage facility and port used.
 -	Maintenance cost assumed to be zero during lifetime of equipment (5 years based on 2 spawnings per year).
 -	Cost of vessel travel from port to reef site and back assumed to be zero.

@@ -31,7 +31,6 @@ Below is a diagram of the data flow:
 ![Economics Flow Chart](economics_flow_chart.png)
 
 ```{toctree}
-:hidden:
 :maxdepth: 2
 :caption: User Guide
 

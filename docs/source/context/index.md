@@ -1,6 +1,9 @@
+# Project context
+
 ```{toctree}
 :maxdepth: 1
 :caption: Project Context
+:hidden:
 
 context/01_Context
 context/02_CostModels

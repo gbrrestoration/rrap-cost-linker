@@ -29,3 +29,15 @@ information gathered on each model relevant for model integration and a list of 
 parameters and settings that must be harmonised in any intervention scenario. It is
 considered a live document given the evolving nature of all models and needs to be updated
 on a regular basis.
+
+```{toctree}
+:maxdepth: 1
+:caption: Project Context
+:hidden:
+
+01_Context
+02_CostModels
+03_EcologicalModels
+04_LinkingCostAndEcologicalModels
+05_AppendicesAndAcknowledgements
+```

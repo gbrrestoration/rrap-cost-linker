@@ -40,5 +40,5 @@ generate_rme_results
 metrics
 output_file_format
 example_workflow
-context/index
+context/01_Context
 ```

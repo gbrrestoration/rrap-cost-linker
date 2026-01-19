@@ -30,8 +30,6 @@ Below is a diagram of the data flow:
 
 ![Economics Flow Chart](economics_flow_chart.png)
 
-## Contents
-
 ```{toctree}
 :hidden:
 :maxdepth: 2

@@ -1,4 +1,4 @@
-# 4.	Linking cost and ecological models
+# 3.	Linking cost and ecological models
 Linking the cost models with the ecological models to assess intervention scenarios requires additional code (cost model sampling and sensitivity analysis code available at [cost_model_queries link](https://github.com/open-AIMS/cost_model_queries)
 
 This requires the following:

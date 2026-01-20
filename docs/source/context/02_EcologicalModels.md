@@ -1,6 +1,6 @@
-# 3. Ecological models
-## 3.1 ADRIA
-### 3.1.1 Aquaculture
+# 2. Ecological models
+## 2.1 ADRIA
+### 2.1.1 Aquaculture
 Currently, ADRIA only implements aquaculture interventions.
 Relevant model information:
 
@@ -18,8 +18,8 @@ Relevant model information:
     - Year, quantity and frequency of 1YOEC deployment (for each year)
 
 
-## 3.2 ReefMod
-### 3.2.1 Aquaculture and larval slicks
+## 2.2 ReefMod
+### 2.2.1 Aquaculture and larval slicks
 ReefMod applies the same model specifications to implement aquaculture and larval slick interventions.
 Relevant model information:
 
@@ -37,8 +37,8 @@ This relationship is used to calculate number of 1YOEC that need to be produced.
     - Coral density
     - Year, quantity and frequency of 1YOEC deployment (for each year)
 
-## 3.3 C~scape
-### 3.3.1 Aquaculture and larval slicks
+## 2.3 C~scape
+### 2.3.1 Aquaculture and larval slicks
 C~scape applies the same model specifications to implement aquaculture and larval slick interventions as ADRIA and ReefMod.
 
 Relevant model information:
@@ -65,8 +65,8 @@ Relevant model information:
     - Coral density
     - Year, quantity and frequency of 1YOEC deployment (for each year)
 
-## 3.4 CoCoNet
-### 3.4.1 Larval slicks
+## 2.4 CoCoNet
+### 2.4.1 Larval slicks
 CoCoNet currently only models larval slicks due to difficulties of thermal tolerance being diluted when modelling outplanting over larger areas. Slicks have similar heat tolerance, so this isn’t so much an issue.
 Relevant model information:
 

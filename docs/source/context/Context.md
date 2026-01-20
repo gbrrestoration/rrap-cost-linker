@@ -35,9 +35,8 @@ on a regular basis.
 :caption: Project Context
 :hidden:
 
-01_Context
-02_CostModels
-03_EcologicalModels
-04_LinkingCostAndEcologicalModels
-05_AppendicesAndAcknowledgements
+01_CostModels
+02_EcologicalModels
+03_LinkingCostAndEcologicalModels
+04_AppendicesAndAcknowledgements
 ```

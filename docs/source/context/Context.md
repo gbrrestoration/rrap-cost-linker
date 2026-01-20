@@ -1,4 +1,4 @@
-# 1. Context
+# Context
 
 The Reef Restoration and Adaptation Program (RRAP) employs four ecological models to predict the outcome of alternative interventions (e.g., aquaculture, larval slicks):
 

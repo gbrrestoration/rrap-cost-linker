@@ -1,5 +1,4 @@
-Example workflow
-================
+# Example workflow
 
 ```python
 import cost_eco_model_linker as ceml
@@ -43,4 +42,25 @@ if __name__ == "__main__":
         output_path,
         uncertainty_dict=unc_config,
     )
+```
+
+## Sensitivity analysis
+
+```python
+import cost_eco_model_linker as ceml
+
+prod_cost_model = "../sandbox/3.7.0 CA Production Model.xlsx"
+deploy_cost_model = "../sandbox/3.5.5 CA Deployment Model.xlsx"
+
+# Number of samples to take (must be power of 2)
+N = 2**5
+
+# Samples model and returns an SALib problem specification with results udner the
+# `cost_model_results` key.
+prod_sp = ceml.run_production_model(prod_cost_model, N)
+deploy_sp = ceml.run_deployment_model(deploy_cost_model, N)
+
+# Conduct and save sensitivity analysis results
+ceml.extract_sa_results(prod_sp, "./figs/prod/")
+ceml.extract_sa_results(deploy_sp, "./figs/deploy/")
 ```

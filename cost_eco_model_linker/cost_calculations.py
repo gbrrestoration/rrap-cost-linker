@@ -11,8 +11,8 @@ from .setup_results import OutputStores
 from .sampling import (
     problem_spec,
     convert_factor_types,
-    sample_deployment_cost,
-    sample_production_cost,
+    collect_deployment_costs,
+    collect_production_costs,
 )
 
 THIS_DIR = os.path.dirname(__file__)
@@ -331,10 +331,10 @@ def calculate_costs(
                 ecol_ids,
                 nsims,
             )
-            factors_df_dep = sample_deployment_cost(
+            factors_df_dep = collect_deployment_costs(
                 deploy_model_fp, factors_df_dep, factor_specs_dep
             )
-            factors_df_prod = sample_production_cost(
+            factors_df_prod = collect_production_costs(
                 prod_model_fp, factors_df_prod, factor_specs_prod
             )
 
@@ -367,12 +367,12 @@ def calculate_costs(
                 if any(factors_df_dep["num_devices"].values[0:nsims] > 0):
                     # If deploying more than last year, recalculate setup cost for only those additional corals
                     active_deployment = factors_df_dep["num_devices"] > 0
-                    factors_df_dep_new = sample_deployment_cost(
+                    factors_df_dep_new = collect_deployment_costs(
                         deploy_model_fp,
                         factors_df_dep.loc[active_deployment, :],
                         factor_specs_dep,
                     )
-                    factors_df_prod_new = sample_production_cost(
+                    factors_df_prod_new = collect_production_costs(
                         prod_model_fp,
                         factors_df_prod.loc[active_deployment, :],
                         factor_specs_prod,

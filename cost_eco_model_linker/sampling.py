@@ -1,8 +1,14 @@
 import os
+from os.path import join as path_join
 from win32com import client as w32client
 from SALib import ProblemSpec
 import numpy as np
 import pandas as pd
+
+import matplotlib.pyplot as plt
+
+THIS_DIR = os.path.dirname(os.path.abspath(__file__))
+CONFIG_PATH = os.path.join(THIS_DIR, "config.csv")
 
 
 def calculate_deployment_cost(wb, factor_spec, factors):
@@ -104,7 +110,7 @@ def calculate_production_cost(wb, factor_spec, factors):
     return [Cost, setupCost]
 
 
-def load_config(config_filepath="config.csv"):
+def load_config(config_filepath=CONFIG_PATH):
     """
     Load configuration file for model sampling
 
@@ -116,9 +122,9 @@ def load_config(config_filepath="config.csv"):
     return pd.read_csv(config_filepath)
 
 
-def problem_spec(cost_type, config_filepath="config.csv"):
+def problem_spec(cost_type, config_filepath=CONFIG_PATH):
     """
-    Create a problem specification for sampling using SALib.
+    Create a problem specification for sampling cost models using SALib.
 
     Parameters
     ----------
@@ -175,15 +181,15 @@ def convert_factor_types(factors_df, is_cat):
     return factors_df
 
 
-def _sample_cost(wb_file_path, factors_df, factor_spec, calculate_cost):
+def _run_cost_model(wb_file_path, cost_factors, factor_spec, calculate_cost):
     """
-    Sample a cost model.
+    Run and collect results from a cost model.
 
     Parameters
     ----------
     wb_file_path : str
         Filepath to a cost model as an excel workbook
-    factors_df : dataframe
+    cost_factors : dataframe
         Dataframe of factors to input in the cost model
     factor_spec : dataframe
         factor specification, as loaded from the config.csv
@@ -192,8 +198,8 @@ def _sample_cost(wb_file_path, factors_df, factor_spec, calculate_cost):
 
     Returns
     -------
-    factors_df : dataframe
-        Updated sampled factor dataframe with costs added
+    cost_factors : dataframe
+        Updated dataframe with costs added
     """
     # win32com Excel interface can only open files using their absolute paths
     wb_file_path = os.path.abspath(wb_file_path)
@@ -205,59 +211,187 @@ def _sample_cost(wb_file_path, factors_df, factor_spec, calculate_cost):
     xlapp.DisplayAlerts = False
     wb = xlapp.Workbooks.Open(wb_file_path)
 
-    total_cost = np.zeros((factors_df.shape[0], 2))
+    total_cost = np.zeros((cost_factors.shape[0], 2))
     for idx_n in range(len(total_cost)):
-        total_cost[idx_n, :] = calculate_cost(wb, factor_spec, factors_df.iloc[[idx_n]])
+        total_cost[idx_n, :] = calculate_cost(
+            wb, factor_spec, cost_factors.iloc[[idx_n]]
+        )
 
-    factors_df.loc[:, "Cost"] = total_cost[:, 0]
-    factors_df.loc[:, "setupCost"] = total_cost[:, 1]
+    cost_factors.loc[:, "Cost"] = total_cost[:, 0]
+    cost_factors.loc[:, "setupCost"] = total_cost[:, 1]
 
     wb.Close(SaveChanges=False)  # Close workbook
     xlapp.Quit()
-    return factors_df
+    return cost_factors
 
 
-def sample_deployment_cost(wb_file_path, factors_df, factor_spec):
+def collect_deployment_costs(wb_file_path, cost_factors, factor_spec):
     """
-    Sample the deployment cost model.
+    Run the production cost model.
 
     Parameters
     ----------
     wb_file_path : str
         Filepath to a cost model as an excel workbook
-    factors_df : dataframe
+    cost_factors : dataframe
         Dataframe of factors to input in the cost model
     factor_spec : dataframe
         factor specification, as loaded from the config.csv
 
     Returns
     -------
-    factors_df : dataframe
+    cost_factors : dataframe
         Updated sampled factor dataframe with costs added
     """
-    return _sample_cost(
-        wb_file_path, factors_df, factor_spec, calculate_deployment_cost
+    return _run_cost_model(
+        wb_file_path, cost_factors, factor_spec, calculate_deployment_cost
     )
 
 
-def sample_production_cost(wb_file_path, factors_df, factor_spec):
+def collect_production_costs(wb_file_path, cost_factors, factor_spec):
     """
-    Sample the production cost model.
+    Run the production cost model.
 
     Parameters
     ----------
     wb_file_path : Workbook file path
         A cost model as an excel workbook
-    factors_df : dataframe
+    cost_factors : dataframe
         Dataframe of factors to input in the cost model
     factor_spec : dataframe
         Factor specification, as loaded from the config.csv
 
     Returns
     -------
-    factors_df : dataframe
+    cost_factors : dataframe
         Updated sampled factor dataframe with costs added
     """
-    return _sample_cost(
-        wb_file_path, factors_df, factor_spec, calculate_production_cost
+    return _run_cost_model(
+        wb_file_path, cost_factors, factor_spec, calculate_production_cost
     )
+
+
+def run_deployment_model(cost_model: str, N: int):
+    """
+    Generate Sobol' samples for the deployment model and run
+
+    Parameters
+    ----------
+    cost_model : str
+        Path to cost (spreadsheet) model
+    N : int
+        Number of desired Sobol' sample points (resolves to `N * (2D + 2)` samples)
+        where `D` is the number of model factors
+
+    Returns
+    -------
+    SALib ProblemSpec with `cost_model_results` added as a field.
+    """
+    sp, model_config = problem_spec("deployment")
+
+    # Create Sobol' sample
+    sp.sample_sobol(N, calc_second_order=True)
+
+    samples = pd.DataFrame(data=sp.samples, columns=sp["names"])
+
+    samples = convert_factor_types(samples, model_config.is_cat)
+
+    sample_w_cost_results = collect_deployment_costs(cost_model, samples, model_config)
+
+    sp["cost_model_results"] = sample_w_cost_results
+
+    return sp
+
+
+def run_production_model(cost_model: str, N: int):
+    """
+    Generate Sobol' samples for the production model and run
+
+    Parameters
+    ----------
+    cost_model : str
+        Path to cost (spreadsheet) model
+    N : int
+        Number of desired Sobol' sample points (resolves to `N * (2D + 2)` samples)
+        where `D` is the number of model factors
+
+    Returns
+    -------
+    SALib ProblemSpec with `cost_model_results` added as a field.
+    """
+    sp, model_config = problem_spec("production")
+
+    # Create Sobol' sample
+    sp.sample_sobol(N, calc_second_order=True)
+
+    samples = pd.DataFrame(data=sp.samples, columns=sp["names"])
+
+    samples = convert_factor_types(samples, model_config.is_cat)
+
+    sample_w_cost_results = collect_production_costs(cost_model, samples, model_config)
+
+    sp["cost_model_results"] = sample_w_cost_results
+
+    return sp
+
+
+def extract_sa_results(sp: ProblemSpec, fig_path: str = "./figs/"):
+    os.makedirs(fig_path, exist_ok=True)
+
+    factor_names = sp["names"]
+    cost_results = sp["cost_model_results"]
+
+    # First get sensitivity to setup cost
+    sp.set_results(np.array(cost_results["setupCost"]))
+    sp.analyze_sobol()
+
+    sp.samples = np.array(cost_results[factor_names])
+
+    sp.set_results(np.array(cost_results["setupCost"]))
+    sp.analyze_sobol()
+
+    axes = sp.plot()
+    axes[0].set_yscale("log")
+    fig = plt.gcf()  # get current figure
+    fig.set_size_inches(10, 4)
+    plt.tight_layout()
+
+    plt.savefig(path_join(fig_path, "setup_cost_sobol_SA.png"))
+
+    sp.analyze_pawn()
+    axes = sp.plot()
+    fig = plt.gcf()  # get current figure
+    fig.set_size_inches(10, 4)
+    plt.tight_layout()
+    plt.savefig(path_join(fig_path, "setup_cost_pawn_barplot_SA.png"))
+
+    # SALib.analyze.rsa.analyze(problem_dict, sp.samples, total_cost)
+    sp.heatmap()
+    fig = plt.gcf()  # get current figure
+    fig.set_size_inches(10, 4)
+    plt.savefig(path_join(fig_path, "setup_cost_pawn_heatmap_SA.png"))
+
+    # Then get sensitivity to operational cost
+    sp.set_samples(np.array(cost_results[factor_names]))
+
+    # Get sensitivity to operational cost
+    sp.set_results(np.array(cost_results["Cost"]))
+    sp.analyze_sobol()
+
+    axes = sp.plot()
+    axes[0].set_yscale("log")
+    fig = plt.gcf()  # get current figure
+    fig.set_size_inches(10, 4)
+    plt.tight_layout()
+    plt.savefig(path_join(fig_path, "operational_cost_sobol_SA.png"))
+
+    sp.analyze_pawn()
+    axes = sp.plot()
+    fig = plt.gcf()  # get current figure
+    fig.set_size_inches(10, 4)
+    plt.tight_layout()
+    plt.savefig(path_join(fig_path, "operational_cost_pawn_barplot_SA.png"))
+
+    sp.heatmap()
+    fig.set_size_inches(10, 4)
+    plt.savefig(path_join(fig_path, "operational_cost_pawn_heatmap_SA.png"))

@@ -55,7 +55,7 @@ deploy_cost_model = "./3.5.5 CA Deployment Model.xlsx"
 # Number of samples to take (must be power of 2)
 N = 2**5
 
-# Samples model and returns an SALib problem specification with results udner the
+# Samples model and returns an SALib problem specification with results under the
 # `cost_model_results` key.
 prod_sp = ceml.run_production_model(prod_cost_model, N)
 deploy_sp = ceml.run_deployment_model(deploy_cost_model, N)

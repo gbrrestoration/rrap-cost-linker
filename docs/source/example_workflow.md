@@ -64,3 +64,9 @@ deploy_sp = ceml.run_deployment_model(deploy_cost_model, N)
 ceml.extract_sa_results(prod_sp, "./figs/prod/")
 ceml.extract_sa_results(deploy_sp, "./figs/deploy/")
 ```
+
+The above will generate a set of figures (for production or deployment costs).
+
+Example PAWN analysis results:
+
+![PAWN SA barplot](./_static/figs/prod/operational_cost_pawn_barplot_SA.png)

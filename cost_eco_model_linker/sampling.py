@@ -17,12 +17,12 @@ def calculate_deployment_cost(wb, factor_spec, factors):
 
     Parameters
     ----------
-        wb : Workbook
-            The cost model as an excel workbook
-        factor_spec : dataframe
-            The factor specification, as loaded from the config.csv
-        factors : dataframerow
-            Row of a pandas dataframe with factors to sample
+    wb : Workbook
+        The cost model as an excel workbook
+    factor_spec : dataframe
+        The factor specification, as loaded from the config.csv
+    factors : dataframerow
+        Row of a pandas dataframe with factors to sample
 
     Returns
     -------
@@ -72,19 +72,19 @@ def calculate_production_cost(wb, factor_spec, factors):
 
     Parameters
     ----------
-        wb : Workbook
-            The cost model as an excel workbook
-        factor_spec : dataframe
-            factor specification, as loaded from the config.csv
-        factors : dataframerow
-            Row of a pandas dataframe with factors to sample
+    wb : Workbook
+        The cost model as an excel workbook
+    factor_spec : dataframe
+        factor specification, as loaded from the config.csv
+    factors : dataframerow
+        Row of a pandas dataframe with factors to sample
 
     Returns
     -------
-        Cost: float
-            Operational cost
-        setupCost: float
-            Setup cost
+    Cost: float
+        Operational cost
+    setupCost: float
+        Setup cost
     """
     for _, factor_row in factor_spec[
         (factor_spec.factor_names != "Cost") & (factor_spec.factor_names != "setupCost")
@@ -116,8 +116,8 @@ def load_config(config_filepath=CONFIG_PATH):
 
     Parameters
     ----------
-        config_filepath : str
-            String specifying filepath of config file, default is the default package config file
+    config_filepath : str
+        String specifying filepath of config file, default is the default package config file
     """
     return pd.read_csv(config_filepath)
 
@@ -128,17 +128,17 @@ def problem_spec(cost_type, config_filepath=CONFIG_PATH):
 
     Parameters
     ----------
-        cost_type : str
-            String specifying cost model type, "production_params" or "deployment_params"
-        config_filepath : str
-            String specifying filepath of config file, default is the default package config file
+    cost_type : str
+        String specifying cost model type, "production_params" or "deployment_params"
+    config_filepath : str
+        String specifying filepath of config file, default is the default package config file
 
     Returns
     -------
-        sp: dict
-            ProblemSpec for sampling with SALib
-        factor_spec : dataframe
-            factor specification, as loaded from the config.csv
+    sp : dict
+        ProblemSpec for sampling with SALib
+    factor_spec : dataframe
+        factor specification, as loaded from the config.csv
     """
     if (cost_type != "production") & (cost_type != "deployment"):
         raise ValueError("Non-existent parameter type")
@@ -164,13 +164,14 @@ def convert_factor_types(factors_df, is_cat):
 
     Parameters
     ----------
-        factors_df : dataframe
-            A dataframe of sampled factors
-        is_cat : list{bool}
-            Boolian vector specifian whether each factor is categorical
+    factors_df : dataframe
+        A dataframe of sampled factors
+    is_cat : list{bool}
+        Boolian vector specifian whether each factor is categorical
 
-    Returns:
-        factors_df: Updated sampled factor dataframe with categorical factors as integers
+    Returns
+    -------
+    factors_df : Updated sampled factor dataframe with categorical factors as integers
     """
     for ic_ind, ic in enumerate(is_cat):
         if ic:
@@ -236,7 +237,7 @@ def collect_deployment_costs(wb_file_path, cost_factors, factor_spec):
     cost_factors : dataframe
         Dataframe of factors to input in the cost model
     factor_spec : dataframe
-        factor specification, as loaded from the config.csv
+        Factor specification, as loaded from the config.csv
 
     Returns
     -------

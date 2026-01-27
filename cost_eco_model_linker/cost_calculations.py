@@ -149,17 +149,17 @@ def sample_cost_model(nsims):
     )
 
 
-def update_factors(factors_df_dep, factors_df_prod, ID_key, ecol_idx, nsims):
+def update_factors(deploy_factors, prod_factors, iv_spec, ecol_idx, nsims):
     """
     Update sampled cost model parameter dataframes with intervention specific parameters.
 
     Parameters
     ----------
-    factors_df_dep : dataframe
+    deploy_factors : dataframe
         Factors dataframe for the deployment cost model.
-    factors_df_prod : dataframe
+    prod_factors : dataframe
         Factors dataframe for the production cost model
-    ID_key : dataframe
+    iv_spec : dataframe
         Intervention specification dataframe containing intervention parameters.
     ecol_idx : int
         Indices mapping scenario IDs in the RME results to samples in nsims.
@@ -169,33 +169,33 @@ def update_factors(factors_df_dep, factors_df_prod, ID_key, ecol_idx, nsims):
     """
     # Sum over reefsets for the same intervention and year to give total number of corals outplanted in each environmental sample (rep)
     temp_id_df = (
-        ID_key[["rep", "number_of_1YO_corals"]]
+        iv_spec[["rep", "number_of_1YO_corals"]]
         .groupby("rep")["number_of_1YO_corals"]
         .sum()
         .reset_index()
     )
 
     # Update 1YO corals and convert to equivalent number of devices
-    factors_df_dep.loc[0 : nsims - 1, "num_devices"] = np.ceil(
+    deploy_factors.loc[0 : nsims - 1, "num_devices"] = np.ceil(
         temp_id_df["number_of_1YO_corals"].values[ecol_idx]
-        / factors_df_dep.loc[0 : nsims - 1, "1YOEC_yield"]
+        / deploy_factors.loc[0 : nsims - 1, "1YOEC_yield"]
     )
-    factors_df_prod.loc[0 : nsims - 1, "num_devices"] = np.ceil(
+    prod_factors.loc[0 : nsims - 1, "num_devices"] = np.ceil(
         temp_id_df["number_of_1YO_corals"].values[ecol_idx]
-        / factors_df_dep.loc[0 : nsims - 1, "1YOEC_yield"]
+        / deploy_factors.loc[0 : nsims - 1, "1YOEC_yield"]
     )
 
     # Update number of species
-    factors_df_prod.loc[:, "species_no"] = ID_key["number_of_species"].iloc[0]
+    prod_factors.loc[:, "species_no"] = iv_spec["number_of_species"].iloc[0]
 
     # Make sure the production and deployment models have the same 1YO coral yield per device
-    factors_df_prod.loc[:, "1YOEC_yield"] = factors_df_dep["1YOEC_yield"].values
+    prod_factors.loc[:, "1YOEC_yield"] = deploy_factors["1YOEC_yield"].values
 
     # Port does not matter as we are using distance to port directly
-    factors_df_dep.loc[:, "port"] = 1
-    factors_df_dep.loc[:, "distance_from_port"] = ID_key["distance_to_port_NM"].iloc[0]
+    deploy_factors.loc[:, "port"] = 1
+    deploy_factors.loc[:, "distance_from_port"] = iv_spec["distance_to_port_NM"].iloc[0]
 
-    return factors_df_dep, factors_df_prod
+    return deploy_factors, prod_factors
 
 
 def calc_setup_costs(deploy_factors, prod_factors, iv_spec, ecol_idx, nsims):
@@ -311,15 +311,13 @@ def calculate_costs(
 
         cost_df = initialise_cost_df(int_years, nsims)
 
-        factor_specs_dep, factors_df_dep, factor_specs_prod, factors_df_prod = (
-            sample_cost_model(nsims)
-        )
+        deploy_spec, deploy_factors, prod_spec, prod_factors = sample_cost_model(nsims)
 
         for int_yr in int_years:
             # Add key intervention parameters for year to dataframe as constants
-            factors_df_dep, factors_df_prod = update_factors(
-                factors_df_dep,
-                factors_df_prod,
+            deploy_factors, prod_factors = update_factors(
+                deploy_factors,
+                prod_factors,
                 ID_key.loc[
                     (ID_key.intervention_years == int_yr) & scen_idx,
                     [
@@ -332,22 +330,23 @@ def calculate_costs(
                 ecol_ids,
                 nsims,
             )
-            factors_df_dep = collect_deployment_costs(
-                deploy_model_fp, factors_df_dep, factor_specs_dep
+            deploy_factors = collect_deployment_costs(
+                deploy_model_fp, deploy_factors, deploy_spec
             )
-            factors_df_prod = collect_production_costs(
-                prod_model_fp, factors_df_prod, factor_specs_prod
+            prod_factors = collect_production_costs(
+                prod_model_fp, prod_factors, prod_spec
             )
 
             if int_yr > min(int_years):
                 # Save calculated operational costs
-                save_cost_prod = factors_df_prod["Cost"]
-                save_cost_dep = factors_df_dep["Cost"]
+                save_cost_prod = prod_factors["Cost"]
+                save_cost_dep = deploy_factors["Cost"]
 
-                # Adjust number of corals to "how many more are being deployed this year than last year?" to caculate setup cost correctly
-                factors_df_dep, factors_df_prod = reefmod_setup_costs(
-                    factors_df_dep,
-                    factors_df_prod,
+                # Adjust number of corals to "how many more are being deployed this year
+                # than last year?" to caculate setup cost correctly
+                deploy_factors, prod_factors = calc_setup_costs(
+                    deploy_factors,
+                    prod_factors,
                     ID_key.loc[
                         (ID_key.intervention_years == int_yr - 1) & scen_idx,
                         ["number_of_1YO_corals", "rep"],
@@ -356,45 +355,45 @@ def calculate_costs(
                     nsims,
                 )
 
-                if any(factors_df_dep["num_devices"].values[0:nsims] <= 0):
+                if any(deploy_factors["num_devices"].values[0:nsims] <= 0):
                     # If deploying no more than previous year, setup cost is zero
-                    factors_df_prod.loc[
-                        factors_df_dep["num_devices"] <= 0, "setupCost"
+                    prod_factors.loc[
+                        deploy_factors["num_devices"] <= 0, "setupCost"
                     ] = 0
-                    factors_df_dep.loc[
-                        factors_df_dep["num_devices"] <= 0, "setupCost"
+                    deploy_factors.loc[
+                        deploy_factors["num_devices"] <= 0, "setupCost"
                     ] = 0
 
-                if any(factors_df_dep["num_devices"].values[0:nsims] > 0):
+                if any(deploy_factors["num_devices"].values[0:nsims] > 0):
                     # If deploying more than last year, recalculate setup cost for only those additional corals
-                    active_deployment = factors_df_dep["num_devices"] > 0
+                    active_deployment = deploy_factors["num_devices"] > 0
                     factors_df_dep_new = collect_deployment_costs(
                         deploy_model_fp,
-                        factors_df_dep.loc[active_deployment, :],
-                        factor_specs_dep,
+                        deploy_factors.loc[active_deployment, :],
+                        deploy_spec,
                     )
                     factors_df_prod_new = collect_production_costs(
                         prod_model_fp,
-                        factors_df_prod.loc[active_deployment, :],
-                        factor_specs_prod,
+                        prod_factors.loc[active_deployment, :],
+                        prod_spec,
                     )
 
                     # Replace orginally calculated setup costs with updated setup costs
-                    factors_df_prod.loc[
-                        factors_df_dep["num_devices"] > 0, "setupCost"
-                    ] = factors_df_prod_new["setupCost"]
-                    factors_df_dep.loc[
-                        factors_df_dep["num_devices"] > 0, "setupCost"
+                    prod_factors.loc[deploy_factors["num_devices"] > 0, "setupCost"] = (
+                        factors_df_prod_new["setupCost"]
+                    )
+                    deploy_factors.loc[
+                        deploy_factors["num_devices"] > 0, "setupCost"
                     ] = factors_df_dep_new["setupCost"]
 
                 # Retain originally sampled operational cost for full number of corals, regardless of intervention year
-                factors_df_prod.loc[:, "Cost"] = save_cost_prod
-                factors_df_dep.loc[:, "Cost"] = save_cost_dep
+                prod_factors.loc[:, "Cost"] = save_cost_prod
+                deploy_factors.loc[:, "Cost"] = save_cost_dep
 
             # Calculate all cost codes and add to dataframe
             cost_sum = (
-                factors_df_dep[["setupCost", "Cost"]]
-                + factors_df_prod[["setupCost", "Cost"]]
+                deploy_factors[["setupCost", "Cost"]]
+                + prod_factors[["setupCost", "Cost"]]
             ).values[0:nsims, :]
             cost_df.loc[cost_df.year == int_yr, cost_df.columns[2:]] = cost_types(
                 cost_sum, cont_p, nsims

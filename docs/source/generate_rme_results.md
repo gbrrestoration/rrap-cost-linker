@@ -83,7 +83,7 @@ for (iv_yr_idx, iv_year) in enumerate(iv_years)
 end
 ```
 
-Note that the only intervention type the `Cost-eco-model-linker` can currently calculate
+Note that the only intervention type the `cost-eco-model-linker` can currently calculate
 costs for is outplanting. Other interventions, such as larval methods, will be later
 implemented, but require a separate cost model. Hence, for the current version,
 interventions should only be of `outplant` type, set using `set_outplant_deployment!`.

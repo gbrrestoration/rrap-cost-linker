@@ -67,9 +67,8 @@ through consultation with the Translation to Deployment Team and sensitivity ana
 
 The Excel-based cost models give CAPEX and OPEX costs of the production and deployment
 stages of outplanting corals, for a particular input deployment volume, number of species,
-distance from port to the deployment reef, and other factors. These are sampled using
-functions developed in the [cost_model_queries](https://github.com/open-AIMS/cost_model_queries) python package. More details on the sampling approach can be found in the
-[documentation for this package](https://cost-model-queries.readthedocs.io/en/latest/?badge=latest).
+distance from port to the deployment reef, and other factors, primarily for the ReefMod
+Engine model. Further details are found in the [documentation ](https://open-aims.github.io/cost-eco-model-linker/context/02_EcologicalModels.html#reefmod).
 
 ## Cost model samples output file
 
@@ -93,12 +92,12 @@ simulation which are used by `CREAM`. These are described in the following table
 ## Calculating costs for interventions over multiple years
 
 For outplanting corals over multiple years, the setup costs of production and deployment
-only scale with the *additional* corals planned for outplanting compared to the previous year.
-For example, if 100,000 corals are deployed in the first year, 200,000 in the second year
-and 200,000 in the third year, the setup costs are \$X, \$X and \$0 respectively. The
+only scale with the *additional* corals planned for outplanting compared to the previous
+year. For example, if 100,000 corals are deployed in the first year, 200,000 in the second
+year and 200,000 in the third year, the setup costs are \$X, \$X and \$0 respectively. The
 operational costs are calculated the same way regardless of the year. These year-by-year
 setup cost differences are not specified in the Excel models, but are handled within
-the functions `cost_calculations.update_setupcost_factors()` and
+the functions `cost_calculations.reefmod_setup_costs()` and
 `cost_calculations.calculate_costs()`.
 
 In particular, for years beyond the first intervention year, the costs are sampled first

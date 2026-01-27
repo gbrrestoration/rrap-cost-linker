@@ -68,7 +68,7 @@ through consultation with the Translation to Deployment Team and sensitivity ana
 The Excel-based cost models give CAPEX and OPEX costs of the production and deployment
 stages of outplanting corals, for a particular input deployment volume, number of species,
 distance from port to the deployment reef, and other factors, primarily for the ReefMod
-Engine model. Further details are found in the [documentation ](https://open-aims.github.io/cost-eco-model-linker/context/02_EcologicalModels.html#reefmod).
+Engine model. Further details are found in the [documentation](https://open-aims.github.io/cost-eco-model-linker/context/02_EcologicalModels.html#reefmod).
 
 ## Cost model samples output file
 

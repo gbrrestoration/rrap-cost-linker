@@ -198,10 +198,11 @@ def update_factors(factors_df_dep, factors_df_prod, ID_key, ecol_idx, nsims):
     return factors_df_dep, factors_df_prod
 
 
-def reefmod_setup_costs(deploy_factors, prod_factors, iv_spec, ecol_idx, nsims):
+def calc_setup_costs(deploy_factors, prod_factors, iv_spec, ecol_idx, nsims):
     """
-    Update number of corals to correctly calculate setup cost for years after the first intervention year.
-    Setup costs are only accrued for additional corals deployed relative to the previous year.
+    Update number of corals to correctly calculate setup cost for years after the first
+    intervention year. Setup costs are only accrued for additional corals deployed relative
+    to the previous year.
 
     Parameters
     ----------

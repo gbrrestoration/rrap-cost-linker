@@ -95,7 +95,7 @@ def initialise_cost_df(years, nsims):
     return cost_df
 
 
-def factors_dataframe_update(nsims):
+def sample_cost_model(nsims):
     """
     Sample cost model parameters.
 
@@ -198,7 +198,7 @@ def update_factors(factors_df_dep, factors_df_prod, ID_key, ecol_idx, nsims):
     return factors_df_dep, factors_df_prod
 
 
-def update_setupcost_factors(factors_df_dep, factors_df_prod, ID_key, ecol_idx, nsims):
+def update_setupcost_factors(deploy_factors, prod_factors, iv_spec, ecol_idx, nsims):
     """
     Update number of corals to correctly calculate setup cost for years after the first intervention year.
     Setup costs are only accrued for additional corals deployed relative to the previous year.
@@ -219,27 +219,27 @@ def update_setupcost_factors(factors_df_dep, factors_df_prod, ID_key, ecol_idx, 
     """
     # Sum over reefsets for the same intervention and year to give total number of corals outplanted in each environmental sample (rep)
     temp_id_df = (
-        ID_key[["rep", "number_of_1YO_corals"]]
+        iv_spec[["rep", "number_of_1YO_corals"]]
         .groupby("rep")["number_of_1YO_corals"]
         .sum()
         .reset_index()
     )
 
     # Update 1YO corals ro additional 1YO corals compared to previous year and convert to equivalent number of devices
-    factors_df_dep.loc[0 : nsims - 1, "num_devices"] = factors_df_dep.loc[
+    deploy_factors.loc[0 : nsims - 1, "num_devices"] = deploy_factors.loc[
         0 : nsims - 1, "num_devices"
     ] - np.ceil(
         temp_id_df["number_of_1YO_corals"].values[ecol_idx]
-        / factors_df_dep.loc[0 : nsims - 1, "1YOEC_yield"]
+        / deploy_factors.loc[0 : nsims - 1, "1YOEC_yield"]
     )
-    factors_df_prod.loc[0 : nsims - 1, "num_devices"] = factors_df_prod.loc[
+    prod_factors.loc[0 : nsims - 1, "num_devices"] = prod_factors.loc[
         0 : nsims - 1, "num_devices"
     ] - np.ceil(
         temp_id_df["number_of_1YO_corals"].values[ecol_idx]
-        / factors_df_dep.loc[0 : nsims - 1, "1YOEC_yield"]
+        / deploy_factors.loc[0 : nsims - 1, "1YOEC_yield"]
     )
 
-    return factors_df_dep, factors_df_prod
+    return deploy_factors, prod_factors
 
 
 def calculate_costs(
@@ -311,7 +311,7 @@ def calculate_costs(
         cost_df = initialise_cost_df(int_years, nsims)
 
         factor_specs_dep, factors_df_dep, factor_specs_prod, factors_df_prod = (
-            factors_dataframe_update(nsims)
+            sample_cost_model(nsims)
         )
 
         for int_yr in int_years:

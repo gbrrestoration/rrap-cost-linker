@@ -47,12 +47,12 @@ def cost_types(cost, contingency, nsims):
 
     Parameters
     ----------
-        cost : dataframe
-            Dataframe containing 'Cost' and 'setupCost'
-        contingency : float
-            Contingency proportion.
-        nsims : int
-            Total number of simulations (from metrics sampling)
+    cost : dataframe
+        Dataframe containing 'Cost' and 'setupCost'
+    contingency : float
+        Contingency proportion.
+    nsims : int
+        Total number of simulations (from metrics sampling)
     """
     return np.vstack(
         (
@@ -101,19 +101,19 @@ def factors_dataframe_update(nsims):
 
     Parameters
     ----------
-        nsims : int
-            Total number of simulations (from metrics sampling)
+    nsims : int
+        Total number of simulations (from metrics sampling)
 
     Returns
     -------
-        factor_specs_dep : dict
-            Factor specification for sampling factors in the deployment cost model.
-        factors_df_dep : dataframe
-            Sampled factors dataframe for the deployment cost model.
-        factor_specs_prod : dict
-            Factor specification for sampling factors in the production cost model.
-        factors_df_prod : dataframe
-            Sampled factors dataframe for the production cost model
+    factor_specs_dep : dict
+        Factor specification for sampling factors in the deployment cost model.
+    factors_df_dep : dataframe
+        Sampled factors for the deployment cost model.
+    factor_specs_prod : dict
+        Factor specification for sampling factors in the production cost model.
+    factors_df_prod : dataframe
+        Sampled factors for the production cost model
     """
     # Sample deployment model factors
     sp_dep, factor_specs_dep = problem_spec(
@@ -205,17 +205,17 @@ def update_setupcost_factors(factors_df_dep, factors_df_prod, ID_key, ecol_idx, 
 
     Parameters
     ----------
-        factors_df_dep : dataframe
-            Factors dataframe for the deployment cost model.
-        factors_df_prod : dataframe
-            Factors dataframe for the production cost model
-        ID_key : dataframe
-            Intervention specification dataframe containing intervention parameters.
-        ecol_idx : int
-            Indices mapping scenario IDs in the RME results to samples in nsims.
-        nsims : int
-            Number of simulations drawn (may be smaller than dataframe size to get correct number of samples
-            for Sobol Sampling).
+    deploy_factors : dataframe
+        Factors dataframe for the deployment cost model.
+    prod_factors : dataframe
+        Factors dataframe for the production cost model
+    iv_spec : dataframe
+        Intervention specification dataframe containing intervention parameters.
+    ecol_idx : int
+        Indices mapping scenario IDs in the RME results to samples in nsims.
+    nsims : int
+        Number of simulations drawn (may be smaller than dataframe size to get correct number of samples
+        for Sobol Sampling).
     """
     # Sum over reefsets for the same intervention and year to give total number of corals outplanted in each environmental sample (rep)
     temp_id_df = (

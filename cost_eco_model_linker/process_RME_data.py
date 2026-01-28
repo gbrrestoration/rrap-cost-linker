@@ -78,17 +78,17 @@ def create_base_economics_dataframe(
 
     Parameters
     ----------
-        regions_data : dataframe
-            A dataframe with key spatial and economics data for each reef in the GBR (loaded from econ_spatial.csv).
-        reef_spatial_data : dataframe
-            A dataframe from the RME specified key reef IDs and spatial information (loaded from reefmod_gbr.gpkg).
-        years : list
-            Years to be included in the economics output file from the ecological modelling.
+    regions_data : dataframe
+        A dataframe with key spatial and economics data for each reef in the GBR (loaded from econ_spatial.csv).
+    reef_spatial_data : dataframe
+        A dataframe from the RME specified key reef IDs and spatial information (loaded from reefmod_gbr.gpkg).
+    years : list
+        Years to be included in the economics output file from the ecological modelling.
 
     Returns
     -------
-        data_store: dataframe
-            Basic economics file structure to save for each intervention/counterfactual scenario.
+    data_store: dataframe
+        Basic economics file structure to save for each intervention/counterfactual scenario.
     """
     regions_data = regions_data.sort_values(by="Reef_ID", ignore_index=True).copy()
 
@@ -115,10 +115,10 @@ def area_weighted_rti(metrics_dict: dict, metrics_df: pd.DataFrame):
 
     Parameters
     ----------
-        metrics_dict : dict
-            Dict containing key sampled metrics and the RCI
-        metrics_df : dataframe
-            Dataframe containing scenario summary dataframe
+    metrics_dict : dict
+        Dict containing key sampled metrics and the RCI
+    metrics_df : dataframe
+        Dataframe containing scenario summary dataframe
     """
     return np.transpose(
         metrics_dict["RTI"]
@@ -136,12 +136,12 @@ def rci(metrics_dict: dict, metrics_df: pd.DataFrame, rci_threshold=0.6):
 
     Parameters
     ----------
-        metrics_dict : dict
-            Dict containing key sampled metrics and the RCI
-        metrics_df : dataframe
-            Dataframe containing scenario summary dataframe
-        rci_threshold : float
-            RCI threshold (in (0.0, 1.0)) above which to calculate area saved for.
+    metrics_dict : dict
+        Dict containing key sampled metrics and the RCI
+    metrics_df : dataframe
+        Dataframe containing scenario summary dataframe
+    rci_threshold : float
+        RCI threshold (in (0.0, 1.0)) above which to calculate area saved for.
     """
     rci = metrics_dict["RCI"]
     rci[rci >= rci_threshold] = 1
@@ -156,10 +156,10 @@ def coral_area_saved(metrics_dict: dict, metrics_df: pd.DataFrame):
 
     Parameters
     ----------
-        metrics_dict : dict
-            Dict containing key sampled metrics and the RCI
-        metrics_df : dataframe
-            Dataframe containing scenario summary dataframe
+    metrics_dict : dict
+        Dict containing key sampled metrics and the RCI
+    metrics_df : dataframe
+        Dataframe containing scenario summary dataframe
     """
     # Convert to hectares by dividaing by 100
     return np.transpose(
@@ -177,12 +177,12 @@ def rfi(metrics_dict: dict, metrics_df: pd.DataFrame, rfi_thresholds=[0.74, 29.9
 
     Parameters
     ----------
-        metrics_dict : dict
-            Dict containing key sampled metrics and the RFI
-        metrics_df : dataframe
-            Dataframe containing scenario summary dataframe
-        rfi_thresholds : float
-            RFI thresholds (min and max fish biomass)
+    metrics_dict : dict
+        Dict containing key sampled metrics and the RFI
+    metrics_df : dataframe
+        Dataframe containing scenario summary dataframe
+    rfi_thresholds : float
+        RFI thresholds (min and max fish biomass)
     """
     rfi = metrics_dict["RFI"]
     rfi[rfi < rfi_thresholds[0]] = rfi_thresholds[0]
@@ -197,10 +197,10 @@ def raw_rci(metrics_dict: dict, metrics_df: pd.DataFrame):
 
     Parameters
     ----------
-        metrics_dict : dict
-            Array containing key sampled metrics and the RCI
-        metrics_df : dataframe
-            Dataframe containing scenario summary dataframe
+    metrics_dict : dict
+        Array containing key sampled metrics and the RCI
+    metrics_df : dataframe
+        Dataframe containing scenario summary dataframe
     """
     return np.transpose(metrics_dict["RCI"], (1, 0))
 
@@ -211,10 +211,10 @@ def raw_rti(metrics_dict: dict, metrics_df: pd.DataFrame):
 
     Parameters
     ----------
-        metrics_dict : dict
-            Array containing key sampled metrics and the RTI
-        metrics_df : dataframe
-            Dataframe containing scenario summary dataframe
+    metrics_dict : dict
+        Array containing key sampled metrics and the RTI
+    metrics_df : dataframe
+        Dataframe containing scenario summary dataframe
     """
     return np.transpose(metrics_dict["RTI"], (1, 0))
 

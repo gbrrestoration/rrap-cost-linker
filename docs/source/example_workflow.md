@@ -49,8 +49,8 @@ if __name__ == "__main__":
 ```python
 import cost_eco_model_linker as ceml
 
-prod_cost_model = "./3.7.0 CA Production Model.xlsx"
-deploy_cost_model = "./3.5.5 CA Deployment Model.xlsx"
+prod_cost_model = "./models/3.8.0 CA Production Model.xlsx"
+deploy_cost_model = "./models/3.8.0 CA Deployment Model.xlsx"
 
 # Number of samples to take (must be power of 2)
 N = 2**5

@@ -1,0 +1,16 @@
+cost_type,sheet,cell_pos,factor_names,range_lower,range_upper,is_cat
+deployment,Dashboard,K11,setupCost,1000.0,1000000.0,False
+deployment,Dashboard,K6,Cost,1000.0,1000000.0,False
+deployment,Dashboard,D5,num_devices,1000.0,1000000.0,True
+deployment,Dashboard,D6,port,0.0,4.0,True
+deployment,Dashboard,D9,DAJ_a_r,9.0,10.0,True
+deployment,Dashboard,D10,DAJ_c_s,1.0,2.0,True
+deployment,Dashboard,D13,deck_space,39.0,40.0,False
+deployment,Lookup Tables,G29,cape_ferg_price,6000.0,8000.0,False
+deployment,Lookup Tables,O14,ship_endurance,13.0,15.0,True
+deployment,Lookup Tables,H63,distance_from_port,1.0,210.0,False
+deployment,Conversions,E25,1YOEC_yield,0.7,0.8,False
+deployment,Logistics,F84,secs_per_dev,0.0,1.0,True
+deployment,Logistics,I84,proportion,0.5,0.55,False
+deployment,Logistics,I83,bins_per_tender,4.0,6.0,True
+deployment,Logistics,D38,deployment_dur,25.0,28.0,True

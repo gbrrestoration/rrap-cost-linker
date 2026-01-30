@@ -116,12 +116,8 @@ def sample_cost_model(nsims):
         Sampled factors for the production cost model
     """
     # Sample deployment model factors
-    sp_dep, factor_specs_dep = problem_spec(
-        "deployment", path_join(THIS_DIR, "config.csv")
-    )
-    sp_prod, factor_specs_prod = problem_spec(
-        "production", path_join(THIS_DIR, "config.csv")
-    )
+    sp_dep, factor_specs_dep = problem_spec("deployment")
+    sp_prod, factor_specs_prod = problem_spec("production")
 
     nfactors = np.min([factor_specs_dep.shape[0], factor_specs_prod.shape[0]]) - 2
     N, K = get_NK(nsims, nfactors)

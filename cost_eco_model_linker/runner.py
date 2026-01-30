@@ -1,6 +1,9 @@
 import os
 from functools import partial
 
+import re
+from packaging.version import Version
+
 import multiprocess as mp
 
 from . import process_RME_data as prd
@@ -13,6 +16,10 @@ from . import (
     calculate_costs,
     post_process_costs,
 )
+
+from .sampling import load_internal_config
+
+SEMVER_RE = re.compile(r"^(?:.*/)?(\d+\.\d+\.\d+)\b")
 
 
 def evaluate(
@@ -49,6 +56,31 @@ def evaluate(
     list[str]
         Paths to result files.
     """
+    # Check available config aligns with model versions
+    m = SEMVER_RE.match(deploy_model_fn)
+    deploy_m_ver = Version(m.group(1)) if m else None
+    if deploy_m_ver is None:
+        raise ValueError(f"No version info found in filename {deploy_model_fn}")
+
+    m = SEMVER_RE.match(prod_model_fn)
+    prod_m_ver = Version(m.group(1)) if m else None
+    if prod_m_ver is None:
+        raise ValueError(f"No version info found in filename {prod_model_fn}")
+
+    # Check that relevant config files exist
+    try:
+        load_internal_config(f"{str(deploy_m_ver)}_deploy_config.csv")
+    except FileNotFoundError:
+        raise ValueError(
+            f"No config available for deployment model {str(deploy_m_ver)}"
+        )
+
+    try:
+        load_internal_config(f"{str(prod_m_ver)}_prod_config.csv")
+    except FileNotFoundError:
+        raise ValueError(f"No config available for production model {str(prod_m_ver)}")
+
+    # Setup data stores
     stores = setup_dirs(results_dir)
 
     # Set defaults

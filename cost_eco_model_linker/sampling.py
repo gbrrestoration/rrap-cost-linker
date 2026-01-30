@@ -8,10 +8,10 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 THIS_DIR = os.path.dirname(os.path.abspath(__file__))
-CONFIG_PATH = os.path.join(THIS_DIR, "config.csv")
+DEFAULT_VER = "3.8.0"
 
 
-def calculate_deployment_cost(wb, factor_spec, factors):
+def calculate_deployment_cost(wb, model_spec, factors):
     """
     Calculates set up and operational costs in the deployment cost model (wb), given a set of parameters to sample.
 
@@ -19,8 +19,8 @@ def calculate_deployment_cost(wb, factor_spec, factors):
     ----------
     wb : Workbook
         The cost model as an excel workbook
-    factor_spec : DataFrame
-        The factor specification, as loaded from the config.csv
+    model_spec : DataFrame
+        The cost model specification, detailing where cells are in the spreadsheet
     factors : DataFrameRow
         Factor values to run cost model with
 
@@ -33,36 +33,30 @@ def calculate_deployment_cost(wb, factor_spec, factors):
     """
     reef_key = ["Moore", "Davies", "Swains", "Keppel"]
     port = factors["port"].iloc[0]
+    factor_names = model_spec.factor_names
 
-    is_not_cost = factor_spec.factor_names != "Cost"
-    is_not_setup = factor_spec.factor_names != "setupCost"
-    for _, factor_row in factor_spec[is_not_cost & is_not_setup].iterrows():
-        factor_row_name = factor_row.factor_names
-        ws = wb.Sheets(factor_row.sheet)
-        if factor_row_name == "distance_from_port":
-            ws.Cells(factor_row.cell_row + port, factor_row.cell_col).Value = factors[
-                factor_row_name
-            ].iloc[0]
-        elif factor_row_name == "port":
-            ws.Cells(factor_row.cell_row, factor_row.cell_col).Value = reef_key[
-                port - 1
-            ]
+    is_not_cost = factor_names != "Cost"
+    is_not_setup = factor_names != "setupCost"
+    for _, params in model_spec[is_not_cost & is_not_setup].iterrows():
+        param_names = params.factor_names
+        ws = wb.Sheets(params.sheet)
+        if param_names == "distance_from_port":
+            ws.Range(params.cell_pos).Value = factors[param_names].iloc[0]
+        elif param_names == "port":
+            ws.Range(params.cell_pos).Value = reef_key[port - 1]
         else:
-            ws.Cells(factor_row.cell_row, factor_row.cell_col).Value = factors[
-                factor_row_name
-            ].iloc[0]
+            ws.Range(params.cell_pos).Value = factors[param_names].iloc[0]
 
     ws = wb.Sheets("Dashboard")
     ws.EnableCalculation = True
     ws.Calculate()
 
     # Get the new output
-    cost_cells = factor_spec.loc[factor_spec.factor_names == "Cost"]
-    setupcost_cells = factor_spec.loc[factor_spec.factor_names == "setupCost"]
-    Cost = ws.Cells(cost_cells.cell_row.iloc[0], cost_cells.cell_col.iloc[0]).Value
-    setupCost = ws.Cells(
-        setupcost_cells.cell_row.iloc[0], setupcost_cells.cell_col.iloc[0]
-    ).Value
+    cost_cell = model_spec.loc[factor_names == "Cost", "cell_pos"].values[0]
+    setupcost_cell = model_spec.loc[factor_names == "setupCost", "cell_pos"].values[0]
+
+    Cost = ws.Range(cost_cell).Value
+    setupCost = ws.Range(setupcost_cell).Value
 
     return [Cost, setupCost]
 
@@ -87,31 +81,27 @@ def calculate_production_cost(wb, factor_spec, factors):
     setupCost: float
         Setup cost
     """
-    for _, factor_row in factor_spec[
-        (factor_spec.factor_names != "Cost") & (factor_spec.factor_names != "setupCost")
-    ].iterrows():
+    factor_names = factor_spec.factor_names
+    not_costs = (factor_names != "Cost") & (factor_names != "setupCost")
+    for _, factor_row in factor_spec[not_costs].iterrows():
         ws = wb.Sheets(factor_row.sheet)
-
-        ws.Cells(factor_row.cell_row, factor_row.cell_col).Value = factors[
-            factor_row.factor_names
-        ].iloc[0]
+        ws.Range(factor_row.cell_pos).Value = factors[factor_row.factor_names].iloc[0]
 
     ws = wb.Sheets("Dashboard")
     ws.EnableCalculation = True
     ws.Calculate()
 
     # get the new output
-    cost_cells = factor_spec.loc[factor_spec.factor_names == "Cost"]
-    setupcost_cells = factor_spec.loc[factor_spec.factor_names == "setupCost"]
-    Cost = ws.Cells(cost_cells.cell_row.iloc[0], cost_cells.cell_col.iloc[0]).Value
-    setupCost = ws.Cells(
-        setupcost_cells.cell_row.iloc[0], setupcost_cells.cell_col.iloc[0]
-    ).Value
+    cost_cells = factor_spec.loc[factor_names == "Cost", "cell_pos"].values[0]
+    setupcost_cells = factor_spec.loc[factor_names == "setupCost", "cell_pos"].values[0]
+
+    Cost = ws.Range(cost_cells).Value
+    setupCost = ws.Range(setupcost_cells).Value
 
     return [Cost, setupCost]
 
 
-def load_config(config_filepath=CONFIG_PATH):
+def load_config():
     """
     Load configuration file for model sampling
 
@@ -120,10 +110,25 @@ def load_config(config_filepath=CONFIG_PATH):
     config_filepath : str
         String specifying filepath of config file, default is the default package config file
     """
-    return pd.read_csv(config_filepath)
+    prod = pd.read_csv(f"{THIS_DIR}/{DEFAULT_VER}_prod_config.csv")
+    deploy = pd.read_csv(f"{THIS_DIR}/{DEFAULT_VER}_deploy_config.csv")
+
+    return pd.concat([prod, deploy], ignore_index=True)
 
 
-def problem_spec(cost_type, config_filepath=CONFIG_PATH):
+def load_internal_config(fp):
+    """
+    Load internal config for model sampling
+
+    Parameters
+    ----------
+    fp : str
+        Filename of config file within the package structure
+    """
+    return pd.read_csv(os.path.join(THIS_DIR, fp))
+
+
+def problem_spec(cost_type):
     """
     Create a problem specification for sampling cost models using SALib.
 
@@ -138,25 +143,25 @@ def problem_spec(cost_type, config_filepath=CONFIG_PATH):
     -------
     sp : dict
         ProblemSpec for sampling with SALib
-    factor_spec : dataframe
+    model_spec : dataframe
         factor specification, as loaded from the config.csv
     """
     if (cost_type != "production") & (cost_type != "deployment"):
         raise ValueError("Non-existent parameter type")
 
-    factor_specs = load_config(config_filepath=config_filepath)
-    factor_specs = factor_specs[factor_specs.cost_type == cost_type]
+    model_spec = load_config()
+    model_spec = model_spec[model_spec.cost_type == cost_type]
     factor_ranges = [
-        factor_specs[["range_lower", "range_upper"]].iloc[k].values
-        for k in range(factor_specs.shape[0])
+        model_spec[["range_lower", "range_upper"]].iloc[k].values
+        for k in range(model_spec.shape[0])
     ]
 
     problem_dict = {
-        "num_vars": factor_specs.shape[0],
-        "names": [name for name in factor_specs.factor_names],
+        "num_vars": model_spec.shape[0],
+        "names": [name for name in model_spec.factor_names],
         "bounds": factor_ranges,
     }
-    return ProblemSpec(problem_dict), factor_specs
+    return ProblemSpec(problem_dict), model_spec
 
 
 def convert_factor_types(factors_df, is_cat):

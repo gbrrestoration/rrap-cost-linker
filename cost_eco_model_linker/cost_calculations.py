@@ -291,9 +291,11 @@ def calculate_costs(
 
     # Copy files for independent run
     deploy_model_fp = path_join(tmp_dir, f"{deploy_model_filepath}{_iter_id}.xlsx")
+    os.makedirs(os.path.dirname(deploy_model_fp), exist_ok=True)
     shutil.copy(deploy_model_filepath + ".xlsx", deploy_model_fp)
 
     prod_model_fp = path_join(tmp_dir, f"{prod_model_filepath}{_iter_id}.xlsx")
+    os.makedirs(os.path.dirname(prod_model_fp), exist_ok=True)
     shutil.copy(prod_model_filepath + ".xlsx", prod_model_fp)
 
     unique_ids = np.unique(ID_key.ID)

@@ -19,10 +19,10 @@ def calculate_deployment_cost(wb, factor_spec, factors):
     ----------
     wb : Workbook
         The cost model as an excel workbook
-    factor_spec : dataframe
+    factor_spec : DataFrame
         The factor specification, as loaded from the config.csv
-    factors : dataframerow
-        Row of a pandas dataframe with factors to sample
+    factors : DataFrameRow
+        Factor values to run cost model with
 
     Returns
     -------
@@ -34,28 +34,29 @@ def calculate_deployment_cost(wb, factor_spec, factors):
     reef_key = ["Moore", "Davies", "Swains", "Keppel"]
     port = factors["port"].iloc[0]
 
-    for _, factor_row in factor_spec[
-        (factor_spec.factor_names != "Cost") & (factor_spec.factor_names != "setupCost")
-    ].iterrows():
+    is_not_cost = factor_spec.factor_names != "Cost"
+    is_not_setup = factor_spec.factor_names != "setupCost"
+    for _, factor_row in factor_spec[is_not_cost & is_not_setup].iterrows():
+        factor_row_name = factor_row.factor_names
         ws = wb.Sheets(factor_row.sheet)
-        if factor_row.factor_names == "distance_from_port":
+        if factor_row_name == "distance_from_port":
             ws.Cells(factor_row.cell_row + port, factor_row.cell_col).Value = factors[
-                factor_row.factor_names
+                factor_row_name
             ].iloc[0]
-        elif factor_row.factor_names == "port":
+        elif factor_row_name == "port":
             ws.Cells(factor_row.cell_row, factor_row.cell_col).Value = reef_key[
                 port - 1
             ]
         else:
             ws.Cells(factor_row.cell_row, factor_row.cell_col).Value = factors[
-                factor_row.factor_names
+                factor_row_name
             ].iloc[0]
 
     ws = wb.Sheets("Dashboard")
     ws.EnableCalculation = True
     ws.Calculate()
 
-    # get the new output
+    # Get the new output
     cost_cells = factor_spec.loc[factor_spec.factor_names == "Cost"]
     setupcost_cells = factor_spec.loc[factor_spec.factor_names == "setupCost"]
     Cost = ws.Cells(cost_cells.cell_row.iloc[0], cost_cells.cell_col.iloc[0]).Value

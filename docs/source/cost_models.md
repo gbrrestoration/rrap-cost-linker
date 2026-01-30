@@ -6,8 +6,8 @@ at QUT).
 
 The compatible versions of the cost models are:
 
-- Coral Aquaculture Deployment : `3.5.5 CA Deployment Model.xlsx`
-- Coral Aquaculture Production : `3.7.0 CA Production Model.xlsx`
+- Coral Aquaculture Deployment : `3.8.0 CA Deployment Model.xlsx`
+- Coral Aquaculture Production : `3.8.0 CA Production Model.xlsx`
 
 ## Configuration files
 
@@ -41,7 +41,7 @@ The `config.csv` should include info for `setupCost` and `Cost` parameters for b
 
 The following table describes the key parameters sampled in the deployment and production cost models.
 There are many other parameters which could be sampled, but the following were chosen as key sources of uncertainty
-through consultation with the Translation to Deployment Team and sensitivity analyses using `cost_model_queries`.
+through consultation with the Translation to Deployment Team and sensitivity analyses.
 
 | **Parameter name** | **Description** | **Expected range** | **Model** |
 |--------------------|-----------------|-------------------|-----------|
@@ -126,4 +126,4 @@ calculated as follows:
    port in each of the remaining clusters, travelling in order from closest cluster to  \
    port to furthest cluster from port.
 
-<img src="reef_distances_diagram.png" width="800">
+<img src="./_static/figs/prod/reef_distances_diagram.png" width="800">

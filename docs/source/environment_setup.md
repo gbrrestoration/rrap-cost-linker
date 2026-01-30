@@ -37,11 +37,11 @@ Assuming the current directory is the project root:
 
 In VS code, the corresponding virtual environment can be selected by selecting the interpreter in the bottom right of the screen:
 
-<img src="select_interpreter.png" width="800">
+<img src="./_static/figs/prod/select_interpreter.png" width="800">
 
 And then selecting the virtual environment:
 
-<img src="select_environment.png" width="800">
+<img src="./_static/figs/prod/select_environment.png" width="800">
 
 To use `cost-eco-model-linker`,
 

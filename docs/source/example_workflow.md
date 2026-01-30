@@ -53,7 +53,7 @@ prod_cost_model = "./models/3.8.0 CA Production Model.xlsx"
 deploy_cost_model = "./models/3.8.0 CA Deployment Model.xlsx"
 
 # Number of samples to take (must be power of 2)
-N = 2**5
+N = 2**7
 
 # Samples model and returns an SALib problem specification with results under the
 # `cost_model_results` key.

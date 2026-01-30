@@ -38,10 +38,10 @@ lint = [
 
 [project.scripts]
 # Build the HTML documentation
-docs-build = "sphinx-build -b html docs/source docs/build"
+docs-build = "cost_eco_model_linker.docs:build"
 
 # Clean the build directory and then build
-docs-clean = { composite = ["rm -rf docs/build", "docs-build"] }
+docs-clean = "cost_eco_model_linker.docs:clean"
 
 # Build and open the docs in your browser (requires sphinx-autobuild)
-docs-dev = "sphinx-autobuild docs/source docs/build/html"
+docs-dev = "cost_eco_model_linker.docs:dev"

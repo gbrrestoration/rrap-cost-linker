@@ -3,6 +3,7 @@ from dotenv import dotenv_values
 import os
 from os.path import join as path_join
 
+from copy import copy
 from collections import OrderedDict
 from dataclasses import dataclass
 
@@ -23,7 +24,7 @@ class OutputStores:
     intervention_keys_dir: str
 
 
-def setup_dirs(base_dir) -> OutputStores:
+def setup_dirs(base_dir: str) -> OutputStores:
     """
     Create output directories at specified location.
 
@@ -37,14 +38,14 @@ def setup_dirs(base_dir) -> OutputStores:
     OutputStores
         Named collection of output directory paths.
     """
-    config = RESULT_DIRS
+    config = copy(RESULT_DIRS)
 
     env_file = path_join("./.env")
     if os.path.isfile(env_file):
         user_config = {**dotenv_values(env_file)}
 
         # Merge dicts so that default values are used if not provided
-        config = RESULT_DIRS | user_config
+        config = config | user_config
 
     for k, dir_name in config.items():
         full_path = path_join(base_dir, dir_name)

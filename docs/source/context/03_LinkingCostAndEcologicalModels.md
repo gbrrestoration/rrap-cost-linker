@@ -1,11 +1,10 @@
 # 3.	Linking cost and ecological models
-Linking the cost models with the ecological models to assess intervention scenarios requires additional code (cost model sampling and sensitivity analysis code available at [cost_model_queries link](https://github.com/open-AIMS/cost_model_queries)
+Linking the cost models with the ecological models to assess intervention scenarios
+requires the following:
 
-This requires the following:
-
--	Scenario settings adjusted, simplified, harmonised, standardised, and automated across cost and ecological models (see list of model parameters and interventions settings).
--	Sensitivity analysis of cost model parameters to develop space for Monte Carlo sampling of cost model data.
--	Expanding reef selection to all 3806 reefs as currently the cost models only capture 4 reefs. This would require pairing of available ports with all reefs and capturing reef combinations and capacity.
+- Scenario settings adjusted, simplified, harmonised, standardised, and automated across cost and ecological models (see list of model parameters and interventions settings).
+- Sensitivity analysis of cost model parameters to develop space for Monte Carlo sampling of cost model data.
+- Expanding reef selection to all 3806 reefs as currently the cost models only capture 4 reefs. This would require pairing of available ports with all reefs and capturing reef combinations and capacity.
 
 The key model parameters and scenario settings are summarised in Table 1. For the full list see Appendix.
 

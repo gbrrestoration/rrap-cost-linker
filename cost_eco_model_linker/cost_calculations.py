@@ -214,7 +214,8 @@ def calc_setup_costs(deploy_factors, prod_factors, iv_spec, ecol_idx, nsims):
         Number of simulations drawn (may be smaller than dataframe size to get correct number of samples
         for Sobol Sampling).
     """
-    # Sum over reefsets for the same intervention and year to give total number of corals outplanted in each environmental sample (rep)
+    # Sum over reefsets for the same intervention and year to give total number of corals
+    # outplanted in each environmental sample (rep)
     temp_id_df = (
         iv_spec[["rep", "number_of_1YO_corals"]]
         .groupby("rep")["number_of_1YO_corals"]
@@ -222,19 +223,21 @@ def calc_setup_costs(deploy_factors, prod_factors, iv_spec, ecol_idx, nsims):
         .reset_index()
     )
 
-    # Update 1YO corals ro additional 1YO corals compared to previous year and convert to equivalent number of devices
-    deploy_factors.loc[0 : nsims - 1, "num_devices"] = deploy_factors.loc[
-        0 : nsims - 1, "num_devices"
-    ] - np.ceil(
-        temp_id_df["number_of_1YO_corals"].values[ecol_idx]
-        / deploy_factors.loc[0 : nsims - 1, "1YOEC_yield"]
-    )
-    prod_factors.loc[0 : nsims - 1, "num_devices"] = prod_factors.loc[
-        0 : nsims - 1, "num_devices"
-    ] - np.ceil(
-        temp_id_df["number_of_1YO_corals"].values[ecol_idx]
-        / deploy_factors.loc[0 : nsims - 1, "1YOEC_yield"]
-    )
+    sel = slice(0, nsims - 1)
+    n_1yo_corals = temp_id_df["number_of_1YO_corals"].values[ecol_idx]
+    yield_1yo_corals = deploy_factors.loc[sel, "1YOEC_yield"]
+
+    # Account for losses and inefficiencies to determine how many corals are needed
+    # to meet production targets
+    required_production = np.ceil(n_1yo_corals / yield_1yo_corals)
+
+    # Update 1YO corals ro additional 1YO corals compared to previous year and convert to
+    # equivalent number of devices
+    deploy_factors.loc[sel, "num_devices"] -= required_production
+
+    # Note: Production calculation subtracts same value as deployment (this is how it
+    #       was implemented originally, and I guess it is to align the two datasets)
+    prod_factors.loc[sel, "num_devices"] -= required_production
 
     return deploy_factors, prod_factors
 

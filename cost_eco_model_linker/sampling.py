@@ -201,7 +201,7 @@ def convert_factor_types(factors_df, is_cat):
     return factors_df
 
 
-def _run_cost_model(wb_file_path, cost_factors, factor_spec, calculate_cost):
+def _run_cost_model(wb, cost_factors, factor_spec, calculate_cost):
     """
     Run and collect results from a cost model.
 
@@ -214,61 +214,29 @@ def _run_cost_model(wb_file_path, cost_factors, factor_spec, calculate_cost):
     factor_spec : dataframe
         factor specification, as loaded from the config.csv
     calculate_cost: function
-        Function to use to sample cost
+        Function to use to sample cost. One of:
+        - "calculate_deployment_cost"
+        - "calculate_production_cost"
 
     Returns
     -------
     cost_factors : dataframe
         Updated dataframe with costs added
     """
-    # win32com Excel interface can only open files using their absolute paths
-    wb_file_path = os.path.abspath(wb_file_path)
-
-    # Open workbook
-    xlapp = w32client.DispatchEx("Excel.Application")
-    xlapp.Interactive = False
-    xlapp.Visible = False
-    xlapp.DisplayAlerts = False
-    wb = xlapp.Workbooks.Open(wb_file_path)
-
     total_cost = np.zeros((cost_factors.shape[0], 2))
     for idx_n in range(len(total_cost)):
         total_cost[idx_n, :] = calculate_cost(
-            wb, factor_spec, cost_factors.iloc[[idx_n]]
+            wb, factor_spec, cost_factors.iloc[idx_n, :]
         )
 
-    cost_factors.loc[:, "Cost"] = total_cost[:, 0]
-    cost_factors.loc[:, "setupCost"] = total_cost[:, 1]
+    cost_factors.loc[:, ["Cost", "setupCost"]] = total_cost
+    # cost_factors.loc[:, "Cost"] = total_cost[:, 0]
+    # cost_factors.loc[:, "setupCost"] = total_cost[:, 1]
 
-    wb.Close(SaveChanges=False)  # Close workbook
-    xlapp.Quit()
     return cost_factors
 
 
-def collect_deployment_costs(wb_file_path, cost_factors, factor_spec):
-    """
-    Run the production cost model.
-
-    Parameters
-    ----------
-    wb_file_path : str
-        Filepath to a cost model as an excel workbook
-    cost_factors : dataframe
-        Dataframe of factors to input in the cost model
-    factor_spec : dataframe
-        Factor specification, as loaded from the config.csv
-
-    Returns
-    -------
-    cost_factors : dataframe
-        Updated sampled factor dataframe with costs added
-    """
-    return _run_cost_model(
-        wb_file_path, cost_factors, factor_spec, calculate_deployment_cost
-    )
-
-
-def collect_production_costs(wb_file_path, cost_factors, factor_spec):
+def collect_production_costs(wb, cost_factors, factor_spec):
     """
     Run the production cost model.
 
@@ -286,9 +254,29 @@ def collect_production_costs(wb_file_path, cost_factors, factor_spec):
     cost_factors : dataframe
         Updated sampled factor dataframe with costs added
     """
-    return _run_cost_model(
-        wb_file_path, cost_factors, factor_spec, calculate_production_cost
-    )
+    return _run_cost_model(wb, cost_factors, factor_spec, calculate_production_cost)
+
+
+def collect_deployment_costs(wb, cost_factors, factor_spec):
+    """
+    Run the deployment cost model.
+
+    Parameters
+    ----------
+    wb_file_path : str
+        Filepath to a cost model as an excel workbook
+    cost_factors : dataframe
+        Dataframe of factors to input in the cost model
+    factor_spec : dataframe
+        Factor specification, as loaded from the config.csv
+
+    Returns
+    -------
+    cost_factors : dataframe
+        Updated sampled factor dataframe with costs added
+    """
+
+    return _run_cost_model(wb, cost_factors, factor_spec, calculate_deployment_cost)
 
 
 def run_deployment_model(cost_model: str, N: int):
@@ -316,7 +304,9 @@ def run_deployment_model(cost_model: str, N: int):
 
     samples = convert_factor_types(samples, model_config.is_cat)
 
-    sample_w_cost_results = collect_deployment_costs(cost_model, samples, model_config)
+    xlapp, wb = open_excel(cost_model)
+    sample_w_cost_results = collect_deployment_costs(wb, samples, model_config)
+    close_excel(xlapp, wb)
 
     sp["cost_model_results"] = sample_w_cost_results
 
@@ -348,7 +338,9 @@ def run_production_model(cost_model: str, N: int):
 
     samples = convert_factor_types(samples, model_config.is_cat)
 
-    sample_w_cost_results = collect_production_costs(cost_model, samples, model_config)
+    xlapp, wb = open_excel(cost_model)
+    sample_w_cost_results = collect_production_costs(wb, samples, model_config)
+    close_excel(xlapp, wb)
 
     sp["cost_model_results"] = sample_w_cost_results
 

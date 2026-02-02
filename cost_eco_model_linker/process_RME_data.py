@@ -354,11 +354,11 @@ def create_economics_metric_files(
         )
 
         # Calculate and store distance to port
-        rep_reefs_sort, total_dist = find_max_reef_distance(
+        rep_reefs_sort, rep_reef_names, total_dist = find_max_reef_distance(
             reef_spatial_data, regions_data, iv_reefs, max_dist=max_dist
         )
-        id_key_df["furthest_representative_reef"] = rep_reefs_sort[-1]
-        id_key_df["closest_representative_reef"] = rep_reefs_sort[0]
+        id_key_df["furthest_representative_reef"] = rep_reef_names[-1]
+        id_key_df["closest_representative_reef"] = rep_reef_names[0]
         id_key_df["distance_to_port_NM"] = total_dist
 
         # Process batches

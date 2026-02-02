@@ -13,3 +13,13 @@ from .sampling import (
     run_deployment_model,
     extract_sa_results,
 )
+
+from .handlers import (
+    open_excel,
+    close_excel,
+    reset_workbook,
+    get_industry_codes,
+    find_table,
+    create_eia_template,
+    fill_EIA_info,
+)

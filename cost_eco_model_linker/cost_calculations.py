@@ -163,7 +163,8 @@ def update_factors(deploy_factors, prod_factors, iv_spec, ecol_idx, nsims):
         Number of simulations drawn (may be smaller than dataframe size to get correct number of samples
         for Sobol Sampling).
     """
-    # Sum over reefsets for the same intervention and year to give total number of corals outplanted in each environmental sample (rep)
+    # Sum over reefsets for the same intervention and year to give total number of corals
+    # outplanted in each environmental sample (rep)
     temp_id_df = (
         iv_spec[["rep", "number_of_1YO_corals"]]
         .groupby("rep")["number_of_1YO_corals"]
@@ -171,24 +172,27 @@ def update_factors(deploy_factors, prod_factors, iv_spec, ecol_idx, nsims):
         .reset_index()
     )
 
+    # Note: Not sure why this implementation is only selecting 0 to nsims - 1
+    sel = slice(0, nsims - 1)
+
+    # Determine number of devices considering yield
+    n_1yo_corals = temp_id_df["number_of_1YO_corals"].values[ecol_idx]
+    yield_1yo = deploy_factors.loc[sel, "1YOEC_yield"]
+    n_devices = np.ceil(n_1yo_corals / yield_1yo)
+
     # Update 1YO corals and convert to equivalent number of devices
-    deploy_factors.loc[0 : nsims - 1, "num_devices"] = np.ceil(
-        temp_id_df["number_of_1YO_corals"].values[ecol_idx]
-        / deploy_factors.loc[0 : nsims - 1, "1YOEC_yield"]
-    )
-    prod_factors.loc[0 : nsims - 1, "num_devices"] = np.ceil(
-        temp_id_df["number_of_1YO_corals"].values[ecol_idx]
-        / deploy_factors.loc[0 : nsims - 1, "1YOEC_yield"]
-    )
+    deploy_factors.loc[sel, "num_devices"] = n_devices
+    prod_factors.loc[sel, "num_devices"] = n_devices
 
     # Update number of species
     prod_factors.loc[:, "species_no"] = iv_spec["number_of_species"].iloc[0]
 
-    # Make sure the production and deployment models have the same 1YO coral yield per device
+    # Make sure the production and deployment models have the same 1YO coral yield per
+    # device
     prod_factors.loc[:, "1YOEC_yield"] = deploy_factors["1YOEC_yield"].values
 
     # Port does not matter as we are using distance to port directly
-    deploy_factors.loc[:, "port"] = 1
+    deploy_factors.loc[:, "reef"] = 1
     deploy_factors.loc[:, "distance_from_port"] = iv_spec["distance_to_port_NM"].iloc[0]
 
     return deploy_factors, prod_factors

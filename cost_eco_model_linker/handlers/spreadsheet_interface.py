@@ -351,4 +351,8 @@ def fill_EIA_info(
         *[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
     )
 
+    # Move Labour column to last position
+    labour_col = eia_template.pop("labour")
+    eia_template["labour"] = labour_col
+
     return eia_template

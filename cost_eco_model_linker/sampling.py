@@ -7,6 +7,8 @@ import pandas as pd
 
 import matplotlib.pyplot as plt
 
+from .handlers import open_excel, close_excel
+
 THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_VER = "3.8.0"
 
@@ -26,13 +28,23 @@ def calculate_deployment_cost(wb, model_spec, factors):
 
     Returns
     -------
-        Cost: float
-            Operational cost
-        setupCost: float
-            Setup cost
+    op_cost: float
+        Operational cost
+    setup_cost: float
+        Setup cost
     """
-    reef_key = ["Moore", "Davies", "Swains", "Keppel"]
-    port = factors["port"].iloc[0]
+    lookup_ws = wb.Sheets("Lookup Tables")
+    start_cell = lookup_ws.Cells.Find("Moore")
+    col_num = start_cell.Column
+
+    # Get list of Reef clusters
+    tbl_region = start_cell.CurrentRegion.Rows
+    end_cell_pos = tbl_region.Row + tbl_region.Rows.Count - 1
+    end_cell = lookup_ws.Cells(end_cell_pos, col_num)
+    col_range = lookup_ws.Range(start_cell, end_cell)
+    reef_key = np.array(col_range.Value).flatten()
+    # reef_key = ["Moore", "Davies", "Swains", "Keppel"]
+
     factor_names = model_spec.factor_names
 
     is_not_cost = factor_names != "Cost"
@@ -41,11 +53,12 @@ def calculate_deployment_cost(wb, model_spec, factors):
         param_names = params.factor_names
         ws = wb.Sheets(params.sheet)
         if param_names == "distance_from_port":
-            ws.Range(params.cell_pos).Value = factors[param_names].iloc[0]
-        elif param_names == "port":
-            ws.Range(params.cell_pos).Value = reef_key[port - 1]
+            ws.Range(params.cell_pos).Value = factors[param_names]
+        elif param_names == "reef":
+            reef = int(factors["reef"])
+            ws.Range(params.cell_pos).Value = reef_key[reef - 1]
         else:
-            ws.Range(params.cell_pos).Value = factors[param_names].iloc[0]
+            ws.Range(params.cell_pos).Value = factors[param_names]
 
     ws = wb.Sheets("Dashboard")
     ws.EnableCalculation = True
@@ -55,10 +68,10 @@ def calculate_deployment_cost(wb, model_spec, factors):
     cost_cell = model_spec.loc[factor_names == "Cost", "cell_pos"].values[0]
     setupcost_cell = model_spec.loc[factor_names == "setupCost", "cell_pos"].values[0]
 
-    Cost = ws.Range(cost_cell).Value
-    setupCost = ws.Range(setupcost_cell).Value
+    op_cost = ws.Range(cost_cell).Value
+    setup_cost = ws.Range(setupcost_cell).Value
 
-    return [Cost, setupCost]
+    return op_cost, setup_cost
 
 
 def calculate_production_cost(wb, factor_spec, factors):
@@ -76,16 +89,16 @@ def calculate_production_cost(wb, factor_spec, factors):
 
     Returns
     -------
-    Cost: float
+    op_cost: float
         Operational cost
-    setupCost: float
+    setup_cost: float
         Setup cost
     """
     factor_names = factor_spec.factor_names
     not_costs = (factor_names != "Cost") & (factor_names != "setupCost")
     for _, factor_row in factor_spec[not_costs].iterrows():
         ws = wb.Sheets(factor_row.sheet)
-        ws.Range(factor_row.cell_pos).Value = factors[factor_row.factor_names].iloc[0]
+        ws.Range(factor_row.cell_pos).Value = factors[factor_row.factor_names]
 
     ws = wb.Sheets("Dashboard")
     ws.EnableCalculation = True
@@ -95,10 +108,10 @@ def calculate_production_cost(wb, factor_spec, factors):
     cost_cells = factor_spec.loc[factor_names == "Cost", "cell_pos"].values[0]
     setupcost_cells = factor_spec.loc[factor_names == "setupCost", "cell_pos"].values[0]
 
-    Cost = ws.Range(cost_cells).Value
-    setupCost = ws.Range(setupcost_cells).Value
+    op_cost = ws.Range(cost_cells).Value
+    setup_cost = ws.Range(setupcost_cells).Value
 
-    return [Cost, setupCost]
+    return [op_cost, setup_cost]
 
 
 def load_config():

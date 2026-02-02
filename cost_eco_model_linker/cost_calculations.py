@@ -15,6 +15,14 @@ from .sampling import (
     collect_production_costs,
 )
 
+from .handlers import (
+    open_excel,
+    close_excel,
+    reset_workbook,
+    create_eia_template,
+    fill_EIA_info,
+)
+
 THIS_DIR = os.path.dirname(__file__)
 
 
@@ -227,6 +235,7 @@ def calc_setup_costs(deploy_factors, prod_factors, iv_spec, ecol_idx, nsims):
         .reset_index()
     )
 
+    # Note: Not sure why this implementation is only selecting 0 to nsims - 1
     sel = slice(0, nsims - 1)
     n_1yo_corals = temp_id_df["number_of_1YO_corals"].values[ecol_idx]
     yield_1yo_corals = deploy_factors.loc[sel, "1YOEC_yield"]
@@ -304,27 +313,33 @@ def calculate_costs(
     unique_ids = np.unique(ID_key.ID)
     cost_filepaths = [""] * len(unique_ids)
 
+    deploy_xlapp, deploy_wb = open_excel(deploy_model_fp)
+    prod_xlapp, prod_wb = open_excel(prod_model_fp)
+    eia_template = create_eia_template(deploy_wb)
+
     for id_idx, scen_id in enumerate(unique_ids):
         # Intervention scenario ID to link costs to ecological model outcomes
         scen_idx = ID_key.ID == scen_id
-        int_years = np.unique(ID_key.intervention_years[scen_idx])  # Intervention years
+        iv_years = np.unique(ID_key.intervention_years[scen_idx])  # Intervention years
 
         # Ecological rep sampling indices
         # (`min()` because the indices should be relative to the vector selected
         # for the intervention id)
         ecol_ids = ecol_ids_df[str(scen_id)] - min(ecol_ids_df[str(scen_id)])
 
-        cost_df = initialise_cost_df(int_years, nsims)
+        cost_df = initialise_cost_df(iv_years, nsims)
 
         deploy_spec, deploy_factors, prod_spec, prod_factors = sample_cost_model(nsims)
 
-        for int_yr in int_years:
+        for iv_yr in iv_years:
+            curr_selector = (ID_key.intervention_years == iv_yr) & scen_idx
+
             # Add key intervention parameters for year to dataframe as constants
             deploy_factors, prod_factors = update_factors(
                 deploy_factors,
                 prod_factors,
                 ID_key.loc[
-                    (ID_key.intervention_years == int_yr) & scen_idx,
+                    curr_selector,
                     [
                         "number_of_1YO_corals",
                         "distance_to_port_NM",
@@ -336,62 +351,65 @@ def calculate_costs(
                 nsims,
             )
             deploy_factors = collect_deployment_costs(
-                deploy_model_fp, deploy_factors, deploy_spec
+                deploy_wb, deploy_factors, deploy_spec
             )
-            prod_factors = collect_production_costs(
-                prod_model_fp, prod_factors, prod_spec
-            )
+            prod_factors = collect_production_costs(prod_wb, prod_factors, prod_spec)
 
-            if int_yr > min(int_years):
+            # Get associated port
+            deploy_ws = deploy_wb.Sheets("Logistics")
+            departure_port = deploy_ws.Range("D26").Value
+
+            prev_selector = (ID_key.intervention_years == iv_yr - 1) & scen_idx
+            if iv_yr > min(iv_years):
                 # Save calculated operational costs
                 save_cost_prod = prod_factors["Cost"]
                 save_cost_dep = deploy_factors["Cost"]
 
-                # Adjust number of corals to "how many more are being deployed this year
-                # than last year?" to caculate setup cost correctly
+                # Adjust setup costs to account for CAPEX that does not need to be spent
+                # again this year, e.g., no need to buy a truck every year, just use the
+                # one from last year again.
                 deploy_factors, prod_factors = calc_setup_costs(
                     deploy_factors,
                     prod_factors,
-                    ID_key.loc[
-                        (ID_key.intervention_years == int_yr - 1) & scen_idx,
-                        ["number_of_1YO_corals", "rep"],
-                    ],
+                    ID_key.loc[prev_selector, ["number_of_1YO_corals", "rep"]],
                     ecol_ids,
                     nsims,
                 )
 
-                if any(deploy_factors["num_devices"].values[0:nsims] <= 0):
-                    # If deploying no more than previous year, setup cost is zero
-                    prod_factors.loc[
-                        deploy_factors["num_devices"] <= 0, "setupCost"
-                    ] = 0
-                    deploy_factors.loc[
-                        deploy_factors["num_devices"] <= 0, "setupCost"
-                    ] = 0
+                no_additional = deploy_factors["num_devices"].values[0:nsims] <= 0
+                if no_additional.any():
+                    no_devices = deploy_factors["num_devices"] <= 0
 
-                if any(deploy_factors["num_devices"].values[0:nsims] > 0):
-                    # If deploying more than last year, recalculate setup cost for only those additional corals
+                    # If deploying no more than previous year, setup cost is zero
+                    prod_factors.loc[no_devices, "setupCost"] = 0
+                    deploy_factors.loc[no_devices, "setupCost"] = 0
+
+                has_additional = deploy_factors["num_devices"].values[0:nsims] > 0
+                if has_additional.any():
+                    # If deploying more than last year, recalculate setup cost for only
+                    # those additional corals
                     active_deployment = deploy_factors["num_devices"] > 0
-                    factors_df_dep_new = collect_deployment_costs(
-                        deploy_model_fp,
+                    updated_dep_cost = collect_deployment_costs(
+                        deploy_wb,
                         deploy_factors.loc[active_deployment, :],
                         deploy_spec,
                     )
-                    factors_df_prod_new = collect_production_costs(
-                        prod_model_fp,
+                    updated_prod_cost = collect_production_costs(
+                        prod_wb,
                         prod_factors.loc[active_deployment, :],
                         prod_spec,
                     )
 
                     # Replace orginally calculated setup costs with updated setup costs
-                    prod_factors.loc[deploy_factors["num_devices"] > 0, "setupCost"] = (
-                        factors_df_prod_new["setupCost"]
+                    prod_factors.loc[active_deployment, "setupCost"] = (
+                        updated_prod_cost["setupCost"]
                     )
-                    deploy_factors.loc[
-                        deploy_factors["num_devices"] > 0, "setupCost"
-                    ] = factors_df_dep_new["setupCost"]
+                    deploy_factors.loc[active_deployment, "setupCost"] = (
+                        updated_dep_cost["setupCost"]
+                    )
 
-                # Retain originally sampled operational cost for full number of corals, regardless of intervention year
+                # Retain originally sampled operational cost for full number of corals,
+                # regardless of intervention year
                 prod_factors.loc[:, "Cost"] = save_cost_prod
                 deploy_factors.loc[:, "Cost"] = save_cost_dep
 
@@ -400,9 +418,27 @@ def calculate_costs(
                 deploy_factors[["setupCost", "Cost"]]
                 + prod_factors[["setupCost", "Cost"]]
             ).values[0:nsims, :]
-            cost_df.loc[cost_df.year == int_yr, cost_df.columns[2:]] = cost_types(
+            cost_df.loc[cost_df.year == iv_yr, cost_df.columns[2:]] = cost_types(
                 cost_sum, cont_p, nsims
             )
+
+            closest_reef = ID_key.loc[
+                curr_selector.idxmax(), "closest_representative_reef"
+            ]
+
+            # TODO: Have to take into account the adjustments above!
+            eia_template = fill_EIA_info(
+                prod_wb,
+                deploy_wb,
+                scen_id,
+                iv_yr,
+                closest_reef,
+                departure_port,
+                eia_template,
+            )
+
+            deploy_wb = reset_workbook(deploy_xlapp, deploy_wb, deploy_model_fp)
+            prod_wb = reset_workbook(prod_xlapp, prod_wb, prod_model_fp)
 
         cost_filepath = path_join(
             cost_dir,
@@ -411,5 +447,10 @@ def calculate_costs(
 
         cost_df.to_csv(cost_filepath, index=False)
         cost_filepaths[id_idx] = cost_filepath
+
+    close_excel(deploy_xlapp, deploy_wb)
+    close_excel(prod_xlapp, prod_wb)
+
+    eia_template.to_csv(path_join(cost_dir, f"id_{iv_ID_key}_EIA.csv"))
 
     return cost_filepaths

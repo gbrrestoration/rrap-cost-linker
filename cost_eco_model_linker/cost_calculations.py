@@ -82,6 +82,19 @@ def initialise_cost_df(years, nsims):
     """
     Initialize dataframe for storing sampled cost data.
 
+    Components:
+    - 1 : CAPEX, sum of production and deployment cost
+    - 2 : Contingency CAPEX, % of CAPEX
+    - 3 : OPEX, sum of production and deployment cost
+    - 4 : Sustaining capital OPEX, set to zero for now (assumed to be included in OPEX through contract)
+    - 5 : Contingency OPEX, % of OPEX
+    - 6 : Vessel fuel, only relevant if volunteer vessels are used - set to zero for now
+    - 7 : CAPEX-monitoring, set to zero (assumed no monitoring cost)
+    - 8 : Contingency CAPEX-monitoring, % of CAPEX-monitoring
+    - 9 : OPEX-monitoring, set to zero (assumed no monitoring cost)
+    - 10 : Sustaining capital OPEX-monitoring, set to zero (assumed no monitoring cost)
+    - 11 : Contingency OPEX-monitoring, % of OPEX-monitoring
+
     Parameters
     ----------
     years : np.array

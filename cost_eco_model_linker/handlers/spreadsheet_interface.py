@@ -285,107 +285,115 @@ def fill_total_costs(it, iv_start, year, dest, port, eia_template, prefix):
     return eia_template
 
 
+def _process_cost_section(
+    eia_template,
+    wb,
+    section_name,
+    shared_args,
+    collect_return_flag=None,
+):
+    """Process a single cost section (Collection, Return, Production, or Deployment)"""
+    # Fill CAPEX and OPEX
+    eia_template = fill_capex(
+        *shared_args, eia_template, wb, f"{section_name}_Capex", collect_return_flag
+    )
+    eia_template = fill_opex(
+        *shared_args, eia_template, wb, f"{section_name}_Opex", collect_return_flag
+    )
+
+    iv_start_year, curr_year = shared_args[1:3]
+    if curr_year > iv_start_year:
+        # Adjust capital costs
+        s_name = f"{section_name}_Capex"
+        relevant_sections = eia_template.expense_name == s_name
+        this_year = eia_template.year == curr_year
+        init_year = eia_template.year == iv_start_year
+
+        # CAPEX costs are made relative to initial year
+        # This assumes increases to production are temporary and do not carry over to
+        # forward years. Really we should be making it relative to the biggest deployment
+        # year *so far* (increases to production capacity are permanent).
+        this_row = this_year & relevant_sections
+        init_row = init_year & relevant_sections
+        eia_template.iloc[this_row, 5:] = (
+            eia_template.iloc[this_row, 5:].values
+            - eia_template.iloc[init_row, 5:].values
+        )
+
+    # Fill totals
+    eia_template = fill_total_costs(*shared_args, eia_template, section_name)
+
+    return eia_template
+
+
 def fill_EIA_info(
     prod_wb,
     deploy_wb,
     it: int,
+    iv_start_year: int,
     year: int,
     dest: str,
     port: str,
-    cost_adjustment_values,
     eia_template: pd.DataFrame,
 ):
-    shared_args = (it, year, dest, port)
+    """
+    Fill EIA template with cost data.
 
-    # Collection
-    eia_template = fill_capex(
-        *shared_args, eia_template, prod_wb, "1.0_Coral_Collection_Capex", "COLLECT"
-    )
-    eia_template = fill_opex(
-        *shared_args, eia_template, prod_wb, "1.0_Coral_Collection_Opex", "COLLECT"
-    )
-    eia_template = fill_total_costs(*shared_args, eia_template, "1.0_Coral_Collection")
+    Parameters
+    ----------
+    prod_wb :
+        Production model
+    deploy_wb :
+        Deployment model
+    it : int
+        ReefMod Engine Iteration ID
+    iv_start_year: int
+        Year interventions begin
+    year : int
+        Simulation year
+    dest : str
+        Deployment destination
+    port : str
+        Port where deployments launched from
+    eia_template : pd.DataFrame
+        Template to fill
+    """
+    shared_args = (it, iv_start_year, year, dest, port)
 
-    # Return
-    eia_template = fill_capex(
-        *shared_args, eia_template, prod_wb, "2.0_Coral_Return_Capex", "RETURN"
-    )
-    eia_template = fill_opex(
-        *shared_args, eia_template, prod_wb, "2.0_Coral_Return_Opex", "RETURN"
-    )
-    eia_template = fill_total_costs(*shared_args, eia_template, "2.0_Coral_Return")
+    # Process production sections
+    sections = [
+        ("1.0_Coral_Collection", prod_wb, "COLLECT"),
+        ("2.0_Coral_Return", prod_wb, "RETURN"),
+        ("3.0_Production", prod_wb, None),
+    ]
 
-    # Production
-    eia_template = fill_capex(
-        *shared_args, eia_template, prod_wb, "3.0_Production_Capex"
-    )
-    eia_template = fill_opex(*shared_args, eia_template, prod_wb, "3.0_Production_Opex")
-    eia_template = fill_total_costs(*shared_args, eia_template, "3.0_Production")
-
-    eia_template = fill_capex(
-        *shared_args, eia_template, prod_wb, "3.0_Production_Capex"
-    )
-
-    data_cols = slice(5, -1)
-    if cost_adjustment_values[0, 0] == 0:
-        # Set all production CAPEX rows to zero
-        capex_rows = eia_template.expense_name.str.contains(
-            "Collection_Capex|Return_Capex|Production_Capex"
+    for section_name, wb, flag in sections:
+        eia_template = _process_cost_section(
+            eia_template,
+            wb,
+            section_name,
+            shared_args,
+            flag,
         )
-        eia_template.iloc[capex_rows, data_cols] = 0.0
 
-    eia_template = fill_opex(*shared_args, eia_template, prod_wb, "3.0_Production_Opex")
-    if cost_adjustment_values[0, 1] == 0:
-        # Set all production OPEX rows to zero
-        opex_rows = eia_template.expense_name.str.contains(
-            "Collection_Opex|Return_Opex|Production_Opex"
+    # Process deployment section
+    eia_template = _process_cost_section(
+        eia_template,
+        deploy_wb,
+        "4.0_Deployment",
+        shared_args,
+    )
+
+    # Add monitoring rows (zeros)
+    zero_row = [0.0] * 10
+    for expense_type in ["Capex", "Opex", "Total_Capex_&_Opex"]:
+        eia_template.loc[len(eia_template.index), :] = (
+            *(shared_args[:1] + shared_args[2:]),
+            f"5.0_Monitor_{expense_type}",
+            *zero_row,
         )
-        eia_template.iloc[opex_rows, data_cols] = 0.0
 
-    eia_template = fill_total_costs(*shared_args, eia_template, "3.0_Production")
-
-    # Deployment
-    eia_template = fill_capex(
-        *shared_args, eia_template, deploy_wb, "4.0_Deployment_Capex"
-    )
-
-    if cost_adjustment_values[1, 0] == 0:
-        # Set all deployment CAPEX rows to zero
-        capex_rows = eia_template.expense_name.str.contains("Deployment_Capex")
-        eia_template.iloc[capex_rows, data_cols] = 0.0
-
-    eia_template = fill_opex(
-        *shared_args, eia_template, deploy_wb, "4.0_Deployment_Opex"
-    )
-
-    if cost_adjustment_values[1, 1] == 0:
-        # Set all deployment OPEX rows to zero
-        opex_rows = eia_template.expense_name.str.contains("Deployment_Opex")
-        eia_template.iloc[opex_rows, data_cols] = 0.0
-
-    eia_template = fill_total_costs(*shared_args, eia_template, "4.0_Deployment")
-
-    # Fill monitoring rows
-    eia_template.loc[len(eia_template.index), :] = (
-        *shared_args,
-        "5.0_Monitor_Capex",
-        *[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-    )
-
-    eia_template.loc[len(eia_template.index), :] = (
-        *shared_args,
-        "5.0_Monitor_Opex",
-        *[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-    )
-
-    eia_template.loc[len(eia_template.index), :] = (
-        *shared_args,
-        "5.0_Monitor_Total_Capex_&_Opex",
-        *[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-    )
-
-    # Move Labour column to last position
-    labour_col = eia_template.pop("labour")
-    eia_template["labour"] = labour_col
+    # Move labour column to last position
+    eia_template["labour"] = eia_template.pop("labour")
 
     return eia_template

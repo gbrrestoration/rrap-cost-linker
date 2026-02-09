@@ -43,7 +43,6 @@ def calculate_deployment_cost(wb, model_spec, factors):
     end_cell = lookup_ws.Cells(end_cell_pos, col_num)
     col_range = lookup_ws.Range(start_cell, end_cell)
     reef_key = np.array(col_range.Value).flatten()
-    # reef_key = ["Moore", "Davies", "Swains", "Keppel"]
 
     factor_names = model_spec.factor_names
 
@@ -68,8 +67,8 @@ def calculate_deployment_cost(wb, model_spec, factors):
     cost_cell = model_spec.loc[factor_names == "Cost", "cell_pos"].values[0]
     setupcost_cell = model_spec.loc[factor_names == "setupCost", "cell_pos"].values[0]
 
-    op_cost = ws.Range(cost_cell).Value
-    setup_cost = ws.Range(setupcost_cell).Value
+    op_cost = float(ws.Range(cost_cell).Value)
+    setup_cost = float(ws.Range(setupcost_cell).Value)
 
     return op_cost, setup_cost
 
@@ -230,8 +229,6 @@ def _run_cost_model(wb, cost_factors, factor_spec, calculate_cost):
         )
 
     cost_factors.loc[:, ["Cost", "setupCost"]] = total_cost
-    # cost_factors.loc[:, "Cost"] = total_cost[:, 0]
-    # cost_factors.loc[:, "setupCost"] = total_cost[:, 1]
 
     return cost_factors
 

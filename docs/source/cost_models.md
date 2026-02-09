@@ -97,7 +97,7 @@ year. For example, if 100,000 corals are deployed in the first year, 200,000 in 
 year and 200,000 in the third year, the setup costs are \$X, \$X and \$0 respectively. The
 operational costs are calculated the same way regardless of the year. These year-by-year
 setup cost differences are not specified in the Excel models, but are handled within
-the functions `cost_calculations.calc_setup_costs()` and
+the functions `cost_calculations.calc_production_requirement()` and
 `cost_calculations.calculate_costs()`.
 
 In particular, for years beyond the first intervention year, the costs are sampled first

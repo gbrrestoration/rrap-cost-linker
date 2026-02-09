@@ -168,13 +168,16 @@ def _setup_EIA_calculation(
 
 
 def create_cost_filters(cost_type_df, attribution=None):
-    """Returns dict of common filter combinations"""
+    """Returns dict of common filter combinations.
+
+    Filters based on entries in the `Type` column in CAPEX and OPEX spreadsheets
+    of the cost models.
+    """
     filters = {
         "passive": cost_type_df.Type.isin(["Facility", "Storage", "Technology"]),
-        "passive_opex": cost_type_df.Type.isin(
-            ["Materials", "Facility", "Passive Labour"]
-        ),
-        "active": cost_type_df.Type == "Active Labour",
+        "passive_opex": cost_type_df.Type.isin(["Materials", "Facility"]),
+        "labor": (cost_type_df.Type == "Active Labour")
+        | (cost_type_df.Type == "Passive Labour"),
     }
 
     if attribution:
@@ -198,7 +201,7 @@ def fill_industry_costs(
         )
 
 
-def fill_opex(it, year, dest, port, eia_template, wb, expense, attribution=None):
+def fill_opex(it, _, year, dest, port, eia_template, wb, expense, attribution=None):
     """
     attribution : One of ["COLLECT", "RETURN", None], see `Attribution` column in Excel worksheets.
     """
@@ -210,7 +213,7 @@ def fill_opex(it, year, dest, port, eia_template, wb, expense, attribution=None)
     cost_type_df = find_table(wb.Sheets(sheet_name), "Amount")
     filters = create_cost_filters(cost_type_df, attribution)
 
-    active_costs = 0.0
+    labor_costs = 0.0
     for code in unique_ind_codes:
         matches_code = ind_codes[cost_df.index] == code
 
@@ -218,16 +221,17 @@ def fill_opex(it, year, dest, port, eia_template, wb, expense, attribution=None)
         passive_sel = matches_code & filters["passive_opex"] & filters["attr"]
         eia_template.loc[next_idx, code] = float(cost_df.loc[passive_sel, "Cost"].sum())
 
-        # Accumulate active labor
-        active_sel = matches_code & filters["active"] & filters["attr"]
-        active_costs += float(cost_df.loc[active_sel, "Cost"].sum())
+        # Accumulate labor costs
+        labor_sel = matches_code & filters["labor"] & filters["attr"]
+        labor_costs += float(cost_df.loc[labor_sel, "Cost"].sum())
 
-    eia_template.loc[next_idx, "labour"] = active_costs
+    eia_template.loc[next_idx, "labour"] = labor_costs
     eia_template.fillna(0.0, inplace=True)
+
     return eia_template
 
 
-def fill_capex(it, year, dest, port, eia_template, wb, expense, attribution=None):
+def fill_capex(it, _, year, dest, port, eia_template, wb, expense, attribution=None):
     """
     attribution : One of ["COLLECT", "RETURN"], see `Attribution` column in Excel worksheets.
     """
@@ -253,7 +257,7 @@ def fill_capex(it, year, dest, port, eia_template, wb, expense, attribution=None
     return eia_template
 
 
-def fill_total_costs(it, year, dest, port, eia_template, prefix):
+def fill_total_costs(it, iv_start, year, dest, port, eia_template, prefix):
     """
     Create total row by summing CAPEX and OPEX rows.
 

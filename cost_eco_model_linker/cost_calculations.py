@@ -154,15 +154,22 @@ def sample_cost_model(nsims):
         data=sp_prod.samples, columns=factor_specs_prod.factor_names
     )
 
+    # Subset to just the number of sims as the scenarios beyond `nsims` do not get used
+    # Yes, this means the Sobol' sampling is not necessary.
+    # Based on conversation with R. Crocker, this was simply to get something working
+    # reusing existing code.
+    factors_df_dep = factors_df_dep.iloc[0:nsims, :]
+    factors_df_prod = factors_df_prod.iloc[0:nsims, :]
+
     # Convert factor types to suitable format for cost model sampling
     factors_df_dep = convert_factor_types(factors_df_dep, factor_specs_dep.is_cat)
     factors_df_prod = convert_factor_types(factors_df_prod, factor_specs_prod.is_cat)
 
     return (
         factor_specs_dep,
-        factors_df_dep.iloc[0 : N * K],
+        factors_df_dep,
         factor_specs_prod,
-        factors_df_prod.iloc[0 : N * K],
+        factors_df_prod,
     )
 
 

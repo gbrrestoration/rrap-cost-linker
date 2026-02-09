@@ -352,6 +352,9 @@ def calculate_costs(
         deploy_spec, deploy_factors, prod_spec, prod_factors = sample_cost_model(nsims)
 
         for iv_yr in iv_years:
+            # Adjusted production and deployment capital costs
+            cost_adjustment_values = np.zeros((len(deploy_factors), 2))
+
             curr_selector = (ID_key.intervention_years == iv_yr) & scen_idx
 
             # Add key intervention parameters for year to dataframe as constants
@@ -379,6 +382,12 @@ def calculate_costs(
             deploy_ws = deploy_wb.Sheets("Logistics")
             departure_port = deploy_ws.Range("D26").Value
 
+            # Set costs (to be adjusted later)
+            cost_adjustment_values[0, 0] = prod_factors["Cost"][0]
+            cost_adjustment_values[1, 0] = deploy_factors["Cost"][0]
+            cost_adjustment_values[0, 1] = prod_factors["setupCost"][0]
+            cost_adjustment_values[1, 1] = deploy_factors["setupCost"][0]
+
             prev_selector = (ID_key.intervention_years == iv_yr - 1) & scen_idx
             if iv_yr > min(iv_years):
                 # Save calculated operational costs
@@ -386,8 +395,8 @@ def calculate_costs(
                 save_cost_dep = deploy_factors["Cost"]
 
                 # Adjust setup costs to account for CAPEX that does not need to be spent
-                # again this year, e.g., no need to buy a truck every year, just use the
-                # one from last year again.
+                # again this year, superficial example: no need to buy a truck every year,
+                # just use the one from last year again.
                 deploy_factors, prod_factors = calc_setup_costs(
                     deploy_factors,
                     prod_factors,
@@ -404,8 +413,8 @@ def calculate_costs(
                     prod_factors.loc[no_devices, "setupCost"] = 0
                     deploy_factors.loc[no_devices, "setupCost"] = 0
 
-                has_additional = deploy_factors["num_devices"].values[0:nsims] > 0
-                if has_additional.any():
+                    cost_adjustment_values[no_devices, :] = 0.0
+                else:
                     # If deploying more than last year, recalculate setup cost for only
                     # those additional corals
                     active_deployment = deploy_factors["num_devices"] > 0
@@ -427,6 +436,11 @@ def calculate_costs(
                     deploy_factors.loc[active_deployment, "setupCost"] = (
                         updated_dep_cost["setupCost"]
                     )
+
+                    cost_adjustment_values[active_deployment, :] = [
+                        updated_prod_cost["setupCost"],
+                        updated_dep_cost["setupCost"],
+                    ]
 
                 # Retain originally sampled operational cost for full number of corals,
                 # regardless of intervention year
@@ -454,6 +468,7 @@ def calculate_costs(
                 iv_yr,
                 closest_reef,
                 departure_port,
+                cost_adjustment_values,  # just pass in first draw for now...
                 eia_template,
             )
 

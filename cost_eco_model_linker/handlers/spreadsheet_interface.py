@@ -288,6 +288,7 @@ def fill_EIA_info(
     year: int,
     dest: str,
     port: str,
+    cost_adjustment_values,
     eia_template: pd.DataFrame,
 ):
     shared_args = (it, year, dest, port)
@@ -320,16 +321,44 @@ def fill_EIA_info(
     eia_template = fill_capex(
         *shared_args, eia_template, prod_wb, "3.0_Production_Capex"
     )
+
+    data_cols = slice(5, -1)
+    if cost_adjustment_values[0, 0] == 0:
+        # Set all production CAPEX rows to zero
+        capex_rows = eia_template.expense_name.str.contains(
+            "Collection_Capex|Return_Capex|Production_Capex"
+        )
+        eia_template.iloc[capex_rows, data_cols] = 0.0
+
     eia_template = fill_opex(*shared_args, eia_template, prod_wb, "3.0_Production_Opex")
+    if cost_adjustment_values[0, 1] == 0:
+        # Set all production OPEX rows to zero
+        opex_rows = eia_template.expense_name.str.contains(
+            "Collection_Opex|Return_Opex|Production_Opex"
+        )
+        eia_template.iloc[opex_rows, data_cols] = 0.0
+
     eia_template = fill_total_costs(*shared_args, eia_template, "3.0_Production")
 
     # Deployment
     eia_template = fill_capex(
         *shared_args, eia_template, deploy_wb, "4.0_Deployment_Capex"
     )
+
+    if cost_adjustment_values[1, 0] == 0:
+        # Set all deployment CAPEX rows to zero
+        capex_rows = eia_template.expense_name.str.contains("Deployment_Capex")
+        eia_template.iloc[capex_rows, data_cols] = 0.0
+
     eia_template = fill_opex(
         *shared_args, eia_template, deploy_wb, "4.0_Deployment_Opex"
     )
+
+    if cost_adjustment_values[1, 1] == 0:
+        # Set all deployment OPEX rows to zero
+        opex_rows = eia_template.expense_name.str.contains("Deployment_Opex")
+        eia_template.iloc[opex_rows, data_cols] = 0.0
+
     eia_template = fill_total_costs(*shared_args, eia_template, "4.0_Deployment")
 
     # Fill monitoring rows

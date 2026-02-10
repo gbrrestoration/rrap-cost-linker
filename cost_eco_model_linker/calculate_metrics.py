@@ -162,11 +162,9 @@ def indicator_params(
         )
 
     ## RTI LINEAR REGRESSION UNCERTAINTY
-    rti_intercept = -0.871  # Intercept of rci to rti linear equation
+    rti_intercept = 0.1564301 # Intercept of rci to rti linear equation
     if uncertainty_dict["rti_uncert"] != 0:
-        rti_intercept += np.random.normal(
-            0, 0.0036
-        )  # Intercept of rci to rti linear equation
+        rti_intercept += np.random.normal(0, 0.00036) # Intercept of rci to rti linear equation
 
     ## RFI BUILT FROM DIGITISING FIG 4A AND FIG 6B FROM Graham and Nash, 2012 https://doi.org/10.1007/s00338-012-0984-y
 
@@ -360,15 +358,7 @@ def reef_condition_rme(
 def rti_rme(ecol_indicators, rti_intercept):
     # Calculate RTI, which is just the RCI made continuous (coefficients calculated previously,
     # by fitting linear regression of discrete RCI to the 6 ecological indicators underpinning it
-    all_reeftourism = rti_intercept + 0.7678 * ecol_indicators["total_cover"]
-    (
-        +0.2945 * ecol_indicators["shelter_volume"]
-        + 0.8371 * ecol_indicators["coraljuv_relative"]
-    )
-    (
-        +0.2822 * ecol_indicators["COTSrel_complementary"]
-        + 0.7764 * ecol_indicators["rubble_complementary"]
-    )
+    all_reeftourism = rti_intercept + 1.6457*ecol_indicators["total_cover"]
 
     all_reeftourism[all_reeftourism > 0.9] = 0.9
     all_reeftourism[all_reeftourism < 0.1] = 0.1

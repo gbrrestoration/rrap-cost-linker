@@ -36,6 +36,9 @@ lint = [
     "ruff>=0.14.1",
 ]
 
+[tool.setuptools]
+packages = ["cost_eco_model_linker"]
+
 [project.scripts]
 # Build the HTML documentation
 docs-build = "cost_eco_model_linker.docs:build"

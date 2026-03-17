@@ -78,7 +78,7 @@ def indicator_params(
     # MAXIMUM JUVENILES
     if max_coral_juv is None:
         max_coral_juv = np.max(
-            result_set["nb_coral_juv"][scen_ids, :, juv_max_years[0] : juv_max_years[1]]
+            result_set["coral_juv_m2"][scen_ids, :, juv_max_years[0] : juv_max_years[1]]
         )
 
     ## SHELTER VOLUME UNCERTAINTY
@@ -162,9 +162,15 @@ def indicator_params(
         )
 
     ## RTI LINEAR REGRESSION UNCERTAINTY
-    rti_intercept = 0.1564301 # Intercept of rci to rti linear equation
+    rti_intercept = -0.4685314 # Intercept of rci to rti linear equation
+    rti_cov_slope = 0.2625856 # Slope of rci to rti linear equation, with coral cover
+    rti_shelt_slope = 0.6100339 # Slope of rci to rti linear equation, with relative shelter volume
+    rti_juv_slope = 0.8345460 # Slope of rci to rti linear equation, with relative coral juveniles
+    rti_cots_slope = 0.2569332 # Slope of rci to rti linear equation, with complementary of relative COTS abundance
+    rti_rubble_slope = 0.3245505 # Slope of rci to rti linear equation, with complementary of rubble cover
+
     if uncertainty_dict["rti_uncert"] != 0:
-        rti_intercept += np.random.normal(0, 0.00036) # Intercept of rci to rti linear equation
+        rti_intercept += np.random.normal(0, 0.0006761) # Intercept of rci to rti linear equation
 
     ## RFI BUILT FROM DIGITISING FIG 4A AND FIG 6B FROM Graham and Nash, 2012 https://doi.org/10.1007/s00338-012-0984-y
 
@@ -189,6 +195,11 @@ def indicator_params(
         sheltervolume_parameters,
         rci_crit,
         rti_intercept,
+        rti_cov_slope,
+        rti_shelt_slope,
+        rti_juv_slope,
+        rti_cots_slope,
+        rti_rubble_slope,
         intercept1,
         intercept2,
         slope1,
@@ -204,6 +215,7 @@ def reef_condition_rme(
     rci_crit,
     maxcoraljuv,
     nsims,
+    curr_eco_sim_idx=None,
 ):
     """
     Calculates reef condition for a set of scenarios in the provided ReefModEngine.jl results_data.
@@ -237,7 +249,7 @@ def reef_condition_rme(
     # Settings
     criteria_threshold = 0.6  # threshold for how many criteria need to be met for category to be satisfied.
     cots_outbreak_threshold = (
-        0.2  # number of CoTS per manta tow to classify as outbreak
+        11  # number of CoTS per hectare to classify as outbreak, corresponds to 0.22 cots per mantatow (Moran and De'ath 1992)
     )
     n_metrics = 5  # see below for metrics implemented
 
@@ -246,24 +258,24 @@ def reef_condition_rme(
         coral_cover_per_taxa = np.mean(results_data["total_taxa_cover"], axis=0)
         # data.nb_coral_adol = np.mean(F.nb_coral_adol, axis=0)
         # data.nb_coral_adult = np.mean(F.nb_coral_adult, axis=0)
-        nb_coral_juv = np.mean(results_data["nb_coral_juv"][scen_ids, :, :], axis=0)
+        coral_juv_m2 = np.mean(results_data["coral_juv_m2"][scen_ids, :, :], axis=0)
         rubble = np.mean(results_data["rubble"][scen_ids, :, :], axis=0)
         relative_shelter_volume = np.mean(
             results_data["relative"][scen_ids, :, :], axis=0
         )
         curr_eco_sim = scen_ids[0]
 
-    if (
-        ecol_uncert == 1
-    ):  # If we want eco model uncertainty, sample from reefmod simulations
+    if (ecol_uncert == 1):  # If we want eco model uncertainty, sample from reefmod simulations
         curr_eco_sim = random.choices(scen_ids, k=nsims)
+
+        if(curr_eco_sim_idx is not None): # To use provided index of reefmod simulation, instead of random sampling
+            curr_eco_sim = curr_eco_sim_idx
+
         cots = results_data["cots"][curr_eco_sim, :, :]
         coral_cover_per_taxa = results_data["total_taxa_cover"][curr_eco_sim, :, :, :]
-        nb_coral_juv = results_data["nb_coral_juv"][curr_eco_sim, :, :]
+        coral_juv_m2 = results_data["coral_juv_m2"][curr_eco_sim, :, :]
         rubble = results_data["rubble"][curr_eco_sim, :, :]
-        relative_shelter_volume = results_data["relative_shelter_volume"][
-            curr_eco_sim, :, :
-        ]
+        relative_shelter_volume = results_data["relative_shelter_volume"][curr_eco_sim, :, :]
 
     # Extract constants and variables
     nsims, ngroups, nreefs, nyrs = coral_cover_per_taxa.shape
@@ -300,12 +312,14 @@ def reef_condition_rme(
     )  # first calculate total coral cover
 
     # Coral juveniles
-    coraljuv_relative = nb_coral_juv / (
+    coraljuv_relative = coral_juv_m2 / (
         maxcoraljuv
     )  # convert absolute juvenile numbers to relative measures
 
-    # USE BUILT-IN RELATIVE SHELTER VOLUME FROM REEFMOD, BUT ADJUST TO APPROXIMATELY OUR 0-1 SCALING
-    shelterVolume = relative_shelter_volume * 10
+    # use built-in relative shelter volume from reefmod engine, but rescale to match values calculated from reefmod-gbr oututs,
+    # which use shelter volume from 95cm diameter (circle) plating acroporid as maximum shelter volume, in contrast with reefmod engine which uses
+    # a square 100x100cm plating acroporid's shelter volume as maximum.
+    shelterVolume = relative_shelter_volume * 9.33
     shelterVolume[shelterVolume > 1] = 1
     shelterVolume[shelterVolume < 0] = 0
 
@@ -355,10 +369,14 @@ def reef_condition_rme(
     }, curr_eco_sim
 
 
-def rti_rme(ecol_indicators, rti_intercept):
+def rti_rme(ecol_indicators, rti_intercept, rti_cov_slope, rti_shelt_slope, rti_juv_slope, rti_cots_slope, rti_rubble_slope):
     # Calculate RTI, which is just the RCI made continuous (coefficients calculated previously,
     # by fitting linear regression of discrete RCI to the 6 ecological indicators underpinning it
-    all_reeftourism = rti_intercept + 1.6457*ecol_indicators["total_cover"]
+    all_reeftourism = rti_intercept + rti_cov_slope*ecol_indicators["total_cover"] + \
+                      rti_shelt_slope*ecol_indicators["shelter_volume"] + \
+                      rti_juv_slope*ecol_indicators["coraljuv_relative"] + \
+                      rti_cots_slope*ecol_indicators["COTSrel_complementary"] + \
+                      rti_rubble_slope*ecol_indicators["rubble_complementary"]
 
     all_reeftourism[all_reeftourism > 0.9] = 0.9
     all_reeftourism[all_reeftourism < 0.1] = 0.1
@@ -371,7 +389,7 @@ def rfi_rme(total_cover, intercept1, slope1, intercept2, slope2):
     return 0.01 * (intercept2 + slope2 * (intercept1 + slope1 * total_cover * 100))
 
 
-def extract_metrics(results_data, scen_ids, nsims, uncertainty_dict=None):
+def extract_metrics(results_data, scen_ids, nsims, uncertainty_dict=None, curr_eco_sim_idx=None, indicator_param_dict = None):
     """
     Calculates indicator metrics for a set of scenarios in the provided ReefModEngine.jl results_data and
     saves in a summary array of size (nsims, nreefs*nyears), suitable to be saved in the economics dataframe
@@ -408,16 +426,24 @@ def extract_metrics(results_data, scen_ids, nsims, uncertainty_dict=None):
     num_reefs = len(results_data["locations"][:])
     m = num_reefs * num_years
 
-    (
-        maxcoraljuv,
-        sheltervolume_parameters,
-        rci_crit,
-        rti_intercept,
-        intercept1,
-        intercept2,
-        slope1,
-        slope2,
-    ) = indicator_params(results_data, scen_ids, uncertainty_dict=uncertainty_dict)
+    if indicator_param_dict is None:
+        (maxcoraljuv, sheltervolume_parameters,
+         rci_crit, rti_intercept, intercept1,
+         intercept2, slope1, slope2) = indicator_params(results_data, scen_ids, uncertainty_dict=uncertainty_dict)
+    else:
+        maxcoraljuv = indicator_param_dict["maxcoraljuv"]
+        sheltervolume_parameters = indicator_param_dict["sheltervolume_parameters"]
+        rci_crit = indicator_param_dict["rci_crit"]
+        rti_intercept = indicator_param_dict["rti_intercept"]
+        rti_cov_slope = indicator_param_dict["rti_cov_slope"]
+        rti_shelt_slope = indicator_param_dict["rti_shelt_slope"]
+        rti_juv_slope = indicator_param_dict["rti_juv_slope"]
+        rti_cots_slope = indicator_param_dict["rti_cots_slope"]
+        rti_rubble_slope = indicator_param_dict["rti_rubble_slope"]
+        intercept1 = indicator_param_dict["intercept1"]
+        intercept2 = indicator_param_dict["intercept2"]
+        slope1 = indicator_param_dict["slope1"]
+        slope2 = indicator_param_dict["slope2"]
 
     # Calculate RCI and ecological indicators
     ecol_indicators, ecol_sample_ids = reef_condition_rme(
@@ -428,8 +454,10 @@ def extract_metrics(results_data, scen_ids, nsims, uncertainty_dict=None):
         rci_crit,
         maxcoraljuv,
         nsims,
+        curr_eco_sim_idx=curr_eco_sim_idx
     )
-    ecol_indicators["RTI"] = rti_rme(ecol_indicators, rti_intercept)
+    ecol_indicators["RTI"] = rti_rme(ecol_indicators, rti_intercept, rti_cov_slope, rti_shelt_slope,
+                                     rti_juv_slope, rti_cots_slope, rti_rubble_slope)
     ecol_indicators["RFI"] = rfi_rme(
         ecol_indicators["total_cover"], intercept1, slope1, intercept2, slope2
     )

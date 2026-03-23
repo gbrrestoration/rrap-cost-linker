@@ -410,9 +410,7 @@ def create_economics_metric_files(
         intervention_start = scens_df_iv["year"].min()
         intervention_start_idx = np.where(years == intervention_start)[0][0]
         data_store = base_data_store.copy()
-        data_store["year_relative"] = data_store["year_absolute"] - (
-            intervention_start  # + 1
-        )
+        data_store["year_relative"] = data_store["year_absolute"] - intervention_start
 
         # Get scenario indices for this intervention and its counterfactual
         scen_id_start = iv_idx * n_reps

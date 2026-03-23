@@ -61,16 +61,15 @@ def find_representative_reefs(iv_reef_spatial, regions_data, max_dist=25.0):
         distance_to_port_NM=np.zeros((iv_reef_spatial.shape[0],))
     )
 
+    min_dist_port_m = regions_data.minimum_distance_to_nearest_port_m
     for reef in iv_reef_spatial["UNIQUE_ID"].values:
-        iv_reef_spatial.loc[
-            iv_reef_spatial["UNIQUE_ID"] == reef, "distance_to_port_NM"
-        ] = (
-            regions_data.loc[
-                regions_data["UNIQUE_ID"] == reef,
-                ["minimum_distance_to_nearest_port_m"],
-            ].iloc[0]
-            * 0.00053996
-        ).minimum_distance_to_nearest_port_m  # Convert to nautical miles
+        curr_reef = iv_reef_spatial["UNIQUE_ID"] == reef
+        reg_curr_reef = regions_data["UNIQUE_ID"] == reef
+
+        # Convert to nautical miles
+        iv_reef_spatial.loc[curr_reef, "distance_to_port_NM"] = (
+            min_dist_port_m[reg_curr_reef].iloc[0] * 0.00053996
+        )
 
     representative_reefs = []
     rep_reef_names = []

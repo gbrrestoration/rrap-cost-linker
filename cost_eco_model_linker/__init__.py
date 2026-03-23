@@ -5,7 +5,12 @@ from .cost_calculations import calculate_costs
 from .parallel_cost_sampling import para_sample_econ, post_process_costs
 
 from .calculate_metrics import default_uncertainty_dict
-from .runner import evaluate, parallel_evaluate
+from .runner import (
+    evaluate,
+    parallel_evaluate,
+    evaluate_production_cost,
+    evaluate_deployment_cost,
+)
 
 from .sampling import (
     problem_spec,

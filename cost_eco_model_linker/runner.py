@@ -17,7 +17,18 @@ from . import (
     post_process_costs,
 )
 
-from .sampling import load_internal_config
+from .handlers import open_excel, close_excel
+
+from .sampling import (
+    load_internal_config,
+    calculate_production_cost,
+    calculate_deployment_cost,
+    THIS_DIR,
+    DEFAULT_VER,
+)
+
+import numpy as np
+import pandas as pd
 
 SEMVER_RE = re.compile(r"^(?:.*/)?(\d+\.\d+\.\d+)\b")
 
@@ -158,3 +169,131 @@ def parallel_evaluate(
 
     # Post-process saved samples to be in single file
     post_process_costs(result, nsims)
+
+
+def evaluate_production_cost(
+    workbook_path: str,
+    **factors,
+) -> tuple[float, float]:
+    """
+    Wrapper that converts factor kwargs into the format expected by
+    calculate_production_cost and returns operational and setup costs.
+    Only the factors to be overridden need to be provided; all others
+    default to their current values in the workbook.
+
+    Parameters
+    ----------
+    workbook_path : str
+        Absolute path to the Excel workbook.
+    **factors
+        Factor name-value pairs keyed by factor_name from the config CSV.
+        Only factors to be overridden need to be supplied.
+        Note: '1YOEC_yield' must be passed as **{"1YOEC_yield": value}
+        due to the leading digit making it an invalid Python identifier.
+
+    Returns
+    -------
+    op_cost : float
+        Operational cost.
+    setup_cost : float
+        Setup cost.
+    """
+    factor_spec = pd.read_csv(f"{THIS_DIR}/{DEFAULT_VER}_production_config.csv")
+
+    unknown_factors = set(factors) - set(factor_spec["factor_names"])
+    if unknown_factors:
+        raise ValueError(f"Unrecognised factor(s): {unknown_factors}")
+
+    xlapp, wb = open_excel(workbook_path)
+    try:
+        # Retrieve reef key list
+        lookup_ws = wb.Sheets("Lookup Tables")
+        start_cell = lookup_ws.Cells.Find("Moore")
+        col_num = start_cell.Column
+        tbl_region = start_cell.CurrentRegion.Rows
+        end_cell_pos = tbl_region.Row + tbl_region.Rows.Count - 1
+        end_cell = lookup_ws.Cells(end_cell_pos, col_num)
+        reef_key = np.array(lookup_ws.Range(start_cell, end_cell).Value).flatten()
+
+        # Read current cell values from workbook as defaults
+        current_values = {}
+        for _, row in factor_spec.iterrows():
+            cell_value = wb.Sheets(row["sheet"]).Range(row["cell_pos"]).Value
+            if row["factor_names"] == "reef":
+                # Convert string back to 1-based dropdown index
+                cell_value = int(np.where(reef_key == cell_value)[0][0]) + 1
+            current_values[row["factor_names"]] = cell_value
+
+        # Override with user-provided values
+        current_values.update(factors)
+
+        factors_row = pd.Series(current_values)
+        op_cost, setup_cost = calculate_production_cost(wb, factor_spec, factors_row)
+    finally:
+        close_excel(xlapp, wb)
+
+    return op_cost, setup_cost
+
+
+def evaluate_deployment_cost(
+    workbook_path: str,
+    **factors,
+) -> tuple[float, float]:
+    """
+    Wrapper that converts factor kwargs into the format expected by
+    calculate_deployment_cost and returns operational and setup costs.
+    Only the factors to be overridden need to be provided; all others
+    default to their current values in the workbook.
+
+    Parameters
+    ----------
+    workbook_path : str
+        Absolute path to the Excel workbook.
+    **factors
+        Factor name-value pairs keyed by factor_name from the config CSV.
+        Only factors to be overridden need to be supplied.
+        Note: '1YOEC_yield' must be passed as **{"1YOEC_yield": value}
+        due to the leading digit making it an invalid Python identifier.
+
+    Returns
+    -------
+    op_cost : float
+        Operational cost.
+    setup_cost : float
+        Setup cost.
+    """
+    model_spec = pd.read_csv(f"{THIS_DIR}/{DEFAULT_VER}_deploy_config.csv")
+
+    unknown_factors = set(factors) - set(model_spec["factor_names"])
+    if unknown_factors:
+        raise ValueError(f"Unrecognised factor(s): {unknown_factors}")
+
+    xlapp, wb = open_excel(workbook_path)
+    try:
+        # Retrieve reef key list, matching the logic in calculate_deployment_cost
+        lookup_ws = wb.Sheets("Lookup Tables")
+        start_cell = lookup_ws.Cells.Find("Moore")
+        col_num = start_cell.Column
+        tbl_region = start_cell.CurrentRegion.Rows
+        end_cell_pos = tbl_region.Row + tbl_region.Rows.Count - 1
+        end_cell = lookup_ws.Cells(end_cell_pos, col_num)
+        reef_key = np.array(lookup_ws.Range(start_cell, end_cell).Value).flatten()
+
+        # Read current cell values from workbook as defaults
+        current_values = {}
+        for _, row in model_spec.iterrows():
+            cell_value = wb.Sheets(row["sheet"]).Range(row["cell_pos"]).Value
+            if row["factor_names"] == "reef":
+                # Convert string back to 1-based dropdown index
+                cell_value = int(np.where(reef_key == cell_value)[0][0]) + 1
+            current_values[row["factor_names"]] = cell_value
+
+        # Override with user-provided values
+        current_values.update(factors)
+
+        factors_row = pd.Series(current_values)
+        op_cost, setup_cost = calculate_deployment_cost(wb, model_spec, factors_row)
+    finally:
+        close_excel(xlapp, wb)
+
+    return op_cost, setup_cost

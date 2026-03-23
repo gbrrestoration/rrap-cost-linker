@@ -81,10 +81,10 @@ def calculate_production_cost(wb, factor_spec, factors):
     ----------
     wb : Workbook
         The cost model as an excel workbook
-    factor_spec : dataframe
-        factor specification, as loaded from the config.csv
-    factors : dataframerow
-        Row of a pandas dataframe with factors to sample
+    factor_spec : DataFrame
+        Factor specification, as loaded from the config.csv
+    factors : DataFrameRow
+        Factor values to run model with
 
     Returns
     -------
@@ -103,7 +103,7 @@ def calculate_production_cost(wb, factor_spec, factors):
     ws.EnableCalculation = True
     ws.Calculate()
 
-    # get the new output
+    # Get the new output
     cost_cells = factor_spec.loc[factor_names == "Cost", "cell_pos"].values[0]
     setupcost_cells = factor_spec.loc[factor_names == "setupCost", "cell_pos"].values[0]
 

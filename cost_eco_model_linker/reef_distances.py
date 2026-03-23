@@ -126,6 +126,7 @@ def find_max_reef_distance(reef_spatial_data, regions_data, iv_reefs, max_dist=2
 
         reef_name = iv_reef_spatial.reef_name.iloc[0].split(" ")[0]
 
+        # Convert directly to nautical miles
         return rep_reefs_sort, [reef_name, reef_name], total_dist * 0.00053996
 
     # Otherwise, find the most representative reef
@@ -152,4 +153,4 @@ def find_max_reef_distance(reef_spatial_data, regions_data, iv_reefs, max_dist=2
     for dist_idx in range(rep_reef_dist_mat.shape[1] - 1):
         total_dist += rep_reef_dist_mat[dist_idx, dist_idx + 1]
 
-    return rep_reefs_sort, rep_reef_names, total_dist * 0.00053996
+    return rep_reefs_sort, rep_reef_names, total_dist

@@ -9,7 +9,11 @@ import geopandas as gp
 import numpy as np
 import json
 
-from .calculate_metrics import extract_metrics, default_uncertainty_dict, indicator_params
+from .calculate_metrics import (
+    extract_metrics,
+    default_uncertainty_dict,
+    indicator_params,
+)
 from .reef_distances import find_max_reef_distance
 
 THIS_DIR = os.path.dirname(__file__)
@@ -218,6 +222,7 @@ def raw_rti(metrics_dict: dict, metrics_df: pd.DataFrame):
     """
     return np.transpose(metrics_dict["RTI"], (1, 0))
 
+
 def coral_cover(metrics_dict: dict, metrics_df: pd.DataFrame):
     """
     Processes metrics dict coral cover for table storage.
@@ -230,6 +235,7 @@ def coral_cover(metrics_dict: dict, metrics_df: pd.DataFrame):
         Dataframe containing scenario summary dataframe
     """
     return np.transpose(metrics_dict["total_cover"], (1, 0))
+
 
 def shelter_volume(metrics_dict: dict, metrics_df: pd.DataFrame):
     """
@@ -244,6 +250,7 @@ def shelter_volume(metrics_dict: dict, metrics_df: pd.DataFrame):
     """
     return np.transpose(metrics_dict["shelter_volume"], (1, 0))
 
+
 def coraljuv_relative(metrics_dict: dict, metrics_df: pd.DataFrame):
     """
     Processes metrics dict into relative juvenile coral cover for table storage.
@@ -257,6 +264,7 @@ def coraljuv_relative(metrics_dict: dict, metrics_df: pd.DataFrame):
     """
     return np.transpose(metrics_dict["coraljuv_relative"], (1, 0))
 
+
 def COTSrel_complementary(metrics_dict: dict, metrics_df: pd.DataFrame):
     """
     Processes metrics dict into relative COTS complementary cover for table storage.
@@ -269,6 +277,7 @@ def COTSrel_complementary(metrics_dict: dict, metrics_df: pd.DataFrame):
         Dataframe containing scenario summary dataframe
     """
     return np.transpose(metrics_dict["COTSrel_complementary"], (1, 0))
+
 
 def rubble_complementary(metrics_dict: dict, metrics_df: pd.DataFrame):
     """
@@ -402,7 +411,7 @@ def create_economics_metric_files(
         intervention_start_idx = np.where(years == intervention_start)[0][0]
         data_store = base_data_store.copy()
         data_store["year_relative"] = data_store["year_absolute"] - (
-            intervention_start #+ 1
+            intervention_start  # + 1
         )
 
         # Get scenario indices for this intervention and its counterfactual
@@ -439,14 +448,26 @@ def create_economics_metric_files(
             ds = pd.DataFrame()
 
             # Extract metrics for intervention and counterfactual
-
-            (maxcoraljuv, sheltervolume_parameters, rci_crit,
-             rti_intercept, rti_cov_slope, rti_shelt_slope,
-             rti_juv_slope, rti_cots_slope, rti_rubble_slope,
-             intercept1,intercept2,slope1,slope2) = indicator_params(results_data,
-                                                                     iv_scens,
-                                                                     uncertainty_dict=uncertainty_dict,
-                                                                     juv_max_years=[0,int(intervention_start_idx-1)])
+            (
+                maxcoraljuv,
+                sheltervolume_parameters,
+                rci_crit,
+                rti_intercept,
+                rti_cov_slope,
+                rti_shelt_slope,
+                rti_juv_slope,
+                rti_cots_slope,
+                rti_rubble_slope,
+                intercept1,
+                intercept2,
+                slope1,
+                slope2,
+            ) = indicator_params(
+                results_data,
+                iv_scens,
+                uncertainty_dict=uncertainty_dict,
+                juv_max_years=[0, int(intervention_start_idx - 1)],
+            )
 
             indicator_params_dict = {
                 "maxcoraljuv": maxcoraljuv,
@@ -461,7 +482,7 @@ def create_economics_metric_files(
                 "intercept1": intercept1,
                 "intercept2": intercept2,
                 "slope1": slope1,
-                "slope2": slope2
+                "slope2": slope2,
             }
 
             metrics_data_iv, ecol_ids = extract_metrics(
@@ -470,7 +491,7 @@ def create_economics_metric_files(
                 len(batch_sel),
                 uncertainty_dict=uncertainty_dict,
                 curr_eco_sim_idx=None,
-                indicator_param_dict=indicator_params_dict
+                indicator_param_dict=indicator_params_dict,
             )
 
             metrics_data_cf, _ = extract_metrics(
@@ -478,8 +499,9 @@ def create_economics_metric_files(
                 cf_scens,
                 len(batch_sel),
                 uncertainty_dict=uncertainty_dict,
-                curr_eco_sim_idx = ecol_ids - n_reps,  # Use same ecological sample for counterfactual as for intervention, adjusting for scenario index shift
-                indicator_param_dict=indicator_params_dict # Use same indicator params for counterfactual as for intervention
+                curr_eco_sim_idx=ecol_ids
+                - n_reps,  # Use same ecological sample for counterfactual as for intervention, adjusting for scenario index shift
+                indicator_param_dict=indicator_params_dict,  # Use same indicator params for counterfactual as for intervention
             )
 
             # Adjust ecological IDs to ignore counterfactuals in cost sampling
@@ -544,7 +566,7 @@ def create_economics_metric_files(
         id_key_df_all.to_csv(f"{id_filename}{core_idx}.csv", index=False)
 
         pd.DataFrame(
-            store_ecol_ids[nbatches * core_idx : nbatches * (core_idx + 1), :]+1,
+            store_ecol_ids[nbatches * core_idx : nbatches * (core_idx + 1), :] + 1,
             columns=[str(id_val) for id_val in intervention_ids],
         ).to_csv(f"{ecol_id_filename}{core_idx}.csv", index=False)
 

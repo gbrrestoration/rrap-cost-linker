@@ -275,17 +275,23 @@ def reef_condition_rme(
         )
         curr_eco_sim = scen_ids[0]
 
-    if (ecol_uncert == 1):  # If we want eco model uncertainty, sample from reefmod simulations
+    if (
+        ecol_uncert == 1
+    ):  # If we want eco model uncertainty, sample from reefmod simulations
         curr_eco_sim = random.choices(scen_ids, k=nsims)
 
-        if(curr_eco_sim_idx is not None): # To use provided index of reefmod simulation, instead of random sampling
+        if (
+            curr_eco_sim_idx is not None
+        ):  # To use provided index of reefmod simulation, instead of random sampling
             curr_eco_sim = curr_eco_sim_idx
 
         cots = results_data["cots"][curr_eco_sim, :, :]
         coral_cover_per_taxa = results_data["total_taxa_cover"][curr_eco_sim, :, :, :]
         coral_juv_m2 = results_data["coral_juv_m2"][curr_eco_sim, :, :]
         rubble = results_data["rubble"][curr_eco_sim, :, :]
-        relative_shelter_volume = results_data["relative_shelter_volume"][curr_eco_sim, :, :]
+        relative_shelter_volume = results_data["relative_shelter_volume"][
+            curr_eco_sim, :, :
+        ]
 
     # Extract constants and variables
     nsims, ngroups, nreefs, nyrs = coral_cover_per_taxa.shape

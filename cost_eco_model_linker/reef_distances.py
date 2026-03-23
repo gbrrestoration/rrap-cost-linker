@@ -83,7 +83,7 @@ def find_representative_reefs(iv_reef_spatial, regions_data, max_dist=25.0):
         representative_reefs += [subset.loc[:, "GBRMPA_ID"].iloc[max_dist_to_port]]
 
         r_name = subset.loc[:, "reef_name"].iloc[max_dist_to_port]
-        rep_reef_names += [r_name.split(" ")[0]]
+        rep_reef_names += [r_name]
 
         rep_reefs_max_dist[cl_idx] = subset.loc[:, "distance_to_port_NM"].iloc[
             max_dist_to_port

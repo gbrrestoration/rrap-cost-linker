@@ -70,3 +70,13 @@ The above will generate a set of figures (for production or deployment costs).
 Example PAWN analysis results:
 
 ![PAWN SA barplot](./_static/figs/prod/operational_cost_pawn_barplot_SA.png)
+
+## Questions and Answers
+
+### How is deployment distance determined?
+
+For a given simulation, the closest port for the furthest reef where deployments were
+simulated is used for cost estimation.
+
+CEML does not currently support assessment of deployment scenarios that change deployment
+locations throughout a simulation.

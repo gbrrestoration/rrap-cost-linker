@@ -58,6 +58,7 @@ def indicator_params(
             Contains information of which types of uncertainty to sample when processing metrics.
         juv_max_years : list
             Indices of years to calculate Juveniles max baseline over.
+            Interventions cannot start in the first year.
         max_coral_juv : list[float]
             Max juveniles baseline (can be included instead of using hindcasting baseline).
 
@@ -77,6 +78,11 @@ def indicator_params(
 
     # MAXIMUM JUVENILES
     if max_coral_juv is None:
+        if juv_max_years[0] == juv_max_years[1]:
+            # A baseline for juveniles must be able to be derived from years prior to
+            # interventions
+            raise ValueError("Interventions cannot start in the first year.")
+
         max_coral_juv = np.max(
             result_set["coral_juv_m2"][scen_ids, :, juv_max_years[0] : juv_max_years[1]]
         )

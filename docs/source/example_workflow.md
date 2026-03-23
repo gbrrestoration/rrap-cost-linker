@@ -71,6 +71,22 @@ Example PAWN analysis results:
 
 ![PAWN SA barplot](./_static/figs/prod/operational_cost_pawn_barplot_SA.png)
 
+
+## Running models directly
+
+```python
+import cost_eco_model_linker as ceml
+
+production_model = "./models/3.8.0 CA Production Model.xlsx"
+
+# Factors not specified by arguments use whatever values are found in the Excel spreadsheet
+# Method below returns CAPEX and OPEX (setup costs and operational costs)
+costs = ceml.evaluate_production_cost(production_model, num_devices=1000000)
+
+print(sum(x))
+```
+
+
 ## Questions and Answers
 
 ### How is deployment distance determined?

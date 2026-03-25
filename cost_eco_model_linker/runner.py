@@ -24,7 +24,8 @@ from .sampling import (
     calculate_production_cost,
     calculate_deployment_cost,
     THIS_DIR,
-    DEFAULT_VER,
+    DEFAULT_PROD_VER,
+    DEFAULT_DEPLOY_VER,
 )
 
 import numpy as np
@@ -198,7 +199,7 @@ def evaluate_production_cost(
     setup_cost : float
         Setup cost.
     """
-    factor_spec = pd.read_csv(f"{THIS_DIR}/{DEFAULT_VER}_production_config.csv")
+    factor_spec = pd.read_csv(f"{THIS_DIR}/{DEFAULT_PROD_VER}_prod_config.csv")
 
     unknown_factors = set(factors) - set(factor_spec["factor_names"])
     if unknown_factors:
@@ -262,7 +263,7 @@ def evaluate_deployment_cost(
     setup_cost : float
         Setup cost.
     """
-    model_spec = pd.read_csv(f"{THIS_DIR}/{DEFAULT_VER}_deploy_config.csv")
+    model_spec = pd.read_csv(f"{THIS_DIR}/{DEFAULT_DEPLOY_VER}_deploy_config.csv")
 
     unknown_factors = set(factors) - set(model_spec["factor_names"])
     if unknown_factors:

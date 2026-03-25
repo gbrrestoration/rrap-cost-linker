@@ -10,7 +10,8 @@ import matplotlib.pyplot as plt
 from .handlers import open_excel, close_excel
 
 THIS_DIR = os.path.dirname(os.path.abspath(__file__))
-DEFAULT_VER = "3.8.0"
+DEFAULT_PROD_VER = "3.9.1"
+DEFAULT_DEPLOY_VER = "3.8.0"
 
 
 def calculate_deployment_cost(wb, model_spec, factors):

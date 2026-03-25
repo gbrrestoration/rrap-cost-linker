@@ -207,28 +207,16 @@ def evaluate_production_cost(
 
     xlapp, wb = open_excel(workbook_path)
     try:
-        # Retrieve reef key list
-        lookup_ws = wb.Sheets("Lookup Tables")
-        start_cell = lookup_ws.Cells.Find("Moore")
-        col_num = start_cell.Column
-        tbl_region = start_cell.CurrentRegion.Rows
-        end_cell_pos = tbl_region.Row + tbl_region.Rows.Count - 1
-        end_cell = lookup_ws.Cells(end_cell_pos, col_num)
-        reef_key = np.array(lookup_ws.Range(start_cell, end_cell).Value).flatten()
-
         # Read current cell values from workbook as defaults
-        current_values = {}
+        spreadsheet_vals = {}
         for _, row in factor_spec.iterrows():
             cell_value = wb.Sheets(row["sheet"]).Range(row["cell_pos"]).Value
-            if row["factor_names"] == "reef":
-                # Convert string back to 1-based dropdown index
-                cell_value = int(np.where(reef_key == cell_value)[0][0]) + 1
-            current_values[row["factor_names"]] = cell_value
+            spreadsheet_vals[row["factor_names"]] = cell_value
 
         # Override with user-provided values
-        current_values.update(factors)
+        spreadsheet_vals.update(factors)
 
-        factors_row = pd.Series(current_values)
+        factors_row = pd.Series(spreadsheet_vals)
         op_cost, setup_cost = calculate_production_cost(wb, factor_spec, factors_row)
     finally:
         close_excel(xlapp, wb)

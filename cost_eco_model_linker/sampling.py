@@ -98,6 +98,13 @@ def calculate_production_cost(wb, factor_spec, factors):
     not_costs = (factor_names != "Cost") & (factor_names != "setupCost")
     for _, factor_row in factor_spec[not_costs].iterrows():
         ws = wb.Sheets(factor_row.sheet)
+
+        if factor_row.factor_names == "num_devices":
+            # Adjust deployed devices to obtain production yield of corals
+            num_devices = factors[factor_row.factor_names]
+            survival = factors["1YOEC_yield"]
+            factors[factor_row.factor_names] = num_devices / (survival * 100) * 100
+
         ws.Range(factor_row.cell_pos).Value = factors[factor_row.factor_names]
 
     ws = wb.Sheets("Dashboard")

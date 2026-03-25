@@ -269,18 +269,24 @@ def evaluate_deployment_cost(
         reef_key = np.array(lookup_ws.Range(start_cell, end_cell).Value).flatten()
 
         # Read current cell values from workbook as defaults
-        current_values = {}
+        spreadsheet_vals = {}
         for _, row in model_spec.iterrows():
             cell_value = wb.Sheets(row["sheet"]).Range(row["cell_pos"]).Value
             if row["factor_names"] == "reef":
                 # Convert string back to 1-based dropdown index
                 cell_value = int(np.where(reef_key == cell_value)[0][0]) + 1
-            current_values[row["factor_names"]] = cell_value
+
+            spreadsheet_vals[row["factor_names"]] = cell_value
 
         # Override with user-provided values
-        current_values.update(factors)
+        spreadsheet_vals.update(factors)
 
-        factors_row = pd.Series(current_values)
+        factors_row = pd.Series(spreadsheet_vals)
+
+        # Note: Number of deployed devices get adjusted to obtain the required production
+        # volume/yield inside `calculate_deployment_cost()`
+        # e.g., to deploy 1M devices with at least 1 coral each, and a yield of 40%,
+        # 2.5M corals are needed to be produced.
         op_cost, setup_cost = calculate_deployment_cost(wb, model_spec, factors_row)
     finally:
         close_excel(xlapp, wb)

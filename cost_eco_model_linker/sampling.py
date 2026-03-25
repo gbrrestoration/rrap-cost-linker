@@ -123,8 +123,8 @@ def load_config():
     config_filepath : str
         String specifying filepath of config file, default is the default package config file
     """
-    prod = pd.read_csv(f"{THIS_DIR}/{DEFAULT_VER}_prod_config.csv")
-    deploy = pd.read_csv(f"{THIS_DIR}/{DEFAULT_VER}_deploy_config.csv")
+    prod = pd.read_csv(f"{THIS_DIR}/{DEFAULT_PROD_VER}_prod_config.csv")
+    deploy = pd.read_csv(f"{THIS_DIR}/{DEFAULT_DEPLOY_VER}_deploy_config.csv")
 
     return pd.concat([prod, deploy], ignore_index=True)
 

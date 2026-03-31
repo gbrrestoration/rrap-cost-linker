@@ -91,13 +91,13 @@ def calculate_production_cost(wb, factor_spec, factors):
 
     Returns
     -------
-    op_cost: float
-        Operational cost
     setup_cost: float
-        Setup cost
+        Setup cost (CAPEX)
+    op_cost: float
+        Operational cost (OPEX)
     """
     factor_names = factor_spec.factor_names
-    not_costs = (factor_names != "Cost") & (factor_names != "setupCost")
+    not_costs = (factor_names != "cost") & (factor_names != "setupCost")
     for _, factor_row in factor_spec[not_costs].iterrows():
         ws = wb.Sheets(factor_row.sheet)
 
@@ -114,13 +114,13 @@ def calculate_production_cost(wb, factor_spec, factors):
     ws.Calculate()
 
     # Get the new output
-    cost_cells = factor_spec.loc[factor_names == "Cost", "cell_pos"].values[0]
     setupcost_cells = factor_spec.loc[factor_names == "setupCost", "cell_pos"].values[0]
+    cost_cells = factor_spec.loc[factor_names == "cost", "cell_pos"].values[0]
 
-    op_cost = ws.Range(cost_cells).Value
     setup_cost = ws.Range(setupcost_cells).Value
+    op_cost = ws.Range(cost_cells).Value
 
-    return [op_cost, setup_cost]
+    return [setup_cost, op_cost]
 
 
 def load_config():
@@ -238,7 +238,12 @@ def _run_cost_model(wb, cost_factors, factor_spec, calculate_cost):
             wb, factor_spec, cost_factors.iloc[idx_n, :]
         )
 
-    cost_factors.loc[:, ["Cost", "setupCost"]] = total_cost
+    try:
+        cost_factors.loc[:, ["setupCost", "cost"]] = total_cost
+    except TypeError:
+        raise TypeError(
+            "Incorrect type encountered. Ensure continuous values are not integers in config files."
+        )
 
     return cost_factors
 

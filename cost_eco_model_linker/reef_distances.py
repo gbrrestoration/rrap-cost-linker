@@ -1,7 +1,14 @@
+from os.path import join as path_join, dirname
 import numpy as np
+import pandas as pd
 from math import radians, cos, sin, asin, sqrt
 from scipy.cluster.hierarchy import fclusterdata
 from scipy.spatial import distance_matrix
+
+
+REPR_PORTS = pd.read_csv(
+    path_join(dirname(__file__), "representative_port_locations.csv")
+)
 
 
 def haversine(x, y):
@@ -22,6 +29,29 @@ def haversine(x, y):
     c = 2 * asin(sqrt(a))
     r = 6371  # Radius of earth in kilometers. Determines return value units.
     return c * r
+
+
+def find_closest_port(iv_reef_spatial):
+    """
+    Find closest port from mean location of reefs where interventions occur.
+
+    Returns
+    -------
+    Tuple, of the name of closest port and the distance in nautical miles.
+    """
+    # Use the mean distance to port:
+    mean_lon = np.mean(iv_reef_spatial.LON)
+    mean_lat = np.mean(iv_reef_spatial.LAT)
+    distance_to_port = [
+        haversine((mean_lon, mean_lat), list(port_pos))
+        for port_pos in REPR_PORTS.loc[:, ["LON", "LAT"]].itertuples(index=False)
+    ]
+
+    min_dist_port_idx = np.argmin(distance_to_port)
+    min_dist_port_NM = distance_to_port[min_dist_port_idx] * 0.00053996
+    closest_port = REPR_PORTS.loc[min_dist_port_idx, "port_name"]
+
+    return closest_port, min_dist_port_NM
 
 
 def find_representative_reefs(iv_reef_spatial, regions_data, max_dist=25.0):
@@ -89,6 +119,16 @@ def find_representative_reefs(iv_reef_spatial, regions_data, max_dist=25.0):
         rep_reefs_max_dist[cl_idx] = dist_to_port.iloc[max_dist_to_port]
 
     return representative_reefs, rep_reef_names, rep_reefs_max_dist
+
+
+def find_representative_port(reef_spatial_data, iv_reefs):
+    iv_reef_spatial = reef_spatial_data.loc[
+        reef_spatial_data["GBRMPA_ID"].isin(iv_reefs)
+    ]
+
+    port_name, distance_NM = find_closest_port(iv_reef_spatial)
+
+    return port_name, distance_NM
 
 
 def find_max_reef_distance(reef_spatial_data, regions_data, iv_reefs, max_dist=25.0):

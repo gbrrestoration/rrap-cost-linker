@@ -22,7 +22,7 @@ Functions
    cost_eco_model_linker.cost_calculations.initialise_cost_df
    cost_eco_model_linker.cost_calculations.factors_dataframe_update
    cost_eco_model_linker.cost_calculations.update_factors
-   cost_eco_model_linker.cost_calculations.update_setupcost_factors
+   cost_eco_model_linker.cost_calculations.update_capex_factors
    cost_eco_model_linker.cost_calculations.calculate_costs
 
 
@@ -54,7 +54,7 @@ Module Contents
    - 10 : Sustaining capital OPEX-monitoring, set to zero (assumed no monitoring cost)
    - 11 : Contingency OPEX-monitoring, % of OPEX-monitoring
 
-   :param cost: Dataframe containing 'Cost' and 'setupCost'
+   :param cost: Dataframe containing 'capex' and 'opex'
    :type cost: dataframe
    :param contingency: Contingency proportion.
    :type contingency: float
@@ -105,7 +105,7 @@ Module Contents
    :type nsims: int
 
 
-.. py:function:: update_setupcost_factors(factors_df_dep, factors_df_prod, ID_key, ecol_idx, nsims)
+.. py:function:: update_capex_factors(factors_df_dep, factors_df_prod, ID_key, ecol_idx, nsims)
 
    Update number of corals to correctly calculate setup cost for years after the first intervention year.
    Setup costs are only accrued for additional corals deployed relative to the previous year.
@@ -141,5 +141,3 @@ Module Contents
    :type cont_p: float
    :param iter_id: ID used for parallel sampling to keep track of batches for ordered recombination.
    :type iter_id: int
-
-

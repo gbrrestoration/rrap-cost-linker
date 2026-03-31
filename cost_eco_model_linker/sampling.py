@@ -1,5 +1,7 @@
 import os
 from os.path import join as path_join
+import tempfile
+import shutil
 from win32com import client as w32client
 from SALib import ProblemSpec
 import numpy as np
@@ -11,7 +13,7 @@ from .handlers import open_excel, close_excel
 
 THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_PROD_VER = "3.9.1"
-DEFAULT_DEPLOY_VER = "3.8.0"
+DEFAULT_DEPLOY_VER = "3.9.0"
 
 
 def calculate_deployment_cost(wb, model_spec, factors):
@@ -29,10 +31,10 @@ def calculate_deployment_cost(wb, model_spec, factors):
 
     Returns
     -------
-    op_cost: float
-        Operational cost
     setup_cost: float
-        Setup cost
+        Setup cost (CAPEX)
+    op_cost: float
+        Operational cost (OPEX)
     """
     lookup_ws = wb.Sheets("Lookup Tables")
     start_cell = lookup_ws.Cells.Find("Moore")
@@ -47,7 +49,7 @@ def calculate_deployment_cost(wb, model_spec, factors):
 
     factor_names = model_spec.factor_names
 
-    is_not_cost = factor_names != "Cost"
+    is_not_cost = factor_names != "cost"
     is_not_setup = factor_names != "setupCost"
     for _, params in model_spec[is_not_cost & is_not_setup].iterrows():
         param_names = params.factor_names

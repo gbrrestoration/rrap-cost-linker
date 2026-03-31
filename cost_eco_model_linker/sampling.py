@@ -49,9 +49,9 @@ def calculate_deployment_cost(wb, model_spec, factors):
 
     factor_names = model_spec.factor_names
 
-    is_not_cost = factor_names != "cost"
-    is_not_setup = factor_names != "setupCost"
-    for _, params in model_spec[is_not_cost & is_not_setup].iterrows():
+    not_capex = factor_names != "capex"
+    not_opex = factor_names != "opex"
+    for _, params in model_spec[not_capex & not_opex].iterrows():
         param_names = params.factor_names
         ws = wb.Sheets(params.sheet)
         if param_names == "distance_from_port":
@@ -62,18 +62,23 @@ def calculate_deployment_cost(wb, model_spec, factors):
         else:
             ws.Range(params.cell_pos).Value = factors[param_names]
 
+    wb.Application.CalculateFull()
     ws = wb.Sheets("Dashboard")
-    ws.EnableCalculation = True
-    ws.Calculate()
 
     # Get the new output
-    cost_cell = model_spec.loc[factor_names == "Cost", "cell_pos"].values[0]
-    setupcost_cell = model_spec.loc[factor_names == "setupCost", "cell_pos"].values[0]
+    capex_cell = model_spec.loc[factor_names == "capex", "cell_pos"].values[0]
+    opex_cell = model_spec.loc[factor_names == "opex", "cell_pos"].values[0]
 
-    op_cost = float(ws.Range(cost_cell).Value)
-    setup_cost = float(ws.Range(setupcost_cell).Value)
+    capex_raw = ws.Range(capex_cell).Value
+    opex_raw = ws.Range(opex_cell).Value
 
-    return op_cost, setup_cost
+    if (capex_raw == -2146826281) or (opex_raw == -2146826281):
+        raise ValueError("Division by zero error in spreadsheet!")
+
+    capex_cost = float(capex_raw)
+    opex_cost = float(opex_raw)
+
+    return capex_cost, opex_cost
 
 
 def calculate_production_cost(wb, factor_spec, factors):
@@ -91,20 +96,20 @@ def calculate_production_cost(wb, factor_spec, factors):
 
     Returns
     -------
-    setup_cost: float
+    capex_cost: float
         Setup cost (CAPEX)
-    op_cost: float
+    opex_cost: float
         Operational cost (OPEX)
     """
     factor_names = factor_spec.factor_names
-    not_costs = (factor_names != "cost") & (factor_names != "setupCost")
+    not_costs = (factor_names != "opex") & (factor_names != "capex")
     for _, factor_row in factor_spec[not_costs].iterrows():
         ws = wb.Sheets(factor_row.sheet)
 
-        if factor_row.factor_names == "num_devices":
+        if factor_row.factor_names == "num_1yoec":
             # Adjust deployed devices to obtain production yield of corals
             num_devices = factors[factor_row.factor_names]
-            survival = factors["1YOEC_yield"]
+            survival = factors["coral_yield_1YOEC"]
             factors[factor_row.factor_names] = num_devices / (survival * 100) * 100
 
         ws.Range(factor_row.cell_pos).Value = factors[factor_row.factor_names]
@@ -114,13 +119,13 @@ def calculate_production_cost(wb, factor_spec, factors):
     ws.Calculate()
 
     # Get the new output
-    setupcost_cells = factor_spec.loc[factor_names == "setupCost", "cell_pos"].values[0]
-    cost_cells = factor_spec.loc[factor_names == "cost", "cell_pos"].values[0]
+    capex_cells = factor_spec.loc[factor_names == "capex", "cell_pos"].values[0]
+    opex_cells = factor_spec.loc[factor_names == "opex", "cell_pos"].values[0]
 
-    setup_cost = ws.Range(setupcost_cells).Value
-    op_cost = ws.Range(cost_cells).Value
+    capex_cost = ws.Range(capex_cells).Value
+    opex_cost = ws.Range(opex_cells).Value
 
-    return [setup_cost, op_cost]
+    return [capex_cost, opex_cost]
 
 
 def load_config():
@@ -172,15 +177,24 @@ def problem_spec(cost_type):
         raise ValueError("Non-existent parameter type")
 
     model_spec = load_config()
-    model_spec = model_spec[model_spec.cost_type == cost_type]
-    factor_ranges = [
-        model_spec[["range_lower", "range_upper"]].iloc[k].values
-        for k in range(model_spec.shape[0])
-    ]
+
+    # Remove results (speaks to where to extract results from, not model factors)
+    # and filter down to the desired cost type.
+    # not_capex_opex = ~model_spec.factor_names.isin(["capex", "opex"])
+    # Turns out this is needed to extract the cell positions from, and why the lower/upper
+    # bounds were populated.
+    is_cost_type = model_spec.cost_type == cost_type
+    model_spec = model_spec[is_cost_type]
+
+    # Remove output from consideration
+    sp_spec = model_spec.loc[model_spec.factor_names != "capex", :]
+    sp_spec = sp_spec.loc[model_spec.factor_names != "opex", :]
+
+    factor_ranges = sp_spec[["range_lower", "range_upper"]].values.tolist()
 
     problem_dict = {
-        "num_vars": model_spec.shape[0],
-        "names": [name for name in model_spec.factor_names],
+        "num_vars": sp_spec.shape[0],
+        "names": sp_spec.factor_names.to_list(),
         "bounds": factor_ranges,
     }
     return ProblemSpec(problem_dict), model_spec
@@ -239,7 +253,7 @@ def _run_cost_model(wb, cost_factors, factor_spec, calculate_cost):
         )
 
     try:
-        cost_factors.loc[:, ["setupCost", "cost"]] = total_cost
+        cost_factors.loc[:, ["capex", "opex"]] = total_cost
     except TypeError:
         raise TypeError(
             "Incorrect type encountered. Ensure continuous values are not integers in config files."
@@ -308,13 +322,14 @@ def run_deployment_model(cost_model: str, N: int):
     SALib ProblemSpec with `cost_model_results` added as a field.
     """
     sp, model_config = problem_spec("deployment")
+    sample_config = model_config.loc[~model_config.factor_names.isin(["capex", "opex"])]
 
     # Create Sobol' sample
     sp.sample_sobol(N, calc_second_order=True)
 
     samples = pd.DataFrame(data=sp.samples, columns=sp["names"])
 
-    samples = convert_factor_types(samples, model_config.is_cat)
+    samples = convert_factor_types(samples, sample_config.is_cat)
 
     xlapp, wb = open_excel(cost_model)
     sample_w_cost_results = collect_deployment_costs(wb, samples, model_config)
@@ -325,14 +340,14 @@ def run_deployment_model(cost_model: str, N: int):
     return sp
 
 
-def run_production_model(cost_model: str, N: int):
+def run_production_model(cost_model: str, N: int, nprocs=1):
     """
     Generate Sobol' samples for the production model and run
 
     Parameters
     ----------
     cost_model : str
-        Path to cost (spreadsheet) model
+        Path to cost (spreadsheet) model, including extension (.xlsx)
     N : int
         Number of desired Sobol' sample points (resolves to `N * (2D + 2)` samples)
         where `D` is the number of model factors
@@ -342,13 +357,13 @@ def run_production_model(cost_model: str, N: int):
     SALib ProblemSpec with `cost_model_results` added as a field.
     """
     sp, model_config = problem_spec("production")
+    sample_config = model_config.loc[~model_config.factor_names.isin(["capex", "opex"])]
 
     # Create Sobol' sample
     sp.sample_sobol(N, calc_second_order=True)
 
     samples = pd.DataFrame(data=sp.samples, columns=sp["names"])
-
-    samples = convert_factor_types(samples, model_config.is_cat)
+    samples = convert_factor_types(samples, sample_config.is_cat)
 
     xlapp, wb = open_excel(cost_model)
     sample_w_cost_results = collect_production_costs(wb, samples, model_config)
@@ -366,12 +381,8 @@ def extract_sa_results(sp: ProblemSpec, fig_path: str = "./figs/"):
     cost_results = sp["cost_model_results"]
 
     # First get sensitivity to setup cost
-    sp.set_results(np.array(cost_results["setupCost"]))
-    sp.analyze_sobol()
-
-    sp.samples = np.array(cost_results[factor_names])
-
-    sp.set_results(np.array(cost_results["setupCost"]))
+    sp.set_samples(np.array(cost_results[factor_names]))
+    sp.set_results(np.array(cost_results["capex"]))
     sp.analyze_sobol()
 
     axes = sp.plot()
@@ -399,7 +410,7 @@ def extract_sa_results(sp: ProblemSpec, fig_path: str = "./figs/"):
     sp.set_samples(np.array(cost_results[factor_names]))
 
     # Get sensitivity to operational cost
-    sp.set_results(np.array(cost_results["Cost"]))
+    sp.set_results(np.array(cost_results["opex"]))
     sp.analyze_sobol()
 
     axes = sp.plot()

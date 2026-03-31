@@ -34,7 +34,7 @@ At minimum, the file must include the following columns:
 - `range_lower`, `range_upper` : the upper and lower bounds for sampling the parameter.
 - `is_cat` : a flag designating whether the parameter is categorical or not.
 
-The `config.csv` should include info for `setupCost` and `Cost` parameters for both the `production` and `deployment` models, parameters which are used to extract the setup
+The `config.csv` should include info for `capex` and `opex` parameters for both the `production` and `deployment` models, parameters which are used to extract the setup
 (CAPEX) and operational (OPEX) cost respectively for a given intervention.
 
 ## Cost model parameter descriptions
@@ -45,11 +45,11 @@ through consultation with the Translation to Deployment Team and sensitivity ana
 
 | **Parameter name** | **Description** | **Expected range** | **Model** |
 |--------------------|-----------------|-------------------|-----------|
-| num_devices | The number of devices outplanted in a year. Each device carries 3 baby corals, with a survival rate to 1YO of *1YOEC_yield*. | (1000, 5000000) | Deployment and Production |
+| num_1yoec | The target number of corals to be outplanted in a year. Determines the required number of devices, where each device carries 3 baby corals, with a survival rate to 1YO of *coral_yield_1YOEC*. | (1000, 5000000) | Deployment and Production |
 | species_no | Number of unique species/regions combinations to be outplanted. Each species and region needs different tanks for production. | (1, 12+) | Production |
 | col_spawn_gam_bun, gam_bun_egg, egg_embryo, embryo_freeswim | Parameters detailing conversions from the spawn to gamete to egg to embryo to freeswimming stage of the coral lifecycle. | See example config file | Production |
 | freeswim_settle, settle_just, just_mature | Parameters detailing conversions from the freeswimming to settlement-ready larvae, to just-settled larva to just-settled unit to mature unit. | See example config file | Production |
-| 1YOEC_yield | The number of surviving 1 YO corals per outplanted device. | (0.6, 0.8) | Production and Deployment |
+| coral_yield_1YOEC | The number of surviving 1 YO corals per outplanted device. | (0.6, 0.8) | Production and Deployment |
 | optimal_rear_density | The optimal density to rear baby corals at. | (1,3) | Production |
 | port | Index specifying which of port to use, generally overwritten in favour of using distance to port directly. | (0,4) | Deployment |
 | DAJ_a_r | DAJ assembly rate (jig-sec/device). | (9, 10) | Deployment |

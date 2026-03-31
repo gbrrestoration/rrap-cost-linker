@@ -389,8 +389,8 @@ def extract_sa_results(sp: ProblemSpec, fig_path: str = "./figs/"):
     fig = plt.gcf()  # get current figure
     fig.set_size_inches(10, 4)
     plt.tight_layout()
-
     plt.savefig(path_join(fig_path, "setup_cost_sobol_SA.png"))
+    plt.close()
 
     sp.analyze_pawn()
     axes = sp.plot()
@@ -398,12 +398,14 @@ def extract_sa_results(sp: ProblemSpec, fig_path: str = "./figs/"):
     fig.set_size_inches(10, 4)
     plt.tight_layout()
     plt.savefig(path_join(fig_path, "setup_cost_pawn_barplot_SA.png"))
+    plt.close()
 
     # SALib.analyze.rsa.analyze(problem_dict, sp.samples, total_cost)
     sp.heatmap()
     fig = plt.gcf()  # get current figure
     fig.set_size_inches(10, 4)
     plt.savefig(path_join(fig_path, "setup_cost_pawn_heatmap_SA.png"))
+    plt.close()
 
     # Then get sensitivity to operational cost
     sp.set_samples(np.array(cost_results[factor_names]))
@@ -418,6 +420,7 @@ def extract_sa_results(sp: ProblemSpec, fig_path: str = "./figs/"):
     fig.set_size_inches(10, 4)
     plt.tight_layout()
     plt.savefig(path_join(fig_path, "operational_cost_sobol_SA.png"))
+    plt.close()
 
     sp.analyze_pawn()
     axes = sp.plot()
@@ -425,7 +428,9 @@ def extract_sa_results(sp: ProblemSpec, fig_path: str = "./figs/"):
     fig.set_size_inches(10, 4)
     plt.tight_layout()
     plt.savefig(path_join(fig_path, "operational_cost_pawn_barplot_SA.png"))
+    plt.close()
 
     sp.heatmap()
     fig.set_size_inches(10, 4)
     plt.savefig(path_join(fig_path, "operational_cost_pawn_heatmap_SA.png"))
+    plt.close()

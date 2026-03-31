@@ -114,9 +114,8 @@ def calculate_production_cost(wb, factor_spec, factors):
 
         ws.Range(factor_row.cell_pos).Value = factors[factor_row.factor_names]
 
+    wb.Application.CalculateFull()
     ws = wb.Sheets("Dashboard")
-    ws.EnableCalculation = True
-    ws.Calculate()
 
     # Get the new output
     capex_cells = factor_spec.loc[factor_names == "capex", "cell_pos"].values[0]

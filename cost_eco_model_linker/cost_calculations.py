@@ -56,7 +56,7 @@ def cost_types(cost, contingency, nsims):
     Parameters
     ----------
     cost : dataframe
-        Dataframe containing 'Cost' and 'setupCost'
+        Dataframe containing 'capex' and 'opex'
     contingency : float
         Contingency proportion.
     nsims : int
@@ -156,10 +156,10 @@ def sample_cost_model(nsims):
     )
 
     # Ensure float type
-    factors_df_dep["setupCost"] = factors_df_dep.setupCost.astype(float)
-    factors_df_dep["cost"] = factors_df_dep.cost.astype(float)
-    factors_df_prod["setupCost"] = factors_df_prod.setupCost.astype(float)
-    factors_df_prod["cost"] = factors_df_prod.cost.astype(float)
+    factors_df_dep["capex"] = factors_df_dep.capex.astype(float)
+    factors_df_dep["opex"] = factors_df_dep.opex.astype(float)
+    factors_df_prod["capex"] = factors_df_prod.capex.astype(float)
+    factors_df_prod["opex"] = factors_df_prod.opex.astype(float)
 
     # Subset to just the number of sims as the scenarios beyond `nsims` do not get used
     # Yes, this means the Sobol' sampling is not necessary.
@@ -212,23 +212,28 @@ def update_factors(deploy_factors, prod_factors, iv_spec, ecol_idx, nsims):
 
     # Determine number of devices considering yield
     n_1yo_corals = temp_id_df["number_of_1YO_corals"].values[ecol_idx]
-    yield_1yo = deploy_factors.loc[sel, "1YOEC_yield"]
+    yield_1yo = deploy_factors.loc[sel, "coral_yield_1YOEC"]
     n_devices = np.ceil(n_1yo_corals / yield_1yo)
 
     # Update 1YO corals and convert to equivalent number of devices
-    deploy_factors.loc[sel, "num_devices"] = n_devices
-    prod_factors.loc[sel, "num_devices"] = n_devices
+    deploy_factors.loc[sel, "num_1yoec"] = n_devices
+    prod_factors.loc[sel, "num_1yoec"] = n_devices
 
     # Update number of species
-    prod_factors.loc[:, "species_no"] = iv_spec["number_of_species"].iloc[0]
+    prod_factors.loc[:, "species_no"] = iv_spec["number_of_groups"].iloc[0]
 
     # Make sure the production and deployment models have the same 1YO coral yield per
     # device
-    prod_factors.loc[:, "1YOEC_yield"] = deploy_factors["1YOEC_yield"].values
+    prod_factors.loc[:, "coral_yield_1YOEC"] = deploy_factors[
+        "coral_yield_1YOEC"
+    ].values
 
-    # Port does not matter as we are using distance to port directly
-    deploy_factors.loc[:, "reef"] = 1
+    # Use distance override
+    # TODO: Have to set nearest representative reef too to get estimated haulage costs
     deploy_factors.loc[:, "distance_from_port"] = iv_spec["distance_to_port_NM"].iloc[0]
+
+    # departure_port = deploy_ws.Range("D26").Value
+    # deploy_factors.loc[:, ""]
 
     return deploy_factors, prod_factors
 
@@ -270,7 +275,7 @@ def calc_production_requirement(deploy_factors, prod_factors, iv_spec, ecol_idx,
     #       breaking anything just in case.
     sel = slice(0, nsims - 1)
     n_1yo_corals = temp_id_df["number_of_1YO_corals"].values[ecol_idx]
-    yield_1yo_corals = deploy_factors.loc[sel, "1YOEC_yield"]
+    yield_1yo_corals = deploy_factors.loc[sel, "coral_yield_1YOEC"]
 
     # Account for losses and inefficiencies to determine how many coral devices are needed
     # to meet production targets
@@ -279,11 +284,11 @@ def calc_production_requirement(deploy_factors, prod_factors, iv_spec, ecol_idx,
         return deploy_factors, prod_factors
 
     # Calculate total number of devices to be produced/deployed
-    base_production = prod_factors.loc[sel, "num_devices"]
+    base_production = prod_factors.loc[sel, "num_1yoec"]
     total_prod = (required_production - base_production) + base_production
 
-    prod_factors.loc[sel, "num_devices"] = total_prod
-    deploy_factors.loc[sel, "num_devices"] = total_prod
+    prod_factors.loc[sel, "num_1yoec"] = total_prod
+    deploy_factors.loc[sel, "num_1yoec"] = total_prod
 
     return deploy_factors, prod_factors
 
@@ -363,7 +368,7 @@ def calculate_costs(
         cost_df = initialise_cost_df(iv_years, nsims)
 
         deploy_spec, deploy_factors, prod_spec, prod_factors = sample_cost_model(nsims)
-        base_production_volume = deploy_factors.num_devices
+        base_production_volume = deploy_factors.num_1yoec
 
         for iv_yr in iv_years:
             curr_selector = (ID_key.intervention_years == iv_yr) & scen_idx
@@ -377,7 +382,7 @@ def calculate_costs(
                     [
                         "number_of_1YO_corals",
                         "distance_to_port_NM",
-                        "number_of_species",
+                        "number_of_groups",
                         "rep",
                     ],
                 ],
@@ -388,10 +393,6 @@ def calculate_costs(
                 deploy_wb, deploy_factors, deploy_spec
             )
             prod_factors = collect_production_costs(prod_wb, prod_factors, prod_spec)
-
-            # Get associated port
-            deploy_ws = deploy_wb.Sheets("Logistics")
-            departure_port = deploy_ws.Range("D26").Value
 
             prev_selector = (ID_key.intervention_years == iv_yr - 1) & scen_idx
             if iv_yr > min(iv_years):
@@ -407,14 +408,13 @@ def calculate_costs(
                 )
 
                 additional = (
-                    deploy_factors["num_devices"].values[0:nsims]
-                    - base_production_volume
+                    deploy_factors["num_1yoec"].values[0:nsims] - base_production_volume
                 )
                 no_additional = additional <= 0
                 if no_additional.any():
                     # If deploying no more than previous year, setup cost is zero
-                    prod_factors.loc[no_additional, "setupCost"] = 0.0
-                    deploy_factors.loc[no_additional, "setupCost"] = 0.0
+                    prod_factors.loc[no_additional, "capex"] = 0.0
+                    deploy_factors.loc[no_additional, "capex"] = 0.0
                 else:
                     # If deploying more than last year, recalculate setup cost for only
                     # those additional corals
@@ -436,31 +436,33 @@ def calculate_costs(
                     )
 
                     # Replace orginally calculated setup costs with updated setup costs
-                    prod_factors.loc[with_additional, "setupCost"] = updated_prod_cost[
-                        "setupCost"
+                    prod_factors.loc[with_additional, "capex"] = updated_prod_cost[
+                        "capex"
                     ]
-                    deploy_factors.loc[with_additional, "setupCost"] = updated_dep_cost[
-                        "setupCost"
+                    deploy_factors.loc[with_additional, "capex"] = updated_dep_cost[
+                        "capex"
                     ]
 
                 # Retain originally sampled operational cost for full number of corals,
                 # regardless of intervention year
                 # NOTE: No idea why
-                # prod_factors.loc[:, "Cost"] = save_cost_prod
-                # deploy_factors.loc[:, "Cost"] = save_cost_dep
+                # prod_factors.loc[:, "cost"] = save_cost_prod
+                # deploy_factors.loc[:, "cost"] = save_cost_dep
 
             # Calculate all cost codes and add to dataframe
             cost_sum = (
-                deploy_factors[["setupCost", "Cost"]]
-                + prod_factors[["setupCost", "Cost"]]
+                deploy_factors[["capex", "opex"]] + prod_factors[["capex", "opex"]]
             ).values[0:nsims, :]
             cost_df.loc[cost_df.year == iv_yr, cost_df.columns[2:]] = cost_types(
                 cost_sum, cont_p, nsims
             )
 
-            closest_reef = ID_key.loc[
-                curr_selector.idxmax(), "closest_representative_reef"
-            ]
+            # Get associated port
+            # deploy_ws = deploy_wb.Sheets("Logistics")
+            # departure_port = deploy_ws.Range("D26").Value
+
+            departure_port = ID_key.loc[curr_selector.idxmax(), "port_name"]
+            deploy_distance = ID_key.loc[curr_selector.idxmax(), "distance_to_port_NM"]
 
             eia_template = fill_EIA_info(
                 prod_wb,
@@ -468,7 +470,7 @@ def calculate_costs(
                 scen_id,
                 min(iv_years),
                 iv_yr,
-                closest_reef,
+                deploy_distance,
                 departure_port,
                 eia_template,
             )

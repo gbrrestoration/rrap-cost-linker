@@ -81,7 +81,7 @@ production_model = "./models/3.8.0 CA Production Model.xlsx"
 
 # Factors not specified by arguments use whatever values are found in the Excel spreadsheet
 # Method below returns CAPEX and OPEX (setup costs and operational costs)
-costs = ceml.evaluate_production_cost(production_model, num_devices=1000000)
+costs = ceml.evaluate_production_cost(production_model, num_1yoec=1000000)
 
 print(sum(x))
 ```
@@ -89,10 +89,15 @@ print(sum(x))
 
 ## Questions and Answers
 
-### How is deployment distance determined?
+### How are deployment distances determined?
 
-For a given simulation, the closest port for the furthest reef where deployments were
-simulated is used for cost estimation.
+For a given simulation, a set of reefs where interventions occur are determined a priori,
+or as part of a simulated dynamic decision making process.
 
-CEML does not currently support assessment of deployment scenarios that change deployment
-locations throughout a simulation.
+The mean longitude and latitude is determined for a defined set of intervention locations.
+From this, the distance to the closest port is determined.
+
+While CEML does not currently support assessment of deployment scenarios that change
+deployment locations throughout a simulation, the determined costs should still be
+representative/indicative so long as the intervention reefs are confined within a
+given area.

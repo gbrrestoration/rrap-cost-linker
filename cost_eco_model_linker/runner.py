@@ -1,5 +1,8 @@
 import os
 from functools import partial
+from os.path import join as path_join
+import shutil
+import tempfile
 
 import re
 from packaging.version import Version
@@ -185,12 +188,10 @@ def evaluate_production_cost(
     Parameters
     ----------
     workbook_path : str
-        Absolute path to the Excel workbook.
+        Absolute path to the Excel workbook including extension (.xlsx).
     **factors
         Factor name-value pairs keyed by factor_name from the config CSV.
         Only factors to be overridden need to be supplied.
-        Note: '1YOEC_yield' must be passed as **{"1YOEC_yield": value}
-        due to the leading digit making it an invalid Python identifier.
 
     Returns
     -------
@@ -217,11 +218,11 @@ def evaluate_production_cost(
         spreadsheet_vals.update(factors)
 
         factors_row = pd.Series(spreadsheet_vals)
-        op_cost, setup_cost = calculate_production_cost(wb, factor_spec, factors_row)
+        capex, opex = calculate_production_cost(wb, factor_spec, factors_row)
     finally:
         close_excel(xlapp, wb)
 
-    return op_cost, setup_cost
+    return capex, opex
 
 
 def evaluate_deployment_cost(
@@ -241,7 +242,6 @@ def evaluate_deployment_cost(
     **factors
         Factor name-value pairs keyed by factor_name from the config CSV.
         Only factors to be overridden need to be supplied.
-        Note: '1YOEC_yield' must be passed as **{"1YOEC_yield": value}
         due to the leading digit making it an invalid Python identifier.
 
     Returns
@@ -287,8 +287,9 @@ def evaluate_deployment_cost(
         # volume/yield inside `calculate_deployment_cost()`
         # e.g., to deploy 1M devices with at least 1 coral each, and a yield of 40%,
         # 2.5M corals are needed to be produced.
-        op_cost, setup_cost = calculate_deployment_cost(wb, model_spec, factors_row)
+        capex, opex = calculate_deployment_cost(wb, model_spec, factors_row)
     finally:
         close_excel(xlapp, wb)
 
-    return op_cost, setup_cost
+    return capex, opex
+

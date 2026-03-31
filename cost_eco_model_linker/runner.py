@@ -7,6 +7,10 @@ import tempfile
 import re
 from packaging.version import Version
 
+import numpy as np
+import pandas as pd
+# from SALib import ProblemSpec
+
 import multiprocess as mp
 
 from . import process_RME_data as prd
@@ -293,3 +297,183 @@ def evaluate_deployment_cost(
 
     return capex, opex
 
+
+# --------------------------------------------------------------------------
+# Module-level row evaluator (must be at module scope to be picklable)
+# --------------------------------------------------------------------------
+
+
+def _evaluate_row(
+    x: np.ndarray,
+    workbook_path: str,
+    param_names: list[str],
+    evaluate_fn: callable,
+) -> np.ndarray:
+    """
+    Evaluate a single sample row against a cost model.
+
+    Creates a uniquely-named temporary copy of the workbook before evaluation
+    to avoid file-lock conflicts when multiple worker processes run concurrently.
+    The copy is removed after evaluation regardless of success or failure.
+
+    Parameters
+    ----------
+    x : np.ndarray
+        1-D array of parameter values, ordered to match param_names.
+    workbook_path : str
+        Absolute path to the Excel workbook.
+    param_names : list[str]
+        Ordered parameter names corresponding to columns of the sample DataFrame.
+    evaluate_fn : callable
+        Cost evaluation function with signature ``(workbook_path, **factors)
+        -> tuple[float, float]``. Typically ``evaluate_production_cost`` or
+        ``evaluate_deployment_cost``.
+
+    Returns
+    -------
+    np.ndarray
+        ``[capex, opex, total_cost]`` for this sample.
+    """
+    base, ext = os.path.splitext(workbook_path)
+    tmp_fd, tmp_path = tempfile.mkstemp(suffix=ext, prefix=os.path.basename(base) + "_")
+    os.close(tmp_fd)
+
+    try:
+        shutil.copy(workbook_path, tmp_path)
+        factors = dict(zip(param_names, x))
+        capex, opex = evaluate_fn(tmp_path, **factors)
+    finally:
+        os.remove(tmp_path)
+
+    return np.array([capex, opex, float(capex) + float(opex)])
+
+
+def evaluate_production_cost_parallel(
+    workbook_path: str,
+    samples: pd.DataFrame,
+    nprocs: int | None = None,
+) -> pd.DataFrame:
+    """
+    Evaluate the production cost model across a set of factor combinations in parallel.
+
+    Each row of `samples` is dispatched to a worker process that independently
+    opens a temporary copy of the workbook and returns capex, opex, and total cost.
+    Results are returned as the input DataFrame with three appended cost columns.
+
+    Parameters
+    ----------
+    workbook_path : str
+        Absolute path to the Excel workbook.
+    samples : pd.DataFrame
+        Each row is one model evaluation. Column names must match factor names
+        accepted by ``evaluate_production_cost``. Only factors to be overridden
+        from workbook defaults need to be included as columns.
+    nprocs : int, optional
+        Number of parallel worker processes. Defaults to ``os.cpu_count()``.
+
+    Returns
+    -------
+    pd.DataFrame
+        Input DataFrame with three appended columns:
+        ``capex``, ``opex``, and ``total_cost``.
+
+    Examples
+    --------
+    Simple parameter sweep::
+
+        samples = pd.DataFrame({
+            "num_1yoec": range(100_000, 25_000_001, 100_000),
+            "coral_yield_1YOEC": 0.4,
+            "species_no": 20,
+        })
+        results = ceml.evaluate_production_cost_parallel(prod_model, samples, nprocs=8)
+
+    From a SALib sample matrix::
+
+        sp = ProblemSpec({...})
+        sp.sample_sobol(1024)
+        samples = pd.DataFrame(sp.samples, columns=sp["names"])
+        results = ceml.evaluate_production_cost_parallel(prod_model, samples)
+        sp["Y"] = results["total_cost"].to_numpy()
+        sp.analyze_sobol()
+    """
+    row_evaluator = partial(
+        _evaluate_row,
+        workbook_path=workbook_path,
+        param_names=samples.columns.tolist(),
+        evaluate_fn=evaluate_production_cost,
+    )
+
+    with mp.Pool(processes=nprocs) as pool:
+        Y = np.array(pool.map(row_evaluator, samples.to_numpy()))
+
+    return samples.assign(
+        capex=Y[:, 0],
+        opex=Y[:, 1],
+        total_cost=Y[:, 2],
+    )
+
+
+def evaluate_deployment_cost_parallel(
+    workbook_path: str,
+    samples: pd.DataFrame,
+    nprocs: int | None = None,
+) -> pd.DataFrame:
+    """
+    Evaluate the deployment cost model across a set of factor combinations in parallel.
+
+    Each row of `samples` is dispatched to a worker process that independently
+    opens a temporary copy of the workbook and returns capex, opex, and total cost.
+    Results are returned as the input DataFrame with three appended cost columns.
+
+    Parameters
+    ----------
+    workbook_path : str
+        Absolute path to the Excel workbook.
+    samples : pd.DataFrame
+        Each row is one model evaluation. Column names must match factor names
+        accepted by ``evaluate_deployment_cost``. Only factors to be overridden
+        from workbook defaults need to be included as columns.
+    nprocs : int, optional
+        Number of parallel worker processes. Defaults to ``os.cpu_count()``.
+
+    Returns
+    -------
+    pd.DataFrame
+        Input DataFrame with three appended columns:
+        ``capex``, ``opex``, and ``total_cost``.
+
+    Examples
+    --------
+    Simple parameter sweep::
+
+        samples = pd.DataFrame({
+            "num_1yoec": range(100_000, 25_000_001, 100_000),
+            "reef": 2,
+        })
+        results = ceml.evaluate_deployment_cost_parallel(deploy_model, samples, nprocs=8)
+
+    From a SALib sample matrix::
+
+        sp = ProblemSpec({...})
+        sp.sample_sobol(1024)
+        samples = pd.DataFrame(sp.samples, columns=sp["names"])
+        results = ceml.evaluate_deployment_cost_parallel(deploy_model, samples)
+        sp["Y"] = results["total_cost"].to_numpy()
+        sp.analyze_sobol()
+    """
+    row_evaluator = partial(
+        _evaluate_row,
+        workbook_path=workbook_path,
+        param_names=samples.columns.tolist(),
+        evaluate_fn=evaluate_deployment_cost,
+    )
+
+    with mp.Pool(processes=nprocs) as pool:
+        Y = np.array(pool.map(row_evaluator, samples.to_numpy()))
+
+    return samples.assign(
+        capex=Y[:, 0],
+        opex=Y[:, 1],
+        total_cost=Y[:, 2],
+    )

@@ -10,6 +10,8 @@ from .runner import (
     parallel_evaluate,
     evaluate_production_cost,
     evaluate_deployment_cost,
+    evaluate_production_cost_parallel,
+    evaluate_deployment_cost_parallel,
 )
 
 from .sampling import (

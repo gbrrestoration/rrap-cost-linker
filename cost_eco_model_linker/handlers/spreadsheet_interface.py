@@ -50,9 +50,16 @@ def find_table(ws: w32client.CDispatch, first_header: str) -> pd.DataFrame:
     if not initial_header:
         raise ValueError(f"Header {first_header} not found in given worksheet!")
 
-    table_range = initial_header.CurrentRegion
-    data = table_range.Value
+    region = initial_header.CurrentRegion
 
+    # Explicitly define the range from the header row to the bottom of the region
+    start_cell = ws.Cells(initial_header.Row, region.Column)
+    end_cell = ws.Cells(
+        region.Row + region.Rows.Count - 1, region.Column + region.Columns.Count - 1
+    )
+    table_range = ws.Range(start_cell, end_cell)
+
+    data = table_range.Value
     return pd.DataFrame(data[1:], columns=data[0]).dropna()
 
 
@@ -90,7 +97,7 @@ def find_cost_table(ws: w32client.CDispatch) -> pd.DataFrame:
 def create_eia_template(wb):
     # Setup EIA template
     eia_template = pd.DataFrame(
-        columns=["iteration", "year", "Destination.reef", "Location", "expense_name"]
+        columns=["iteration", "year", "distance", "port", "expense_name"]
     )
 
     ws = wb.Sheets("Scale CAPEX")
@@ -128,8 +135,8 @@ def find_or_fill_row(eia_template, it, year, dest, port, expense):
     sel = (
         (eia_template.iteration == it)
         & (eia_template.year == year)
-        & (eia_template.loc[:, "Destination.reef"] == dest)
-        & (eia_template.Location == port)
+        & (eia_template.distance == dest)
+        & (eia_template.port == port)
         & (eia_template.expense_name == expense)
     )
     if sel.any():
@@ -196,9 +203,19 @@ def fill_industry_costs(
     """Single-pass update of industry costs in EIA template"""
     for code in unique_ind_codes:
         matches_code = ind_codes[df.index] == code
-        eia_template.loc[next_idx, code] = float(
-            df.loc[matches_code & cost_filter, "Cost"].sum()
-        )
+
+        if matches_code.sum() == 0:
+            # Protect against no match
+            continue
+
+        try:
+            eia_template.loc[next_idx, code] = float(
+                df.loc[matches_code & cost_filter, "Cost"].sum()
+            )
+        except KeyError:
+            eia_template.loc[next_idx, code] = float(
+                df.loc[matches_code & cost_filter, "Cost/all"].sum()
+            )
 
 
 def fill_opex(it, _, year, dest, port, eia_template, wb, expense, attribution=None):
@@ -240,8 +257,7 @@ def fill_capex(it, _, year, dest, port, eia_template, wb, expense, attribution=N
         wb, sheet_name, eia_template, it, year, dest, port, expense
     )
 
-    cost_type_df = find_table(wb.Sheets(sheet_name), "Amount")
-
+    cost_type_df = find_table(wb.Sheets(sheet_name), "Resource")
     filters = create_cost_filters(cost_type_df, attribution)
     fill_industry_costs(
         eia_template,
@@ -385,9 +401,9 @@ def fill_EIA_info(
     )
 
     # Add monitoring rows (zeros)
-    zero_row = [0.0] * 10
+    zero_row = [0.0] * 8
     for expense_type in ["Capex", "Opex", "Total_Capex_&_Opex"]:
-        eia_template.loc[len(eia_template.index), :] = (
+        eia_template.loc[len(eia_template.index) - 1, :] = (
             *(shared_args[:1] + shared_args[2:]),
             f"5.0_Monitor_{expense_type}",
             *zero_row,

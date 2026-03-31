@@ -14,7 +14,7 @@ from .calculate_metrics import (
     default_uncertainty_dict,
     indicator_params,
 )
-from .reef_distances import find_max_reef_distance
+from .reef_distances import find_representative_port
 
 THIS_DIR = os.path.dirname(__file__)
 
@@ -420,19 +420,13 @@ def create_economics_metric_files(
 
         # Create intervention key dataframe
         scen_cols = ["intervention id", "year", "rep", "number of corals"]
-        id_key_df = scens_df_iv[scen_cols].assign(
-            distance_to_port_NM=0.0,
-            furthest_representative_reef="",
-            closest_representative_reef="",
-        )
+        id_key_df = scens_df_iv[scen_cols].assign(port_name="", distance_to_port_NM=0.0)
 
-        # Calculate and store distance to port
-        rep_reefs_sort, rep_reef_names, total_dist = find_max_reef_distance(
-            reef_spatial_data, regions_data, iv_reefs, max_dist=max_dist
-        )
-        id_key_df["furthest_representative_reef"] = rep_reef_names[-1]
-        id_key_df["closest_representative_reef"] = rep_reef_names[0]
-        id_key_df["distance_to_port_NM"] = total_dist
+        # Determine distance to nearest port
+        port_name, distance_NM = find_representative_port(reef_spatial_data, iv_reefs)
+
+        id_key_df["port_name"] = port_name
+        id_key_df["distance_to_port_NM"] = distance_NM
 
         # Process batches
         batch_files = []
@@ -541,7 +535,7 @@ def create_economics_metric_files(
         # Finalize intervention key with metadata
         id_key_df = id_key_df.assign(
             results_filename=f"ID{iv_id}_{base_met_filename}",
-            number_of_species=6,
+            number_of_groups=6,
             start_year=start_year,
             end_year=end_year,
             climate_model=scens_df_iv["GCM name"].values,

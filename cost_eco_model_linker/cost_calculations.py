@@ -136,10 +136,17 @@ def sample_cost_model(nsims):
     factors_df_prod : dataframe
         Sampled factors for the production cost model
     """
-    # Sample deployment model factors
+
     sp_dep, factor_specs_dep = problem_spec("deployment")
     sp_prod, factor_specs_prod = problem_spec("production")
 
+    # Sample production model factors
+    sp_prod.sample_sobol(N, calc_second_order=True, skip_values=2**N)
+    factors_df_prod = pd.DataFrame(
+        data=sp_prod.samples, columns=factor_specs_prod.factor_names
+    )
+
+    # Sample deployment model factors
     nfactors = np.min([factor_specs_dep.shape[0], factor_specs_prod.shape[0]]) - 2
     N, K = get_NK(nsims, nfactors)
 
@@ -148,18 +155,18 @@ def sample_cost_model(nsims):
         data=sp_dep.samples, columns=factor_specs_dep.factor_names
     )
 
-    # Sample production model factors
-    sp_prod.sample_sobol(N, calc_second_order=True, skip_values=2**N)
-    factors_df_prod = pd.DataFrame(
-        data=sp_prod.samples, columns=factor_specs_prod.factor_names
-    )
+    # Ensure float type
+    factors_df_dep["setupCost"] = factors_df_dep.setupCost.astype(float)
+    factors_df_dep["cost"] = factors_df_dep.cost.astype(float)
+    factors_df_prod["setupCost"] = factors_df_prod.setupCost.astype(float)
+    factors_df_prod["cost"] = factors_df_prod.cost.astype(float)
 
     # Subset to just the number of sims as the scenarios beyond `nsims` do not get used
     # Yes, this means the Sobol' sampling is not necessary.
     # Based on conversation with R. Crocker, this was simply to get something working
     # reusing existing code.
-    factors_df_dep = factors_df_dep.iloc[0:nsims, :]
     factors_df_prod = factors_df_prod.iloc[0:nsims, :]
+    factors_df_dep = factors_df_dep.iloc[0:nsims, :]
 
     # Convert factor types to suitable format for cost model sampling
     factors_df_dep = convert_factor_types(factors_df_dep, factor_specs_dep.is_cat)

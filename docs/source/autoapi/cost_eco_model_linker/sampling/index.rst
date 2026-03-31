@@ -32,8 +32,8 @@ Module Contents
    :param factors: Row of a pandas dataframe with factors to sample
    :type factors: dataframerow
 
-   :returns: * **Cost** (*float*) -- Operational cost
-             * **setupCost** (*float*) -- Setup cost
+   :returns: * **opex** (*float*) -- Operational cost
+             * **capex** (*float*) -- Setup cost
 
 
 .. py:function:: calculate_production_cost(wb, factor_spec, factors)
@@ -47,8 +47,8 @@ Module Contents
    :param factors: Row of a pandas dataframe with factors to sample
    :type factors: dataframerow
 
-   :returns: * **Cost** (*float*) -- Operational cost
-             * **setupCost** (*float*) -- Setup cost
+   :returns: * **opex** (*float*) -- Operational cost
+             * **capex** (*float*) -- Setup cost
 
 
 .. py:function:: load_config(config_filepath='config.csv')
@@ -113,5 +113,3 @@ Module Contents
 
    :returns: **factors_df** -- Updated sampled factor dataframe with costs added
    :rtype: dataframe
-
-

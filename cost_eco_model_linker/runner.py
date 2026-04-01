@@ -1,6 +1,5 @@
 import os
 from functools import partial
-from os.path import join as path_join
 import shutil
 import tempfile
 
@@ -24,21 +23,87 @@ from . import (
     post_process_costs,
 )
 
-from .handlers import open_excel, close_excel
+from .handlers import open_excel, close_excel, reset_workbook
 
 from .sampling import (
     load_internal_config,
     calculate_production_cost,
     calculate_deployment_cost,
+    _read_reef_key,
     THIS_DIR,
-    DEFAULT_PROD_VER,
-    DEFAULT_DEPLOY_VER,
 )
 
 import numpy as np
 import pandas as pd
 
 SEMVER_RE = re.compile(r"^(?:.*/)?(\d+\.\d+\.\d+)\b")
+
+_KNOWN_MODEL_TYPES = {
+    "production": "prod",
+    "deployment": "deploy",
+}
+
+
+def _parse_model_info(
+    workbook_path: str,
+    model_type: str | None = None,
+) -> tuple[str, str]:
+    """
+    Extract model type and version from a workbook filename.
+
+    The expected filename pattern is ``'<version> <type> <name>'``,
+    e.g. ``'3.9.1 CA Production Model.xlsx'``.
+
+    Parameters
+    ----------
+    workbook_path : str
+        Path to the workbook (only the filename stem is inspected).
+    model_type : str, optional
+        If provided, skips type inference and only extracts the version.
+
+    Returns
+    -------
+    model_type : str
+        ``"production"`` or ``"deployment"``.
+    version : str
+        Semantic version string, e.g. ``"3.9.1"``.
+
+    Raises
+    ------
+    ValueError
+        If the version cannot be extracted, or if ``model_type`` is ``None``
+        and the type cannot be inferred from the filename.
+    """
+    stem = os.path.splitext(os.path.basename(workbook_path))[0]
+
+    m = re.search(r"\d+\.\d+\.\d+", stem)
+    if not m:
+        raise ValueError(
+            f"Could not extract a version number from filename {stem!r}. "
+            "Expected pattern: '<version> <type> <name>', "
+            "e.g. '3.9.1 CA Production Model.xlsx'."
+        )
+    version = m.group(0)
+
+    if model_type is None:
+        stem_lower = stem.lower()
+        for name in _KNOWN_MODEL_TYPES:
+            if name in stem_lower:
+                model_type = name
+                break
+        else:
+            raise ValueError(
+                f"Could not infer model type from filename {stem!r}. "
+                f"Expected one of {list(_KNOWN_MODEL_TYPES)} in the filename, "
+                "or pass model_type explicitly."
+            )
+    elif model_type not in _KNOWN_MODEL_TYPES:
+        raise ValueError(
+            f"Unknown model_type {model_type!r}. "
+            f"Must be one of {list(_KNOWN_MODEL_TYPES)}."
+        )
+
+    return model_type, version
 
 
 def evaluate(
@@ -204,7 +269,8 @@ def evaluate_production_cost(
     setup_cost : float
         Setup cost.
     """
-    factor_spec = pd.read_csv(f"{THIS_DIR}/{DEFAULT_PROD_VER}_prod_config.csv")
+    _, version = _parse_model_info(workbook_path, "production")
+    factor_spec = pd.read_csv(os.path.join(THIS_DIR, f"{version}_prod_config.csv"))
 
     unknown_factors = set(factors) - set(factor_spec["factor_names"])
     if unknown_factors:
@@ -255,7 +321,8 @@ def evaluate_deployment_cost(
     setup_cost : float
         Setup cost.
     """
-    model_spec = pd.read_csv(f"{THIS_DIR}/{DEFAULT_DEPLOY_VER}_deploy_config.csv")
+    _, version = _parse_model_info(workbook_path, "deployment")
+    model_spec = pd.read_csv(os.path.join(THIS_DIR, f"{version}_deploy_config.csv"))
 
     unknown_factors = set(factors) - set(model_spec["factor_names"])
     if unknown_factors:
@@ -263,14 +330,7 @@ def evaluate_deployment_cost(
 
     xlapp, wb = open_excel(workbook_path)
     try:
-        # Retrieve reef key list, matching the logic in calculate_deployment_cost
-        lookup_ws = wb.Sheets("Lookup Tables")
-        start_cell = lookup_ws.Cells.Find("Moore")
-        col_num = start_cell.Column
-        tbl_region = start_cell.CurrentRegion.Rows
-        end_cell_pos = tbl_region.Row + tbl_region.Rows.Count - 1
-        end_cell = lookup_ws.Cells(end_cell_pos, col_num)
-        reef_key = np.array(lookup_ws.Range(start_cell, end_cell).Value).flatten()
+        reef_key = _read_reef_key(wb)
 
         # Read current cell values from workbook as defaults
         spreadsheet_vals = {}
@@ -299,181 +359,166 @@ def evaluate_deployment_cost(
 
 
 # --------------------------------------------------------------------------
-# Module-level row evaluator (must be at module scope to be picklable)
+# Outer function: temp copy + batch evaluation
 # --------------------------------------------------------------------------
 
 
-def _evaluate_row(
-    x: np.ndarray,
+def run_cost_model(
     workbook_path: str,
-    param_names: list[str],
-    evaluate_fn: callable,
-) -> np.ndarray:
+    params_df: pd.DataFrame,
+    *,
+    model_type: str | None = None,
+    nprocs: int | None = None,
+) -> pd.DataFrame:
     """
-    Evaluate a single sample row against a cost model.
+    Evaluate a cost model over a set of parameter combinations.
 
-    Creates a uniquely-named temporary copy of the workbook before evaluation
-    to avoid file-lock conflicts when multiple worker processes run concurrently.
-    The copy is removed after evaluation regardless of success or failure.
+    The model type (production or deployment) and config version are inferred
+    from the workbook filename — e.g. ``'3.9.1 CA Production Model.xlsx'``.
+    Pass ``model_type`` explicitly only when the filename does not follow the
+    standard naming convention.
+
+    When ``nprocs`` is greater than 1, ``params_df`` is split into chunks and
+    evaluated in parallel — each worker opens its own temporary workbook copy.
+    Otherwise the whole DataFrame is evaluated serially in a single workbook
+    session.
+
+    Columns not present in ``params_df`` default to the values currently in the
+    workbook.
 
     Parameters
     ----------
-    x : np.ndarray
-        1-D array of parameter values, ordered to match param_names.
     workbook_path : str
-        Absolute path to the Excel workbook.
-    param_names : list[str]
-        Ordered parameter names corresponding to columns of the sample DataFrame.
-    evaluate_fn : callable
-        Cost evaluation function with signature ``(workbook_path, **factors)
-        -> tuple[float, float]``. Typically ``evaluate_production_cost`` or
-        ``evaluate_deployment_cost``.
+        Absolute path to the Excel workbook including extension (.xlsx).
+    params_df : pd.DataFrame
+        Each row is one model evaluation. Column names must be factor names from
+        the relevant config CSV. Only factors to be overridden from workbook
+        defaults need to be included.
+    model_type : str, optional
+        ``"production"`` or ``"deployment"``. Inferred from the filename if
+        not provided.
+    nprocs : int, optional
+        Number of parallel worker processes. Values <= 1 run serially.
+        Defaults to serial (``None``).
 
     Returns
     -------
-    np.ndarray
-        ``[capex, opex, total_cost]`` for this sample.
+    pd.DataFrame
+        Input DataFrame with three appended columns: ``capex``, ``opex``,
+        and ``total_cost``.
     """
+    model_type, version = _parse_model_info(workbook_path, model_type)
+
+    if nprocs is not None and nprocs > 1:
+        chunks = [c for c in np.array_split(params_df, nprocs) if len(c) > 0]
+        worker = partial(run_cost_model, workbook_path, model_type=model_type)
+        with mp.Pool(processes=nprocs) as pool:
+            results = pool.map(worker, chunks)
+        return pd.concat(results, ignore_index=True)
+
+    config_suffix = _KNOWN_MODEL_TYPES[model_type]
+    evaluate_fn = (
+        calculate_production_cost if model_type == "production" else calculate_deployment_cost
+    )
+    model_spec = pd.read_csv(os.path.join(THIS_DIR, f"{version}_{config_suffix}_config.csv"))
+
+    unknown = set(params_df.columns) - set(model_spec["factor_names"])
+    if unknown:
+        raise ValueError(f"Unrecognised factor(s): {unknown}")
+
     base, ext = os.path.splitext(workbook_path)
     tmp_fd, tmp_path = tempfile.mkstemp(suffix=ext, prefix=os.path.basename(base) + "_")
     os.close(tmp_fd)
 
     try:
         shutil.copy(workbook_path, tmp_path)
-        factors = dict(zip(param_names, x))
-        capex, opex = evaluate_fn(tmp_path, **factors)
+        xlapp, wb = open_excel(tmp_path)
+        try:
+            # Read workbook defaults once before any cells are changed
+            defaults = {}
+            for _, row in model_spec.iterrows():
+                defaults[row["factor_names"]] = (
+                    wb.Sheets(row["sheet"]).Range(row["cell_pos"]).Value
+                )
+
+            # For deployment, the reef cell holds a name; convert to 1-based index
+            # so it matches the integer representation used by calculate_deployment_cost
+            if model_type == "deployment":
+                reef_key = _read_reef_key(wb)
+                reef_name = defaults.get("reef")
+                if reef_name is not None:
+                    defaults["reef"] = int(np.where(reef_key == reef_name)[0][0]) + 1
+
+            results = np.zeros((len(params_df), 2))
+            for i, (_, row) in enumerate(params_df.iterrows()):
+                params = pd.Series({**defaults, **row.to_dict()})
+                results[i] = evaluate_fn(wb, model_spec, params)
+                if i < len(params_df) - 1:
+                    wb = reset_workbook(xlapp, wb, tmp_path)
+        finally:
+            close_excel(xlapp, wb)
     finally:
         os.remove(tmp_path)
 
-    return np.array([capex, opex, float(capex) + float(opex)])
+    return params_df.assign(
+        capex=results[:, 0],
+        opex=results[:, 1],
+        total_cost=results[:, 0] + results[:, 1],
+    )
 
 
-def evaluate_production_cost_parallel(
-    workbook_path: str,
-    samples: pd.DataFrame,
-    nprocs: int | None = None,
-) -> pd.DataFrame:
+def run_parameter_sweep(
+    prod_model,
+    deploy_model,
+    sweep_param,
+    search_range,
+    prod_params=None,
+    dep_params=None,
+):
     """
-    Evaluate the production cost model across a set of factor combinations in parallel.
-
-    Each row of `samples` is dispatched to a worker process that independently
-    opens a temporary copy of the workbook and returns capex, opex, and total cost.
-    Results are returned as the input DataFrame with three appended cost columns.
+    Run a parameter sweep over a range of values for any single parameter.
 
     Parameters
     ----------
-    workbook_path : str
-        Absolute path to the Excel workbook.
-    samples : pd.DataFrame
-        Each row is one model evaluation. Column names must match factor names
-        accepted by ``evaluate_production_cost``. Only factors to be overridden
-        from workbook defaults need to be included as columns.
-    nprocs : int, optional
-        Number of parallel worker processes. Defaults to ``os.cpu_count()``.
+    prod_model : model
+        Production cost model
+    deploy_model : model
+        Deployment cost model
+    sweep_param : str
+        Name of the parameter to sweep over
+    search_range : iterable
+        Range of values to sweep over for sweep_param
+    prod_params : dict, optional
+        Fixed keyword arguments passed to evaluate_production_cost
+    dep_params : dict, optional
+        Fixed keyword arguments passed to evaluate_deployment_cost
 
     Returns
     -------
-    pd.DataFrame
-        Input DataFrame with three appended columns:
-        ``capex``, ``opex``, and ``total_cost``.
-
-    Examples
-    --------
-    Simple parameter sweep::
-
-        samples = pd.DataFrame({
-            "num_1yoec": range(100_000, 25_000_001, 100_000),
-            "coral_yield_1YOEC": 0.4,
-            "species_no": 20,
-        })
-        results = ceml.evaluate_production_cost_parallel(prod_model, samples, nprocs=8)
-
-    From a SALib sample matrix::
-
-        sp = ProblemSpec({...})
-        sp.sample_sobol(1024)
-        samples = pd.DataFrame(sp.samples, columns=sp["names"])
-        results = ceml.evaluate_production_cost_parallel(prod_model, samples)
-        sp["Y"] = results["total_cost"].to_numpy()
-        sp.analyze_sobol()
+    search_range : iterable
+        The input search range
+    prod_capex : np.ndarray
+    prod_opex : np.ndarray
+    dep_capex : np.ndarray
+    dep_opex : np.ndarray
+    totals : np.ndarray
     """
-    row_evaluator = partial(
-        _evaluate_row,
-        workbook_path=workbook_path,
-        param_names=samples.columns.tolist(),
-        evaluate_fn=evaluate_production_cost,
-    )
+    prod_params = prod_params or {}
+    dep_params = dep_params or {}
 
-    with mp.Pool(processes=nprocs) as pool:
-        Y = np.array(pool.map(row_evaluator, samples.to_numpy()))
+    prod_sweep = pd.DataFrame([{sweep_param: val, **prod_params} for val in search_range])
+    dep_sweep = pd.DataFrame([{sweep_param: val, **dep_params} for val in search_range])
 
-    return samples.assign(
-        capex=Y[:, 0],
-        opex=Y[:, 1],
-        total_cost=Y[:, 2],
-    )
+    prod_results = run_cost_model(prod_model, prod_sweep)
+    dep_results = run_cost_model(deploy_model, dep_sweep)
 
-
-def evaluate_deployment_cost_parallel(
-    workbook_path: str,
-    samples: pd.DataFrame,
-    nprocs: int | None = None,
-) -> pd.DataFrame:
-    """
-    Evaluate the deployment cost model across a set of factor combinations in parallel.
-
-    Each row of `samples` is dispatched to a worker process that independently
-    opens a temporary copy of the workbook and returns capex, opex, and total cost.
-    Results are returned as the input DataFrame with three appended cost columns.
-
-    Parameters
-    ----------
-    workbook_path : str
-        Absolute path to the Excel workbook.
-    samples : pd.DataFrame
-        Each row is one model evaluation. Column names must match factor names
-        accepted by ``evaluate_deployment_cost``. Only factors to be overridden
-        from workbook defaults need to be included as columns.
-    nprocs : int, optional
-        Number of parallel worker processes. Defaults to ``os.cpu_count()``.
-
-    Returns
-    -------
-    pd.DataFrame
-        Input DataFrame with three appended columns:
-        ``capex``, ``opex``, and ``total_cost``.
-
-    Examples
-    --------
-    Simple parameter sweep::
-
-        samples = pd.DataFrame({
-            "num_1yoec": range(100_000, 25_000_001, 100_000),
-            "reef": 2,
-        })
-        results = ceml.evaluate_deployment_cost_parallel(deploy_model, samples, nprocs=8)
-
-    From a SALib sample matrix::
-
-        sp = ProblemSpec({...})
-        sp.sample_sobol(1024)
-        samples = pd.DataFrame(sp.samples, columns=sp["names"])
-        results = ceml.evaluate_deployment_cost_parallel(deploy_model, samples)
-        sp["Y"] = results["total_cost"].to_numpy()
-        sp.analyze_sobol()
-    """
-    row_evaluator = partial(
-        _evaluate_row,
-        workbook_path=workbook_path,
-        param_names=samples.columns.tolist(),
-        evaluate_fn=evaluate_deployment_cost,
-    )
-
-    with mp.Pool(processes=nprocs) as pool:
-        Y = np.array(pool.map(row_evaluator, samples.to_numpy()))
-
-    return samples.assign(
-        capex=Y[:, 0],
-        opex=Y[:, 1],
-        total_cost=Y[:, 2],
+    return pd.DataFrame(
+        {
+            "search_range": search_range,
+            "prod_capex": prod_results["capex"].values,
+            "prod_opex": prod_results["opex"].values,
+            "dep_capex": dep_results["capex"].values,
+            "dep_opex": dep_results["opex"].values,
+            "totals": prod_results["total_cost"].values + dep_results["total_cost"].values,
+        }
     )

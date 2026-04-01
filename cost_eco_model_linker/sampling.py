@@ -130,7 +130,9 @@ def calculate_production_cost(wb, factor_spec, factors):
     params = factors.copy()
 
     # Adjust number of devices to account for production yield
-    params["num_1yoec"] = params["num_1yoec"] / (params["coral_yield_1YOEC"] * 100) * 100
+    params["num_1yoec"] = (
+        params["num_1yoec"] / (params["coral_yield_1YOEC"] * 100) * 100
+    )
 
     return evaluate_spreadsheet(wb, factor_spec, params)
 

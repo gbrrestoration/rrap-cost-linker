@@ -92,8 +92,9 @@ def calculate_deployment_cost(wb, model_spec, factors):
     """
     params = factors.copy()
 
-    # Convert 1-based reef index to reef name for cell input
-    params["reef"] = _read_reef_key(wb)[int(params["reef"]) - 1]
+    if "reef" in params:
+        # Convert 1-based reef index to reef name for cell input
+        params["reef"] = _read_reef_key(wb)[int(params["reef"]) - 1]
 
     # Switch to large live-aboard vessel if distance > 59NM or not a day-trip.
     # D7 is set before evaluate_spreadsheet runs CalculateFull.

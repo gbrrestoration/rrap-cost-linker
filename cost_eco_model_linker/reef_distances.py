@@ -20,6 +20,7 @@ def haversine(x, y):
     Calculate the great circle distance in kilometers between two points
     on the earth (specified in decimal degrees)
 
+    Order of values are expected to be in longitude and latitude.
     """
     lon1, lat1 = x
     lon2, lat2 = y

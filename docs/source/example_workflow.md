@@ -176,7 +176,7 @@ deployment locations throughout a simulation, the determined costs should still 
 representative/indicative so long as the intervention reefs are confined within a
 given area.
 
-### How does the configuration CSV column `discrete_values` work?
+### What does `discrete_values` column in the configuration CSV do?
 
 The flooring trick is used to map an input from its continuous sampled representation
 back to a discrete value. This naturally works when the inputs are intended to be between
@@ -204,3 +204,16 @@ Based on a mapping:
 So the realized sample is then:
 [0.1, 0.2, 0.3, 0.4, 0.5]
 ```
+
+### How are distances between production facility and port handled?
+
+The current implementation is to identify the center location of all intervention reefs,
+and then to identify the closest representative _reef_ (as configured in the cost models).
+From there, the closest representatative _port_ is identified. This port is what is used to
+indicate the facility-port distance.
+
+An alternate conceptualization is that ports may be too busy, or operators unavailable.
+In such circumstances, it is plausible that an different port would be used.
+The line below could be added to the deployment configuration CSV to explore such scenarios.
+
+> deployment,Dashboard,D17,distance_from_facility,integer,50,350,50,50,350,"50,350",discrete,TRUE,in kilometers

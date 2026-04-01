@@ -29,7 +29,6 @@ from .sampling import (
     load_internal_config,
     calculate_production_cost,
     calculate_deployment_cost,
-    _read_reef_key,
     THIS_DIR,
 )
 
@@ -278,13 +277,8 @@ def evaluate_production_cost(
 
     xlapp, wb = open_excel(workbook_path)
     try:
-        # Read current cell values from workbook as defaults
-        spreadsheet_vals = {}
-        for _, row in factor_spec.iterrows():
-            cell_value = wb.Sheets(row["sheet"]).Range(row["cell_pos"]).Value
-            spreadsheet_vals[row["factor_names"]] = cell_value
-
-        # Override with user-provided values
+        # Seed from config best-point values, then apply user overrides
+        spreadsheet_vals = dict(zip(factor_spec["factor_names"], factor_spec["best_point_value"]))
         spreadsheet_vals.update(factors)
 
         factors_row = pd.Series(spreadsheet_vals)
@@ -330,19 +324,8 @@ def evaluate_deployment_cost(
 
     xlapp, wb = open_excel(workbook_path)
     try:
-        reef_key = _read_reef_key(wb)
-
-        # Read current cell values from workbook as defaults
-        spreadsheet_vals = {}
-        for _, row in model_spec.iterrows():
-            cell_value = wb.Sheets(row["sheet"]).Range(row["cell_pos"]).Value
-            if row["factor_names"] == "reef":
-                # Convert string back to 1-based dropdown index
-                cell_value = int(np.where(reef_key == cell_value)[0][0]) + 1
-
-            spreadsheet_vals[row["factor_names"]] = cell_value
-
-        # Override with user-provided values
+        # Seed from config best-point values, then apply user overrides
+        spreadsheet_vals = dict(zip(model_spec["factor_names"], model_spec["best_point_value"]))
         spreadsheet_vals.update(factors)
 
         factors_row = pd.Series(spreadsheet_vals)
@@ -434,20 +417,9 @@ def run_cost_model(
         shutil.copy(workbook_path, tmp_path)
         xlapp, wb = open_excel(tmp_path)
         try:
-            # Read workbook defaults once before any cells are changed
-            defaults = {}
-            for _, row in model_spec.iterrows():
-                defaults[row["factor_names"]] = (
-                    wb.Sheets(row["sheet"]).Range(row["cell_pos"]).Value
-                )
-
-            # For deployment, the reef cell holds a name; convert to 1-based index
-            # so it matches the integer representation used by calculate_deployment_cost
-            if model_type == "deployment":
-                reef_key = _read_reef_key(wb)
-                reef_name = defaults.get("reef")
-                if reef_name is not None:
-                    defaults["reef"] = int(np.where(reef_key == reef_name)[0][0]) + 1
+            # Seed from config best-point values — guarantees a known-good baseline
+            # regardless of whatever state the spreadsheet was saved in
+            defaults = dict(zip(model_spec["factor_names"], model_spec["best_point_value"]))
 
             results = np.zeros((len(params_df), 2))
             for i, (_, row) in enumerate(params_df.iterrows()):

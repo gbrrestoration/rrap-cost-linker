@@ -53,7 +53,9 @@ def find_closest_port(iv_reef_spatial):
     ]
 
     min_dist_port_idx = np.argmin(distance_to_port)
-    min_dist_port_NM = distance_to_port[min_dist_port_idx] * 0.00053996
+
+    # Convert kilometers to nautical miles
+    min_dist_port_NM = distance_to_port[min_dist_port_idx] * 0.539957
     closest_port = REPR_PORTS.loc[min_dist_port_idx, "port_name"]
 
     return closest_port, min_dist_port_NM

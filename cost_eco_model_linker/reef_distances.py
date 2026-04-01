@@ -61,6 +61,33 @@ def find_closest_port(iv_reef_spatial):
     return closest_port, min_dist_port_NM
 
 
+def find_representative_reef(reef_spatial_data, iv_reefs):
+    """
+    Find closest representative reef from mean location of reefs where interventions occur.
+
+    Returns
+    -------
+    Name of closest representative reef.
+    """
+    iv_reef_spatial = reef_spatial_data.loc[
+        reef_spatial_data["GBRMPA_ID"].isin(iv_reefs)
+    ]
+
+    # Use the mean distance to port:
+    mean_lon = np.mean(iv_reef_spatial.LON)
+    mean_lat = np.mean(iv_reef_spatial.LAT)
+
+    distance_to_reef = [
+        haversine((mean_lon, mean_lat), list(reef_pos))
+        for reef_pos in REPR_REEFS.loc[:, ["LON", "LAT"]].itertuples(index=False)
+    ]
+
+    min_dist_port_idx = np.argmin(distance_to_reef)
+    closest_reef = REPR_REEFS.loc[min_dist_port_idx, "reef_name"]
+
+    return closest_reef
+
+
 def find_representative_reefs(iv_reef_spatial, regions_data, max_dist=25.0):
     """
     Find clusters of reefs within max_dist of each other. These represent the furthest a ship would travel

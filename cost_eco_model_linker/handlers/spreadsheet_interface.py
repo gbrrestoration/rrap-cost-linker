@@ -232,7 +232,7 @@ def fill_opex(it, _, year, dest, port, eia_template, wb, attribution=None):
     """
     sheet_name = "Batch OPEX"
     cost_df, ind_codes, unique_ind_codes, next_idx = _setup_EIA_calculation(
-        wb, sheet_name, eia_template, it, year, dest, port, "Opex"
+        wb, sheet_name, eia_template, it, year, dest, port, "OPEX"
     )
 
     cost_type_df = find_table(wb.Sheets(sheet_name), "Amount")
@@ -269,7 +269,7 @@ def fill_capex(it, _, year, dest, port, eia_template, wb, attribution=None):
     """
     sheet_name = "Scale CAPEX"
     cost_df, ind_codes, unique_ind_codes, next_idx = _setup_EIA_calculation(
-        wb, sheet_name, eia_template, it, year, dest, port, "Capex"
+        wb, sheet_name, eia_template, it, year, dest, port, "CAPEX"
     )
 
     cost_type_df = find_table(wb.Sheets(sheet_name), "Resource")
@@ -366,14 +366,15 @@ def fill_EIA_info(
     if year > iv_start_year:
         this_year = eia_template.year == year
         init_year = eia_template.year == iv_start_year
-        capex_rows = eia_template.expense_name == "Capex"
+        capex_rows = eia_template.expense_name == "CAPEX"
 
         this_row = this_year & capex_rows
         init_row = init_year & capex_rows
-        eia_template.iloc[this_row, 5:] = (
+        incremental = (
             eia_template.iloc[this_row, 5:].values
             - eia_template.iloc[init_row, 5:].values
         )
+        eia_template.iloc[this_row, 5:] = incremental.clip(min=0)
 
     # Move labour column to last position
     eia_template["labour"] = eia_template.pop("labour")

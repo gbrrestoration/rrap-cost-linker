@@ -164,6 +164,12 @@ def load_internal_config(fp):
     return pd.read_csv(os.path.join(THIS_DIR, fp))
 
 
+# Distributions that use [lower, upper] bounds and support the categorical flooring trick.
+# "discrete" is a convenience label in the config meaning uniform over discrete values;
+# it is mapped to "unif" before being passed to SALib.
+_UNIFORM_LIKE_DISTS = {"unif", "logunif", "discrete"}
+
+
 def problem_spec(cost_type):
     """
     Create a problem specification for sampling cost models using SALib.
@@ -200,12 +206,18 @@ def problem_spec(cost_type):
     not_opex = model_spec.factor_names != "opex"
     sp_spec = model_spec.loc[not_capex & not_opex, :]
 
-    factor_ranges = sp_spec[["range_lower", "range_upper"]]
+    # Resolve sampling distributions: fill missing with "unif"
+    raw_dists = sp_spec["UNC_distribution"].fillna("unif").str.strip().str.lower()
+    raw_dists = raw_dists.where(raw_dists != "", other="unif")
+    is_uniform_like = raw_dists.isin(_UNIFORM_LIKE_DISTS)
 
-    # Adjust discrete/categorical sampling bounds so that sampling trick can be applied.
-    # The trick being: [min, max+1], take the floor of the continuous sample.
+    factor_ranges = sp_spec[["range_lower", "range_upper"]].copy()
+
+    # Categorical flooring trick ([min, max+1] then floor) only applies when the
+    # distribution is uniform-like; for distributions like "norm" the bounds have a
+    # different meaning (e.g. [mean, std]) so we must not modify them.
     is_cat = sp_spec.is_cat
-    factor_ranges.loc[is_cat, "range_upper"] += 1
+    factor_ranges.loc[is_cat & is_uniform_like, "range_upper"] += 1
 
     is_discrete_mapped = sp_spec["discrete_values"].notna() & (
         sp_spec["discrete_values"] != ""
@@ -215,10 +227,14 @@ def problem_spec(cost_type):
         factor_ranges.loc[idx, "range_lower"] = 0
         factor_ranges.loc[idx, "range_upper"] = len(options)  # flooring trick: [0, n)
 
+    # Map "discrete" → "unif" for SALib (SALib has no "discrete" distribution type)
+    salib_dists = raw_dists.replace("discrete", "unif").to_list()
+
     problem_dict = {
         "num_vars": sp_spec.shape[0],
         "names": sp_spec.factor_names.to_list(),
         "bounds": factor_ranges.values.tolist(),
+        "dists": salib_dists,
     }
     return ProblemSpec(problem_dict), model_spec
 

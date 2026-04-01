@@ -165,9 +165,14 @@ def load_internal_config(fp):
 
 
 # Distributions that use [lower, upper] bounds and support the categorical flooring trick.
-# "discrete" is a convenience label in the config meaning uniform over discrete values;
-# it is mapped to "unif" before being passed to SALib.
+# "discrete" is a convenience label in the config meaning uniform over discrete values.
 _UNIFORM_LIKE_DISTS = {"unif", "logunif", "discrete"}
+
+# Map convenience/long-form distribution names to SALib distribution codes.
+_DIST_ALIASES = {
+    "discrete": "unif",  # discrete uniform — treated as continuous uniform by SALib
+    "normal": "norm",  # long-form alias
+}
 
 
 def problem_spec(cost_type):
@@ -227,8 +232,14 @@ def problem_spec(cost_type):
         factor_ranges.loc[idx, "range_lower"] = 0
         factor_ranges.loc[idx, "range_upper"] = len(options)  # flooring trick: [0, n)
 
-    # Map "discrete" → "unif" for SALib (SALib has no "discrete" distribution type)
-    salib_dists = raw_dists.replace("discrete", "unif").to_list()
+    # loguniform requires a strictly positive lower bound
+    is_logunif = raw_dists == "logunif"
+    factor_ranges.loc[
+        is_logunif & (factor_ranges["range_lower"] <= 0), "range_lower"
+    ] = 1e-6
+
+    # Map convenience names to SALib distribution codes
+    salib_dists = [_DIST_ALIASES.get(d, d) for d in raw_dists]
 
     problem_dict = {
         "num_vars": sp_spec.shape[0],
@@ -236,6 +247,7 @@ def problem_spec(cost_type):
         "bounds": factor_ranges.values.tolist(),
         "dists": salib_dists,
     }
+
     return ProblemSpec(problem_dict), model_spec
 
 

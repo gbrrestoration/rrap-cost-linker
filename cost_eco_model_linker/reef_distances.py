@@ -10,6 +10,10 @@ REPR_PORTS = pd.read_csv(
     path_join(dirname(__file__), "representative_port_locations.csv")
 )
 
+REPR_REEFS = pd.read_csv(
+    path_join(dirname(__file__), "representative_reef_locations.csv")
+)
+
 
 def haversine(x, y):
     """

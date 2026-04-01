@@ -16,6 +16,60 @@ DEFAULT_PROD_VER = "3.9.1"
 DEFAULT_DEPLOY_VER = "3.9.0"
 
 
+def _read_reef_key(wb) -> np.ndarray:
+    """Read reef cluster names from the deployment workbook lookup table."""
+    lookup_ws = wb.Sheets("Lookup Tables")
+    start_cell = lookup_ws.Cells.Find("Moore")
+    col_num = start_cell.Column
+    tbl_region = start_cell.CurrentRegion.Rows
+    end_cell_pos = tbl_region.Row + tbl_region.Rows.Count - 1
+    end_cell = lookup_ws.Cells(end_cell_pos, col_num)
+    return np.array(lookup_ws.Range(start_cell, end_cell).Value).flatten()
+
+
+def evaluate_spreadsheet(wb, model_spec, params) -> tuple[float, float]:
+    """
+    Set input cells, trigger recalculation, and read back capex and opex.
+
+    This is the inner function for both cost models. All model-specific parameter
+    transformations (yield adjustment, reef name resolution, vessel type switching)
+    must be applied to `params` before calling this function.
+
+    Parameters
+    ----------
+    wb : Workbook
+        Open Excel workbook.
+    model_spec : DataFrame
+        Factor specification with columns: factor_names, sheet, cell_pos.
+    params : Series
+        Fully-resolved parameter values indexed by factor_names.
+
+    Returns
+    -------
+    capex : float
+    opex : float
+    """
+    factor_names = model_spec.factor_names
+    not_costs = ~factor_names.isin(["capex", "opex"])
+
+    for _, row in model_spec[not_costs].iterrows():
+        wb.Sheets(row.sheet).Range(row.cell_pos).Value = params[row.factor_names]
+
+    wb.Application.CalculateFull()
+    ws = wb.Sheets("Dashboard")
+
+    capex_cell = model_spec.loc[factor_names == "capex", "cell_pos"].values[0]
+    opex_cell = model_spec.loc[factor_names == "opex", "cell_pos"].values[0]
+
+    capex_raw = ws.Range(capex_cell).Value
+    opex_raw = ws.Range(opex_cell).Value
+
+    if (capex_raw == -2146826281) or (opex_raw == -2146826281):
+        raise ValueError("Division by zero error in spreadsheet!")
+
+    return float(capex_raw), float(opex_raw)
+
+
 def calculate_deployment_cost(wb, model_spec, factors):
     """
     Calculates set up and operational costs in the deployment cost model (wb), given a set of parameters to sample.
@@ -31,54 +85,25 @@ def calculate_deployment_cost(wb, model_spec, factors):
 
     Returns
     -------
-    setup_cost: float
+    capex: float
         Setup cost (CAPEX)
-    op_cost: float
+    opex: float
         Operational cost (OPEX)
     """
-    lookup_ws = wb.Sheets("Lookup Tables")
-    start_cell = lookup_ws.Cells.Find("Moore")
-    col_num = start_cell.Column
+    params = factors.copy()
 
-    # Get list of Reef clusters
-    tbl_region = start_cell.CurrentRegion.Rows
-    end_cell_pos = tbl_region.Row + tbl_region.Rows.Count - 1
-    end_cell = lookup_ws.Cells(end_cell_pos, col_num)
-    col_range = lookup_ws.Range(start_cell, end_cell)
-    reef_key = np.array(col_range.Value).flatten()
+    # Convert 1-based reef index to reef name for cell input
+    params["reef"] = _read_reef_key(wb)[int(params["reef"]) - 1]
 
-    factor_names = model_spec.factor_names
+    # Switch to large live-aboard vessel if distance > 59NM or not a day-trip.
+    # D7 is set before evaluate_spreadsheet runs CalculateFull.
+    if (params["distance_from_port"] > 59) or (params["daytrip"] == 0):
+        sheet_name = model_spec.loc[
+            model_spec.factor_names == "distance_from_port", "sheet"
+        ].values[0]
+        wb.Sheets(sheet_name).Range("D7").Value = 4
 
-    not_capex = factor_names != "capex"
-    not_opex = factor_names != "opex"
-    for _, params in model_spec[not_capex & not_opex].iterrows():
-        param_names = params.factor_names
-        ws = wb.Sheets(params.sheet)
-        if param_names == "distance_from_port":
-            ws.Range(params.cell_pos).Value = factors[param_names]
-        elif param_names == "reef":
-            reef = int(factors["reef"])
-            ws.Range(params.cell_pos).Value = reef_key[reef - 1]
-        else:
-            ws.Range(params.cell_pos).Value = factors[param_names]
-
-    wb.Application.CalculateFull()
-    ws = wb.Sheets("Dashboard")
-
-    # Get the new output
-    capex_cell = model_spec.loc[factor_names == "capex", "cell_pos"].values[0]
-    opex_cell = model_spec.loc[factor_names == "opex", "cell_pos"].values[0]
-
-    capex_raw = ws.Range(capex_cell).Value
-    opex_raw = ws.Range(opex_cell).Value
-
-    if (capex_raw == -2146826281) or (opex_raw == -2146826281):
-        raise ValueError("Division by zero error in spreadsheet!")
-
-    capex_cost = float(capex_raw)
-    opex_cost = float(opex_raw)
-
-    return capex_cost, opex_cost
+    return evaluate_spreadsheet(wb, model_spec, params)
 
 
 def calculate_production_cost(wb, factor_spec, factors):
@@ -96,35 +121,17 @@ def calculate_production_cost(wb, factor_spec, factors):
 
     Returns
     -------
-    capex_cost: float
+    capex: float
         Setup cost (CAPEX)
-    opex_cost: float
+    opex: float
         Operational cost (OPEX)
     """
-    factor_names = factor_spec.factor_names
-    not_costs = (factor_names != "opex") & (factor_names != "capex")
-    for _, factor_row in factor_spec[not_costs].iterrows():
-        ws = wb.Sheets(factor_row.sheet)
+    params = factors.copy()
 
-        if factor_row.factor_names == "num_1yoec":
-            # Adjust deployed devices to obtain production yield of corals
-            num_devices = factors[factor_row.factor_names]
-            survival = factors["coral_yield_1YOEC"]
-            factors[factor_row.factor_names] = num_devices / (survival * 100) * 100
+    # Adjust number of devices to account for production yield
+    params["num_1yoec"] = params["num_1yoec"] / (params["coral_yield_1YOEC"] * 100) * 100
 
-        ws.Range(factor_row.cell_pos).Value = factors[factor_row.factor_names]
-
-    wb.Application.CalculateFull()
-    ws = wb.Sheets("Dashboard")
-
-    # Get the new output
-    capex_cells = factor_spec.loc[factor_names == "capex", "cell_pos"].values[0]
-    opex_cells = factor_spec.loc[factor_names == "opex", "cell_pos"].values[0]
-
-    capex_cost = ws.Range(capex_cells).Value
-    opex_cost = ws.Range(opex_cells).Value
-
-    return [capex_cost, opex_cost]
+    return evaluate_spreadsheet(wb, factor_spec, params)
 
 
 def load_config():
@@ -186,15 +193,29 @@ def problem_spec(cost_type):
     model_spec = model_spec[is_cost_type]
 
     # Remove output from consideration
-    sp_spec = model_spec.loc[model_spec.factor_names != "capex", :]
-    sp_spec = sp_spec.loc[model_spec.factor_names != "opex", :]
+    not_capex = model_spec.factor_names != "capex"
+    not_opex = model_spec.factor_names != "opex"
+    sp_spec = model_spec.loc[not_capex & not_opex, :]
 
-    factor_ranges = sp_spec[["range_lower", "range_upper"]].values.tolist()
+    factor_ranges = sp_spec[["range_lower", "range_upper"]]
+
+    # Adjust discrete/categorical sampling bounds so that sampling trick can be applied.
+    # The trick being: [min, max+1], take the floor of the continuous sample.
+    is_cat = sp_spec.is_cat
+    factor_ranges.loc[is_cat, "range_upper"] += 1
+
+    is_discrete_mapped = sp_spec["discrete_values"].notna() & (
+        sp_spec["discrete_values"] != ""
+    )
+    for idx, row in sp_spec[is_discrete_mapped].iterrows():
+        options = [float(v) for v in str(row["discrete_values"]).split(",")]
+        factor_ranges.loc[idx, "range_lower"] = 0
+        factor_ranges.loc[idx, "range_upper"] = len(options)  # flooring trick: [0, n)
 
     problem_dict = {
         "num_vars": sp_spec.shape[0],
         "names": sp_spec.factor_names.to_list(),
-        "bounds": factor_ranges,
+        "bounds": factor_ranges.values.tolist(),
     }
     return ProblemSpec(problem_dict), model_spec
 
@@ -216,9 +237,50 @@ def convert_factor_types(factors_df, is_cat):
     """
     for ic_ind, ic in enumerate(is_cat):
         if ic:
-            factors_df[factors_df.columns[ic_ind]] = np.ceil(
+            factors_df[factors_df.columns[ic_ind]] = np.floor(
                 factors_df[factors_df.columns[ic_ind]]
             ).astype(int)
+
+    return factors_df
+
+
+def apply_discrete_mapping(factors_df, model_spec):
+    """
+    Map sampled integer indices back to their actual discrete values.
+    Only applies to factors with a discrete_values entry in model_spec.
+    Factors marked as is_cat without discrete_values are already handled
+    by the flooring trick in convert_factor_types.
+
+    Parameters
+    ----------
+    factors_df : dataframe
+        A dataframe of sampled factors
+    model_spec : dataframe
+        Factor specification, as loaded from the config CSV
+
+    Returns
+    -------
+    factors_df : Updated sampled factor dataframe with discrete mappings applied
+
+    Raises
+    ------
+    ValueError
+        If the min/max of discrete_values does not match range_lower/range_upper
+    """
+    for _, row in model_spec.iterrows():
+        if pd.notna(row["discrete_values"]) and row["discrete_values"] != "":
+            options = [float(v) for v in str(row["discrete_values"]).split(",")]
+
+            if min(options) != row["range_lower"] or max(options) != row["range_upper"]:
+                raise ValueError(
+                    f"discrete_values for '{row['factor_names']}' has min/max "
+                    f"({min(options)}, {max(options)}) that does not match "
+                    f"range_lower/range_upper ({row['range_lower']}, {row['range_upper']})"
+                )
+
+            factors_df[row["factor_names"]] = factors_df[row["factor_names"]].apply(
+                lambda idx: options[int(idx)]
+            )
 
     return factors_df
 
@@ -327,7 +389,6 @@ def run_deployment_model(cost_model: str, N: int):
     sp.sample_sobol(N, calc_second_order=True)
 
     samples = pd.DataFrame(data=sp.samples, columns=sp["names"])
-
     samples = convert_factor_types(samples, sample_config.is_cat)
 
     xlapp, wb = open_excel(cost_model)
@@ -431,6 +492,7 @@ def extract_sa_results(sp: ProblemSpec, fig_path: str = "./figs/"):
     plt.close()
 
     sp.heatmap()
+    fig = plt.gcf()
     fig.set_size_inches(10, 4)
     plt.savefig(path_join(fig_path, "operational_cost_pawn_heatmap_SA.png"))
     plt.close()

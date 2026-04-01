@@ -2,7 +2,7 @@
 
 A python library for generating input files for the CREAM economics analysis suite, using
 results from [ReefModEngine.jl](https://github.com/open-AIMS/ReefModEngine.jl) and sampling
-the intervention cost models using the cost_model_queries package.
+the intervention cost models.
 
 [![Documentation](https://img.shields.io/badge/docs-latest-blue)](https://open-aims.github.io/cost-eco-model-linker/)
 
@@ -57,8 +57,8 @@ import cost_eco_model_linker as ceml
 
 # Filepath to RME runs to process
 rme_files_path = "./path_to_RME_outputs"
-deployment_model = "./3.5.5 CA Deployment Model"
-production_model = "./3.7.0 CA Production Model"
+deployment_model = "./3.9.0 CA Deployment Model"
+production_model = "./3.9.1 CA Production Model"
 output_path = "./results"
 
 # Number of sims for metrics sampling (default includes ecological and expert uncertainty
@@ -134,8 +134,8 @@ Cost-eco-model-linker generates sampled cost output files for each of the interv
 modelled in a set of ReefModEngine.jl results. Currently the latest version of the cost
 models that Cost-eco-model-linker is compatiable with are:
 
-- Coral Aquaculture Deployment: "3.5.5 CA Deployment Model.xlsx"
-- Coral Aquaculture Production: "3.7.0 CA Production Model.xlsx"
+- Coral Aquaculture Deployment: "3.9.0 CA Deployment Model.xlsx"
+- Coral Aquaculture Production: "3.9.1 CA Production Model.xlsx"
 
 To get access to these models, contact Nick Dendle at QUT.
 

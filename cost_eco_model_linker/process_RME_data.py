@@ -14,7 +14,7 @@ from .calculate_metrics import (
     default_uncertainty_dict,
     indicator_params,
 )
-from .reef_distances import find_representative_port
+from .reef_distances import find_representative_port, find_representative_reef
 
 THIS_DIR = os.path.dirname(__file__)
 
@@ -425,6 +425,10 @@ def create_economics_metric_files(
         # Determine distance to nearest port
         port_name, distance_NM = find_representative_port(reef_spatial_data, iv_reefs)
 
+        # Determine representative reef
+        reef_name = find_representative_reef(reef_spatial_data, iv_reefs)
+
+        id_key_df["reef"] = reef_name
         id_key_df["port_name"] = port_name
         id_key_df["distance_to_port_NM"] = distance_NM
 

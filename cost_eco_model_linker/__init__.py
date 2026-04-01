@@ -8,10 +8,10 @@ from .calculate_metrics import default_uncertainty_dict
 from .runner import (
     evaluate,
     parallel_evaluate,
+    run_cost_model,
     evaluate_production_cost,
     evaluate_deployment_cost,
-    evaluate_production_cost_parallel,
-    evaluate_deployment_cost_parallel,
+    run_parameter_sweep,
 )
 
 from .sampling import (

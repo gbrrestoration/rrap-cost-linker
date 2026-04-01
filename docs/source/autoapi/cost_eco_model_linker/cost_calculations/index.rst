@@ -19,7 +19,7 @@ Functions
 
    cost_eco_model_linker.cost_calculations.get_NK
    cost_eco_model_linker.cost_calculations.cost_types
-   cost_eco_model_linker.cost_calculations.initialise_cost_df
+   cost_eco_model_linker.cost_calculations.initialize_cost_df
    cost_eco_model_linker.cost_calculations.factors_dataframe_update
    cost_eco_model_linker.cost_calculations.update_factors
    cost_eco_model_linker.cost_calculations.update_capex_factors
@@ -62,7 +62,7 @@ Module Contents
    :type nsims: int
 
 
-.. py:function:: initialise_cost_df(years, nsims)
+.. py:function:: initialize_cost_df(years, nsims)
 
    Initialize dataframe for storing sampled cost data.
 

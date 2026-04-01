@@ -60,7 +60,9 @@ def find_table(ws: w32client.CDispatch, first_header: str) -> pd.DataFrame:
     table_range = ws.Range(start_cell, end_cell)
 
     data = table_range.Value
-    return pd.DataFrame(data[1:], columns=data[0]).dropna()
+    df = pd.DataFrame(data[1:], columns=data[0]).dropna()
+    # If duplicate column names exist (e.g. two "Cost" columns), keep the last occurrence
+    return df.loc[:, ~df.columns.duplicated(keep="last")]
 
 
 def find_cost_table(ws: w32client.CDispatch) -> pd.DataFrame:
@@ -200,7 +202,7 @@ def create_cost_filters(cost_type_df, attribution=None):
 def fill_industry_costs(
     eia_template, next_idx, df, ind_codes, unique_ind_codes, cost_filter
 ):
-    """Single-pass update of industry costs in EIA template"""
+    """Single-pass update of industry costs in EIA template. Accumulates into existing values."""
     for code in unique_ind_codes:
         matches_code = ind_codes[df.index] == code
 
@@ -208,35 +210,48 @@ def fill_industry_costs(
             # Protect against no match
             continue
 
+        if code not in eia_template.columns:
+            eia_template[code] = 0.0
+
+        existing = eia_template.loc[next_idx, code]
+        existing = float(existing) if pd.notna(existing) else 0.0
+
         try:
-            eia_template.loc[next_idx, code] = float(
+            eia_template.loc[next_idx, code] = existing + float(
                 df.loc[matches_code & cost_filter, "Cost"].sum()
             )
         except KeyError:
-            eia_template.loc[next_idx, code] = float(
+            eia_template.loc[next_idx, code] = existing + float(
                 df.loc[matches_code & cost_filter, "Cost/all"].sum()
             )
 
 
-def fill_opex(it, _, year, dest, port, eia_template, wb, expense, attribution=None):
+def fill_opex(it, _, year, dest, port, eia_template, wb, attribution=None):
     """
     attribution : One of ["COLLECT", "RETURN", None], see `Attribution` column in Excel worksheets.
     """
     sheet_name = "Batch OPEX"
     cost_df, ind_codes, unique_ind_codes, next_idx = _setup_EIA_calculation(
-        wb, sheet_name, eia_template, it, year, dest, port, expense
+        wb, sheet_name, eia_template, it, year, dest, port, "Opex"
     )
 
     cost_type_df = find_table(wb.Sheets(sheet_name), "Amount")
     filters = create_cost_filters(cost_type_df, attribution)
 
-    labor_costs = 0.0
+    existing_labour = eia_template.loc[next_idx, "labour"]
+    labor_costs = float(existing_labour) if pd.notna(existing_labour) else 0.0
+
     for code in unique_ind_codes:
         matches_code = ind_codes[cost_df.index] == code
 
-        # Passive costs per industry
+        if code not in eia_template.columns:
+            eia_template[code] = 0.0
+
+        # Passive costs per industry (accumulate into existing)
         passive_sel = matches_code & filters["passive_opex"] & filters["attr"]
-        eia_template.loc[next_idx, code] = float(cost_df.loc[passive_sel, "Cost"].sum())
+        existing = eia_template.loc[next_idx, code]
+        existing = float(existing) if pd.notna(existing) else 0.0
+        eia_template.loc[next_idx, code] = existing + float(cost_df.loc[passive_sel, "Cost"].sum())
 
         # Accumulate labor costs
         labor_sel = matches_code & filters["labor"] & filters["attr"]
@@ -248,13 +263,13 @@ def fill_opex(it, _, year, dest, port, eia_template, wb, expense, attribution=No
     return eia_template
 
 
-def fill_capex(it, _, year, dest, port, eia_template, wb, expense, attribution=None):
+def fill_capex(it, _, year, dest, port, eia_template, wb, attribution=None):
     """
     attribution : One of ["COLLECT", "RETURN"], see `Attribution` column in Excel worksheets.
     """
     sheet_name = "Scale CAPEX"
     cost_df, ind_codes, unique_ind_codes, next_idx = _setup_EIA_calculation(
-        wb, sheet_name, eia_template, it, year, dest, port, expense
+        wb, sheet_name, eia_template, it, year, dest, port, "Capex"
     )
 
     cost_type_df = find_table(wb.Sheets(sheet_name), "Resource")
@@ -268,35 +283,19 @@ def fill_capex(it, _, year, dest, port, eia_template, wb, expense, attribution=N
         filters["passive"] & filters["attr"],
     )
 
+    # Accumulate labour costs (active + passive) across all industry codes, adding to existing
+    existing_labour = eia_template.loc[next_idx, "labour"]
+    labor_costs = float(existing_labour) if pd.notna(existing_labour) else 0.0
+    for code in unique_ind_codes:
+        matches_code = ind_codes[cost_df.index] == code
+        labor_sel = matches_code & filters["labor"] & filters["attr"]
+        try:
+            labor_costs += float(cost_df.loc[labor_sel, "Cost"].sum())
+        except KeyError:
+            labor_costs += float(cost_df.loc[labor_sel, "Cost/all"].sum())
+
+    eia_template.loc[next_idx, "labour"] = labor_costs
     eia_template.fillna(0.0, inplace=True)
-
-    return eia_template
-
-
-def fill_total_costs(it, iv_start, year, dest, port, eia_template, prefix):
-    """
-    Create total row by summing CAPEX and OPEX rows.
-
-    Parameters
-    ----------
-    prefix : str
-        Prefix for expense names (e.g., "3.0_Production" or "4.0_Deployment")
-    """
-    # Find existing CAPEX and OPEX rows
-    capex_line = find_or_fill_row(eia_template, it, year, dest, port, f"{prefix}_Capex")
-    opex_line = find_or_fill_row(eia_template, it, year, dest, port, f"{prefix}_Opex")
-
-    # Create or find total row
-    expense_name = f"{prefix}_Total_Capex_&_Opex"
-    next_idx = find_or_fill_row(eia_template, it, year, dest, port, expense_name)
-
-    # Fill metadata columns
-    eia_template.iloc[next_idx, 0:5] = (it, year, dest, port, expense_name)
-
-    # Sum cost columns
-    eia_template.iloc[next_idx, 5:] = eia_template.iloc[capex_line, 5:].astype(
-        float
-    ) + eia_template.iloc[opex_line, 5:].astype(float)
 
     return eia_template
 
@@ -304,40 +303,16 @@ def fill_total_costs(it, iv_start, year, dest, port, eia_template, prefix):
 def _process_cost_section(
     eia_template,
     wb,
-    section_name,
     shared_args,
     collect_return_flag=None,
 ):
-    """Process a single cost section (Collection, Return, Production, or Deployment)"""
-    # Fill CAPEX and OPEX
-    eia_template = fill_capex(
-        *shared_args, eia_template, wb, f"{section_name}_Capex", collect_return_flag
-    )
-    eia_template = fill_opex(
-        *shared_args, eia_template, wb, f"{section_name}_Opex", collect_return_flag
-    )
+    """Process a single cost section (Collection, Return, Production, or Deployment).
 
-    iv_start_year, curr_year = shared_args[1:3]
-    if curr_year > iv_start_year:
-        # Adjust capital costs
-        s_name = f"{section_name}_Capex"
-        relevant_sections = eia_template.expense_name == s_name
-        this_year = eia_template.year == curr_year
-        init_year = eia_template.year == iv_start_year
-
-        # CAPEX costs are made relative to initial year
-        # This assumes increases to production are temporary and do not carry over to
-        # forward years. Really we should be making it relative to the biggest deployment
-        # year *so far* (increases to production capacity are permanent).
-        this_row = this_year & relevant_sections
-        init_row = init_year & relevant_sections
-        eia_template.iloc[this_row, 5:] = (
-            eia_template.iloc[this_row, 5:].values
-            - eia_template.iloc[init_row, 5:].values
-        )
-
-    # Fill totals
-    eia_template = fill_total_costs(*shared_args, eia_template, section_name)
+    Accumulates CAPEX and OPEX into the single 'Capex' and 'Opex' rows for the
+    given (iteration, year, distance, port) combination.
+    """
+    eia_template = fill_capex(*shared_args, eia_template, wb, collect_return_flag)
+    eia_template = fill_opex(*shared_args, eia_template, wb, collect_return_flag)
 
     return eia_template
 
@@ -376,37 +351,28 @@ def fill_EIA_info(
     """
     shared_args = (it, iv_start_year, year, dest, port)
 
-    # Process production sections
-    sections = [
-        ("1.0_Coral_Collection", prod_wb, "COLLECT"),
-        ("2.0_Coral_Return", prod_wb, "RETURN"),
-        ("3.0_Production", prod_wb, None),
-    ]
+    # Process production sections (Collection, Return, Production)
+    for wb, flag in [
+        (prod_wb, "COLLECT"),
+        (prod_wb, "RETURN"),
+        (prod_wb, None),
+        (deploy_wb, None),
+    ]:
+        eia_template = _process_cost_section(eia_template, wb, shared_args, flag)
 
-    for section_name, wb, flag in sections:
-        eia_template = _process_cost_section(
-            eia_template,
-            wb,
-            section_name,
-            shared_args,
-            flag,
-        )
+    # Adjust CAPEX costs relative to initial intervention year.
+    # CAPEX is a one-time setup cost; in subsequent years only the *incremental*
+    # increase matters (i.e. the cost of scaling up from the initial deployment).
+    if year > iv_start_year:
+        this_year = eia_template.year == year
+        init_year = eia_template.year == iv_start_year
+        capex_rows = eia_template.expense_name == "Capex"
 
-    # Process deployment section
-    eia_template = _process_cost_section(
-        eia_template,
-        deploy_wb,
-        "4.0_Deployment",
-        shared_args,
-    )
-
-    # Add monitoring rows (zeros)
-    zero_row = [0.0] * 8
-    for expense_type in ["Capex", "Opex", "Total_Capex_&_Opex"]:
-        eia_template.loc[len(eia_template.index) - 1, :] = (
-            *(shared_args[:1] + shared_args[2:]),
-            f"5.0_Monitor_{expense_type}",
-            *zero_row,
+        this_row = this_year & capex_rows
+        init_row = init_year & capex_rows
+        eia_template.iloc[this_row, 5:] = (
+            eia_template.iloc[this_row, 5:].values
+            - eia_template.iloc[init_row, 5:].values
         )
 
     # Move labour column to last position

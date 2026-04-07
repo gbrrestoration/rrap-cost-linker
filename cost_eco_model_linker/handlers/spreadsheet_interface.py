@@ -113,7 +113,13 @@ def find_cost_table(ws: w32client.CDispatch) -> pd.DataFrame:
 def create_eia_template(wb):
     # Setup EIA template
     eia_template = pd.DataFrame(
-        columns=["iteration", "year", "distance", "port", "expense_name"]
+        columns=[
+            "iteration",
+            "year",
+            "intervention",
+            "location",
+            "type",
+        ]
     )
 
     ws = wb.Sheets("Scale CAPEX")

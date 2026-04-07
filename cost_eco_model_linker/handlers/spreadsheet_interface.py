@@ -60,7 +60,10 @@ def find_table(ws: w32client.CDispatch, first_header: str) -> pd.DataFrame:
     table_range = ws.Range(start_cell, end_cell)
 
     data = table_range.Value
-    df = pd.DataFrame(data[1:], columns=data[0]).dropna()
+    df = pd.DataFrame(data[1:], columns=data[0])
+    # Drop columns that are entirely empty (e.g. "batch" in the production model)
+    # before dropping rows with any NA, to avoid losing valid data rows.
+    df = df.dropna(axis=1, how="all").dropna().reset_index(drop=True)
     # If duplicate column names exist (e.g. two "Cost" columns), keep the last occurrence
     return df.loc[:, ~df.columns.duplicated(keep="last")]
 

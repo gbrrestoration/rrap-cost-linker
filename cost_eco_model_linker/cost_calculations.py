@@ -180,16 +180,19 @@ def sample_cost_model(nsims):
 
     if nsims is None or nsims == 1:
         # Best-point / deterministic run — use best_point_value directly.
-        # best_point_value is already in real-value space so no type
-        # conversion or discrete mapping is required.
-        factors_df_prod = pd.DataFrame(
-            [dict(zip(specs_prod.factor_names, specs_prod.best_point_value))]
+        # Apply convert_factor_types so categorical (integer) parameters are
+        # stored as ints rather than floats, matching the Sobol path.
+        factors_df_prod = convert_factor_types(
+            pd.DataFrame([dict(zip(specs_prod.factor_names, specs_prod.best_point_value))]),
+            specs_prod.is_cat,
         )
-        factors_df_dep = pd.DataFrame(
-            [dict(zip(specs_dep.factor_names, specs_dep.best_point_value))]
+        factors_df_dep = convert_factor_types(
+            pd.DataFrame([dict(zip(specs_dep.factor_names, specs_dep.best_point_value))]),
+            specs_dep.is_cat,
         )
-        factors_df_lm = pd.DataFrame(
-            [dict(zip(specs_lm.factor_names, specs_lm.best_point_value))]
+        factors_df_lm = convert_factor_types(
+            pd.DataFrame([dict(zip(specs_lm.factor_names, specs_lm.best_point_value))]),
+            specs_lm.is_cat,
         )
     else:
         # Sample production model factors
@@ -608,26 +611,25 @@ def calculate_costs(
                                 deploy_factors["opex"] + prod_factors["opex"]
                             ).values[0:nsims]
 
-                            if rs_yr_idx > 0:
-                                min_rs_yr = rs_years[0]
-                                eia_template_prod = fill_EIA_info(
-                                    prod_wb,
-                                    "CA_P",
-                                    rep,
-                                    min_rs_yr,
-                                    iv_yr,
-                                    departure_port,
-                                    eia_template_prod,
-                                )
-                                eia_template_deploy = fill_EIA_info(
-                                    deploy_wb,
-                                    "CA_D",
-                                    rep,
-                                    min_rs_yr,
-                                    iv_yr,
-                                    departure_port,
-                                    eia_template_deploy,
-                                )
+                            min_rs_yr = rs_years[0]
+                            eia_template_prod = fill_EIA_info(
+                                prod_wb,
+                                "CA_P",
+                                rep,
+                                min_rs_yr,
+                                iv_yr,
+                                departure_port,
+                                eia_template_prod,
+                            )
+                            eia_template_deploy = fill_EIA_info(
+                                deploy_wb,
+                                "CA_D",
+                                rep,
+                                min_rs_yr,
+                                iv_yr,
+                                departure_port,
+                                eia_template_deploy,
+                            )
 
                             deploy_wb = reset_workbook(xlapp, deploy_wb, deploy_model_fp)
                             prod_wb = reset_workbook(xlapp, prod_wb, prod_model_fp)
@@ -675,16 +677,15 @@ def calculate_costs(
                                 lm_factors["opex"].values[0:nsims] * opex_mult
                             )
 
-                            if rs_yr_idx > 0:
-                                eia_template_lm = fill_lm_EIA_info(
-                                    lm_wb,
-                                    "LM",
-                                    rep,
-                                    rs_years[0],
-                                    iv_yr,
-                                    departure_port,
-                                    eia_template_lm,
-                                )
+                            eia_template_lm = fill_lm_EIA_info(
+                                lm_wb,
+                                "LM",
+                                rep,
+                                rs_years[0],
+                                iv_yr,
+                                departure_port,
+                                eia_template_lm,
+                            )
 
                             lm_wb = reset_workbook(xlapp, lm_wb, lm_model_fp)
 
@@ -737,6 +738,9 @@ def calculate_costs(
                         on=["year", "component"],
                     )
 
+            combined["year"] = combined["year"].astype(int)
+            combined["component"] = combined["component"].astype(int)
+
             cost_filepath = path_join(
                 cost_dir,
                 f"ID{scen_id}_intervention_cost_data_iter_pid{p_iter_id}.csv",
@@ -774,7 +778,7 @@ def calculate_costs(
                     capex_mask, 0.0
                 )
                 eia_template.sort_values(
-                    ["iteration", "intervention", "location", "year", "type"],
+                    ["iteration", "year", "intervention", "location", "type"],
                     inplace=True,
                 )
                 eia_template.to_csv(

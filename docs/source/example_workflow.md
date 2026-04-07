@@ -216,4 +216,27 @@ An alternate conceptualization is that ports may be too busy, or operators unava
 In such circumstances, it is plausible that an different port would be used.
 The line below could be added to the deployment configuration CSV to explore such scenarios.
 
+>cost_type, sheet, cell_pos, factor_names, variable_type, SA_range_lower, SA_range_upper
+>best_point_value, range_lower, range_upper, discrete_values, UNC_distribution, is_cat,
+>comments
+>
 > deployment,Dashboard,D17,distance_from_facility,integer,50,350,50,50,350,"50,350",discrete,TRUE,in kilometers
+
+### What is the maximum ship range from port?
+
+The cost models support up to 119.99 nautical miles (NM).
+
+### How is the relationship between the number of coral species and functional groups handled?
+
+The short answer is they are not.
+
+The ecological models represent corals in terms of functional groups. Each functional group
+are represented by several species, and the number of species can differ between functional
+groups. While the configuration is flexible, the cost models typically assume 20 species
+total. How these 20 species are associated with each group is not considered for the purpose
+of costings.
+
+A complication is that the 20 species is on a per-region basis. Interventions across two
+regions would effectively double the cost compared to intervening on one region, as it is
+assumed that species cannot cross regions (either due to socio-cultural reasons or
+ecological concerns).

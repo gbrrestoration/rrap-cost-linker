@@ -33,12 +33,19 @@ def default_uncertainty_dict() -> dict:
             If 1 includes RFI uncertainty by sampling linear regression parameters used to calculate RFI.
 
     """
+    # return {
+    #     "ecol_uncert": 1,
+    #     "shelt_uncert": 0,
+    #     "expert_uncert": 1,
+    #     "rti_uncert": 1,
+    #     "rfi_uncert": 1,
+    # }
     return {
-        "ecol_uncert": 1,
+        "ecol_uncert": 0,
         "shelt_uncert": 0,
-        "expert_uncert": 1,
-        "rti_uncert": 1,
-        "rfi_uncert": 1,
+        "expert_uncert": 0,
+        "rti_uncert": 0,
+        "rfi_uncert": 0,
     }
 
 

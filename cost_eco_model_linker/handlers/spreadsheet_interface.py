@@ -96,7 +96,18 @@ def find_cost_table(ws: w32client.CDispatch) -> pd.DataFrame:
     table_range = target_header.CurrentRegion
     data = table_range.Value
 
-    return pd.DataFrame(data[1:], columns=data[0]).dropna()
+    type_header = ws.Cells.Find("Type")
+    type_data = type_header.CurrentRegion.Value
+    dt = (
+        pd.DataFrame(type_data[1:], columns=type_data[0])["Type"]
+        .dropna()
+        .reset_index(drop=True)
+    )
+
+    cost_data = pd.DataFrame(data[1:], columns=data[0]).dropna().reset_index(drop=True)
+    cost_data.loc[:, "Type"] = dt
+
+    return cost_data
 
 
 def create_eia_template(wb):

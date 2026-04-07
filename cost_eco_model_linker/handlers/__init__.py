@@ -4,4 +4,6 @@ from .spreadsheet_interface import (
     find_table,
     create_eia_template,
     fill_EIA_info,
+    create_lm_eia_template,
+    fill_lm_EIA_info,
 )

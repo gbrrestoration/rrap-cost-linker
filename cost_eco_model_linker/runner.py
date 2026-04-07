@@ -8,7 +8,7 @@ from packaging.version import Version
 
 import numpy as np
 import pandas as pd
-# from SALib import ProblemSpec
+from SALib import ProblemSpec
 
 import multiprocess as mp
 
@@ -29,6 +29,14 @@ from .sampling import (
     load_internal_config,
     calculate_production_cost,
     calculate_deployment_cost,
+    calculate_lm_cost,
+    convert_factor_types,
+    apply_discrete_mapping,
+    problem_spec,
+    get_NK,
+    _pool_initializer,
+    _fix_main_spec,
+    _apply_lm_inventory_model,
     THIS_DIR,
 )
 
@@ -40,6 +48,7 @@ SEMVER_RE = re.compile(r"^(?:.*/)?(\d+\.\d+\.\d+)\b")
 _KNOWN_MODEL_TYPES = {
     "production": "prod",
     "deployment": "deploy",
+    "lm": "LM",
 }
 
 
@@ -110,6 +119,7 @@ def evaluate(
     nsims: int,
     deploy_model_fn: str,
     prod_model_fn: str,
+    lm_model_fn: str,
     results_dir: str,
     metrics: list = None,
     uncertainty_dict: dict = None,
@@ -129,6 +139,8 @@ def evaluate(
         Path to production spreadsheet model, including filename but excluding file extension.
     results_dir : str
         Path to directory for storing results.
+    lm_model_fn : str
+        Path to LM spreadsheet model, including filename but excluding file extension.
     metrics : list, optional
         List of metrics to calculate. Default is None.
     uncertainty_dict : dict, optional
@@ -163,6 +175,15 @@ def evaluate(
     except FileNotFoundError:
         raise ValueError(f"No config available for production model {str(prod_m_ver)}")
 
+    m = SEMVER_RE.match(lm_model_fn)
+    lm_m_ver = Version(m.group(1)) if m else None
+    if lm_m_ver is None:
+        raise ValueError(f"No version info found in filename {lm_model_fn}")
+    try:
+        load_internal_config(f"{str(lm_m_ver)}_LM_config.csv")
+    except FileNotFoundError:
+        raise ValueError(f"No config available for LM model {str(lm_m_ver)}")
+
     # Setup data stores
     stores = setup_dirs(results_dir)
 
@@ -191,7 +212,7 @@ def evaluate(
 
     # Create cost data files for the intervention run ids in ID_key
     result_paths = calculate_costs(
-        stores, int_keys_fn, nsims, deploy_model_fn, prod_model_fn
+        stores, int_keys_fn, nsims, deploy_model_fn, prod_model_fn, lm_model_fn
     )
 
     return result_paths
@@ -203,6 +224,7 @@ def parallel_evaluate(
     ncores: int,
     deploy_model_fn: str,
     prod_model_fn: str,
+    lm_model_fn: str,
     results_dir: str,
     metrics: list = None,
     uncertainty_dict: dict = None,
@@ -226,7 +248,8 @@ def parallel_evaluate(
     )
 
     # Run cost sampling in parallel on ncores
-    with mp.Pool(ncores) as pool:
+    _fix_main_spec()
+    with mp.Pool(ncores, initializer=_pool_initializer) as pool:
         wrapper = partial(
             calculate_costs,
             stores,
@@ -234,6 +257,7 @@ def parallel_evaluate(
             nbatches,
             deploy_model_fn,
             prod_model_fn,
+            lm_model_fn,
             0.25,  # cont_p
         )
 
@@ -278,7 +302,9 @@ def evaluate_production_cost(
     xlapp, wb = open_excel(workbook_path)
     try:
         # Seed from config best-point values, then apply user overrides
-        spreadsheet_vals = dict(zip(factor_spec["factor_names"], factor_spec["best_point_value"]))
+        spreadsheet_vals = dict(
+            zip(factor_spec["factor_names"], factor_spec["best_point_value"])
+        )
         spreadsheet_vals.update(factors)
 
         factors_row = pd.Series(spreadsheet_vals)
@@ -325,7 +351,9 @@ def evaluate_deployment_cost(
     xlapp, wb = open_excel(workbook_path)
     try:
         # Seed from config best-point values, then apply user overrides
-        spreadsheet_vals = dict(zip(model_spec["factor_names"], model_spec["best_point_value"]))
+        spreadsheet_vals = dict(
+            zip(model_spec["factor_names"], model_spec["best_point_value"])
+        )
         spreadsheet_vals.update(factors)
 
         factors_row = pd.Series(spreadsheet_vals)
@@ -339,6 +367,101 @@ def evaluate_deployment_cost(
         close_excel(xlapp, wb)
 
     return capex, opex
+
+
+def evaluate_lm_cost(
+    workbook_path: str,
+    scenarios_df: pd.DataFrame,
+    **factors,
+) -> pd.DataFrame:
+    """
+    Evaluate the LM cost model over a year-by-year coral scenario and apply
+    the inventory/replacement model to produce a cost schedule.
+
+    For each year in ``scenarios_df``, the required pool count is derived as
+    ``clip(ceil(number of corals / yield_per_pool), range_lower, range_upper)``
+    using the bounds from the LM config. Capex/opex are read back from the
+    spreadsheet each year, and the inventory model is applied across the full
+    time series.
+
+    Parameters
+    ----------
+    workbook_path : str
+        Absolute path to the LM Excel workbook including extension (.xlsx).
+    scenarios_df : pd.DataFrame
+        Year-by-year coral scenario table with columns ``year`` and
+        ``number of corals``. Typically a single rep/intervention slice of
+        ``iv_yearly_scenarios.csv``. Will be sorted by year internally.
+    **factors
+        Factor name-value pairs to override from config best-point values.
+        Do not pass ``larval release pools`` — it is derived from
+        ``scenarios_df`` each year.
+
+    Returns
+    -------
+    pd.DataFrame
+        ``scenarios_df`` (sorted by year) extended with columns: ``capex``,
+        ``opex``, ``inventory``, ``new_capex_scale``,
+        ``new_capex_replacement``, ``total_capex``, ``total_capex_opex``,
+        ``ratio``, ``average``.
+    """
+    if "larval release pools" in factors:
+        raise ValueError(
+            "'larval release pools' must not be passed as a factor — it is "
+            "derived from 'number of corals' in scenarios_df each year."
+        )
+
+    _, version = _parse_model_info(workbook_path, "lm")
+    model_spec = pd.read_csv(os.path.join(THIS_DIR, f"{version}_LM_config.csv"))
+
+    unknown_factors = set(factors) - set(model_spec["factor_names"])
+    if unknown_factors:
+        raise ValueError(f"Unrecognised factor(s): {unknown_factors}")
+
+    scenarios_df = scenarios_df.sort_values("year").reset_index(drop=True)
+
+    # Resolve static factor values (best-point defaults + caller overrides).
+    defaults = dict(zip(model_spec["factor_names"], model_spec["best_point_value"]))
+    defaults.update(factors)
+    yield_per_pool = float(defaults["yield_per_pool"])
+
+    # Pool count range from the config.
+    pool_spec = model_spec.loc[
+        model_spec["factor_names"] == "larval release pools"
+    ].iloc[0]
+    pool_min = int(pool_spec["range_lower"])
+    pool_max = int(pool_spec["range_upper"])
+
+    base, ext = os.path.splitext(workbook_path)
+    tmp_fd, tmp_path = tempfile.mkstemp(suffix=ext, prefix=os.path.basename(base) + "_")
+    os.close(tmp_fd)
+
+    capex_vec = np.zeros(len(scenarios_df))
+    opex_vec = np.zeros(len(scenarios_df))
+
+    try:
+        shutil.copy(workbook_path, tmp_path)
+        xlapp, wb = open_excel(tmp_path)
+        try:
+            for i, row in scenarios_df.iterrows():
+                n_corals = float(row["number of corals"])
+                pools = int(
+                    np.clip(np.ceil(n_corals / yield_per_pool), pool_min, pool_max)
+                )
+                params = pd.Series({**defaults, "larval release pools": pools})
+                capex_vec[i], opex_vec[i] = calculate_lm_cost(wb, model_spec, params)
+                if i < len(scenarios_df) - 1:
+                    wb = reset_workbook(xlapp, wb, tmp_path)
+        finally:
+            close_excel(xlapp, wb)
+    finally:
+        os.remove(tmp_path)
+
+    year_table = scenarios_df.copy()
+    year_table["capex"] = capex_vec
+    year_table["opex"] = opex_vec
+
+    return _apply_lm_inventory_model(year_table)
 
 
 # --------------------------------------------------------------------------
@@ -393,21 +516,41 @@ def run_cost_model(
     model_type, version = _parse_model_info(workbook_path, model_type)
 
     if nprocs is not None and nprocs > 1:
-        chunks = [c for c in np.array_split(params_df, nprocs) if len(c) > 0]
+        idx_chunks = np.array_split(np.arange(len(params_df)), nprocs)
+        chunks = [params_df.iloc[idx] for idx in idx_chunks if len(idx) > 0]
         worker = partial(run_cost_model, workbook_path, model_type=model_type)
-        with mp.Pool(processes=nprocs) as pool:
+        _fix_main_spec()
+        with mp.Pool(processes=nprocs, initializer=_pool_initializer) as pool:
             results = pool.map(worker, chunks)
         return pd.concat(results, ignore_index=True)
 
     config_suffix = _KNOWN_MODEL_TYPES[model_type]
-    evaluate_fn = (
-        calculate_production_cost if model_type == "production" else calculate_deployment_cost
+    _evaluate_fn_map = {
+        "production": calculate_production_cost,
+        "deployment": calculate_deployment_cost,
+        "lm": calculate_lm_cost,
+    }
+    evaluate_fn = _evaluate_fn_map[model_type]
+    model_spec = pd.read_csv(
+        os.path.join(THIS_DIR, f"{version}_{config_suffix}_config.csv")
     )
-    model_spec = pd.read_csv(os.path.join(THIS_DIR, f"{version}_{config_suffix}_config.csv"))
 
     unknown = set(params_df.columns) - set(model_spec["factor_names"])
     if unknown:
         raise ValueError(f"Unrecognised factor(s): {unknown}")
+
+    # Apply categorical floor trick and discrete value mapping to match the
+    # sampling convention used by problem_spec / run_production_model etc.
+    input_spec = model_spec[model_spec["factor_names"].isin(params_df.columns)]
+    params_df = convert_factor_types(params_df.copy(), input_spec.is_cat.values)
+    params_df = apply_discrete_mapping(params_df, input_spec)
+
+    # Convert coral count to number of devices required to achieve the target,
+    # accounting for production yield. Both models expect device counts as input.
+    if "num_1yoec" in params_df.columns and "coral_yield_1YOEC" in params_df.columns:
+        params_df["num_1yoec"] = np.ceil(
+            params_df["num_1yoec"] / params_df["coral_yield_1YOEC"]
+        )
 
     base, ext = os.path.splitext(workbook_path)
     tmp_fd, tmp_path = tempfile.mkstemp(suffix=ext, prefix=os.path.basename(base) + "_")
@@ -419,7 +562,9 @@ def run_cost_model(
         try:
             # Seed from config best-point values — guarantees a known-good baseline
             # regardless of whatever state the spreadsheet was saved in
-            defaults = dict(zip(model_spec["factor_names"], model_spec["best_point_value"]))
+            defaults = dict(
+                zip(model_spec["factor_names"], model_spec["best_point_value"])
+            )
 
             results = np.zeros((len(params_df), 2))
             for i, (_, row) in enumerate(params_df.iterrows()):
@@ -439,47 +584,191 @@ def run_cost_model(
     )
 
 
-def run_parameter_sweep(
-    prod_model,
-    deploy_model,
-    sweep_param,
-    search_range,
-    prod_params=None,
-    dep_params=None,
-):
+def sample_joint_factors(
+    nsims: int, seed=None
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, ProblemSpec]:
     """
-    Run a parameter sweep over a range of values for any single parameter.
+    Generate Sobol' samples over the combined factor space of all three models
+    (production, deployment, and LM), then slice back into per-model DataFrames.
+
+    Building one combined ProblemSpec ensures every row corresponds to the same
+    sample point and that any shared factors are identical across models by
+    construction.
+
+    Categorical flooring and discrete value mapping are intentionally *not*
+    applied here — ``run_cost_model`` handles those transformations to avoid
+    double-application.
 
     Parameters
     ----------
-    prod_model : model
-        Production cost model
-    deploy_model : model
-        Deployment cost model
-    sweep_param : str
-        Name of the parameter to sweep over
-    search_range : iterable
-        Range of values to sweep over for sweep_param
-    prod_params : dict, optional
-        Fixed keyword arguments passed to evaluate_production_cost
-    dep_params : dict, optional
-        Fixed keyword arguments passed to evaluate_deployment_cost
+    nsims : int
+        Desired total number of model evaluations. The base Sobol' sample count
+        N is derived via ``get_NK(nsims, n_combined_factors)``.
+    seed : int or None
+        Random seed for reproducibility.
 
     Returns
     -------
+    prod_samples : pd.DataFrame
+        Raw Sobol' samples for the production model.
+    deploy_samples : pd.DataFrame
+        Raw Sobol' samples for the deployment model.
+    lm_samples : pd.DataFrame
+        Raw Sobol' samples for the LM model.
+    combined_sp : ProblemSpec
+        The combined ProblemSpec used for sampling.
+    """
+    sp_prod, _ = problem_spec("production")
+    sp_dep, _ = problem_spec("deployment")
+    sp_lm, _ = problem_spec("lm")
+
+    prod_names = sp_prod["names"]
+    dep_names = sp_dep["names"]
+    lm_names = sp_lm["names"]
+
+    # Union of all factor names; production definitions take precedence for any shared factors.
+    seen = set()
+    combined_names = []
+    for n in list(prod_names) + list(dep_names) + list(lm_names):
+        if n not in seen:
+            combined_names.append(n)
+            seen.add(n)
+
+    bounds_map = {
+        **dict(zip(lm_names, sp_lm["bounds"])),
+        **dict(zip(dep_names, sp_dep["bounds"])),
+        **dict(zip(prod_names, sp_prod["bounds"])),
+    }
+    dists_map = {
+        **dict(zip(lm_names, sp_lm["dists"])),
+        **dict(zip(dep_names, sp_dep["dists"])),
+        **dict(zip(prod_names, sp_prod["dists"])),
+    }
+
+    combined_sp = ProblemSpec(
+        {
+            "num_vars": len(combined_names),
+            "names": combined_names,
+            "bounds": [bounds_map[n] for n in combined_names],
+            "dists": [dists_map[n] for n in combined_names],
+        }
+    )
+    N, _ = get_NK(nsims, len(combined_names))
+    combined_sp.sample_sobol(N, calc_second_order=False, seed=seed)
+    combined_samples = pd.DataFrame(data=combined_sp.samples, columns=combined_names)
+
+    prod_df = combined_samples[list(prod_names)].copy()
+    dep_df = combined_samples[list(dep_names)].copy()
+    lm_df = combined_samples[list(lm_names)].copy()
+
+    return prod_df, dep_df, lm_df, combined_sp
+
+
+def run_joint_cost_models(
+    prod_workbook: str,
+    deploy_workbook: str,
+    lm_workbook: str,
+    prod_samples: pd.DataFrame,
+    deploy_samples: pd.DataFrame,
+    lm_samples: pd.DataFrame,
+    *,
+    nprocs: int = 1,
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """
+    Run production, deployment, and LM cost models against jointly-sampled parameters.
+
+    Parameters
+    ----------
+    prod_workbook : str
+        Path to the production model workbook.
+    deploy_workbook : str
+        Path to the deployment model workbook.
+    lm_workbook : str
+        Path to the LM model workbook.
+    prod_samples, deploy_samples, lm_samples : pd.DataFrame
+        Raw sample DataFrames as returned by ``sample_joint_factors``.
+    nprocs : int, optional
+        Number of parallel workers. Default 1.
+
+    Returns
+    -------
+    prod_results, deploy_results, lm_results : pd.DataFrame
+        Sample DataFrames with ``capex``, ``opex``, and ``total_cost`` columns added.
+    """
+    prod_results = run_cost_model(prod_workbook, prod_samples, nprocs=nprocs)
+    deploy_results = run_cost_model(deploy_workbook, deploy_samples, nprocs=nprocs)
+    lm_results = run_cost_model(lm_workbook, lm_samples, nprocs=nprocs)
+    return prod_results, deploy_results, lm_results
+
+
+def _factor_names(workbook_path: str, model_type: str | None = None) -> set:
+    """Return the set of valid factor names for the given workbook."""
+    model_type, version = _parse_model_info(workbook_path, model_type)
+    config_suffix = _KNOWN_MODEL_TYPES[model_type]
+    spec = pd.read_csv(os.path.join(THIS_DIR, f"{version}_{config_suffix}_config.csv"))
+    return set(spec["factor_names"])
+
+
+def _build_sweep(sweep_param, search_range, fixed_params, valid_factors):
+    """
+    Build a sweep DataFrame, including sweep_param only if it is a valid factor
+    for the target model. Unknown keys in fixed_params are also silently dropped.
+    """
+    row_base = {k: v for k, v in fixed_params.items() if k in valid_factors}
+    if sweep_param in valid_factors:
+        return pd.DataFrame([{sweep_param: val, **row_base} for val in search_range])
+    return pd.DataFrame([row_base] * len(search_range))
+
+
+def sweep_ca(
+    prod_model: str,
+    deploy_model: str,
+    sweep_param: str,
+    search_range,
+    prod_params: dict = None,
+    dep_params: dict = None,
+) -> pd.DataFrame:
+    """
+    Sweep a single parameter across the CA production and deployment models.
+
+    Parameters
+    ----------
+    prod_model : str
+        Path to production cost model workbook.
+    deploy_model : str
+        Path to deployment cost model workbook.
+    sweep_param : str
+        Name of the parameter to sweep over.
     search_range : iterable
-        The input search range
-    prod_capex : np.ndarray
-    prod_opex : np.ndarray
-    dep_capex : np.ndarray
-    dep_opex : np.ndarray
-    totals : np.ndarray
+        Values to sweep over.
+    prod_params : dict, optional
+        Fixed factor overrides for the production model.
+    dep_params : dict, optional
+        Fixed factor overrides for the deployment model. Any key also present
+        in ``prod_params`` is overwritten by the production value, keeping
+        shared factors (e.g. ``num_1yoec``, ``coral_yield_1YOEC``) consistent.
+
+    Returns
+    -------
+    pd.DataFrame
+        One row per sweep value with columns: ``search_range``,
+        ``prod_capex``, ``prod_opex``, ``dep_capex``, ``dep_opex``,
+        ``total_cost``.
     """
     prod_params = prod_params or {}
     dep_params = dep_params or {}
+    search_range = list(search_range)
 
-    prod_sweep = pd.DataFrame([{sweep_param: val, **prod_params} for val in search_range])
-    dep_sweep = pd.DataFrame([{sweep_param: val, **dep_params} for val in search_range])
+    prod_factors = _factor_names(prod_model)
+    dep_factors = _factor_names(deploy_model)
+
+    prod_sweep = _build_sweep(sweep_param, search_range, prod_params, prod_factors)
+
+    # Production values overwrite deployment values for any shared factors.
+    effective_dep_params = {**dep_params, **prod_params}
+    dep_sweep = _build_sweep(
+        sweep_param, search_range, effective_dep_params, dep_factors
+    )
 
     prod_results = run_cost_model(prod_model, prod_sweep)
     dep_results = run_cost_model(deploy_model, dep_sweep)
@@ -491,6 +780,50 @@ def run_parameter_sweep(
             "prod_opex": prod_results["opex"].values,
             "dep_capex": dep_results["capex"].values,
             "dep_opex": dep_results["opex"].values,
-            "totals": prod_results["total_cost"].values + dep_results["total_cost"].values,
+            "total_cost": prod_results["total_cost"].values
+            + dep_results["total_cost"].values,
+        }
+    )
+
+
+def sweep_lm(
+    lm_model: str,
+    sweep_param: str,
+    search_range,
+    lm_params: dict = None,
+) -> pd.DataFrame:
+    """
+    Sweep a single parameter across the LM cost model.
+
+    Parameters
+    ----------
+    lm_model : str
+        Path to LM cost model workbook.
+    sweep_param : str
+        Name of the parameter to sweep over.
+    search_range : iterable
+        Values to sweep over.
+    lm_params : dict, optional
+        Fixed factor overrides for the LM model.
+
+    Returns
+    -------
+    pd.DataFrame
+        One row per sweep value with columns: ``search_range``,
+        ``capex``, ``opex``, ``total_cost``.
+    """
+    lm_params = lm_params or {}
+    search_range = list(search_range)
+
+    lm_factors = _factor_names(lm_model)
+    lm_sweep = _build_sweep(sweep_param, search_range, lm_params, lm_factors)
+    lm_results = run_cost_model(lm_model, lm_sweep)
+
+    return pd.DataFrame(
+        {
+            "search_range": search_range,
+            "capex": lm_results["capex"].values,
+            "opex": lm_results["opex"].values,
+            "total_cost": lm_results["total_cost"].values,
         }
     )

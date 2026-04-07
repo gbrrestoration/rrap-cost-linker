@@ -11,13 +11,19 @@ from .runner import (
     run_cost_model,
     evaluate_production_cost,
     evaluate_deployment_cost,
-    run_parameter_sweep,
+    evaluate_lm_cost,
+    sweep_ca,
+    sweep_lm,
+    sample_joint_factors,
+    run_joint_cost_models,
 )
 
 from .sampling import (
     problem_spec,
+    get_NK,
     run_production_model,
     run_deployment_model,
+    run_lm_model,
     extract_sa_results,
 )
 
@@ -29,4 +35,6 @@ from .handlers import (
     find_table,
     create_eia_template,
     fill_EIA_info,
+    create_lm_eia_template,
+    fill_lm_EIA_info,
 )

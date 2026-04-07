@@ -419,18 +419,18 @@ def create_economics_metric_files(
         cf_scens = unique_cf_scens[scen_id_start:scen_id_end]
 
         # Create intervention key dataframe
-        scen_cols = ["intervention id", "year", "rep", "number of corals"]
+        scen_cols = ["intervention id", "year", "rep", "number of corals", "type", "reefset"]
         id_key_df = scens_df_iv[scen_cols].assign(port_name="", distance_to_port_NM=0.0)
 
-        # Determine distance to nearest port
-        port_name, distance_NM = find_representative_port(reef_spatial_data, iv_reefs)
-
-        # Determine representative reef
+        # Determine distance to nearest port and representative reef per reefset
         reef_name = find_representative_reef(reef_spatial_data, iv_reefs)
-
         id_key_df["reef"] = reef_name
-        id_key_df["port_name"] = port_name
-        id_key_df["distance_to_port_NM"] = distance_NM
+        for rs_name in reefset_names:
+            rs_reefs = iv_dict[rs_name]
+            rs_port_name, rs_distance_NM = find_representative_port(reef_spatial_data, rs_reefs)
+            rs_mask = id_key_df["reefset"] == rs_name
+            id_key_df.loc[rs_mask, "port_name"] = rs_port_name
+            id_key_df.loc[rs_mask, "distance_to_port_NM"] = rs_distance_NM
 
         # Process batches
         batch_files = []

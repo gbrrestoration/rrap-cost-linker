@@ -240,3 +240,16 @@ A complication is that the 20 species is on a per-region basis. Interventions ac
 regions would effectively double the cost compared to intervening on one region, as it is
 assumed that species cannot cross regions (either due to socio-cultural reasons or
 ecological concerns).
+
+### Do the EIA output files contain per-draw cost breakdowns?
+
+No. The EIA files (`EIA_{id}_{model}.csv`) record industry-code cost breakdowns (CAPEX
+and OPEX by ANZSIC code) for the **last cost model draw only**. This is a known limitation:
+`fill_EIA_info` reads directly from the workbook after all draws have been evaluated, so
+only the final workbook state is captured.
+
+Per-draw cost totals (CAPEX, contingency, OPEX, etc.) are available in the
+`intervention_cost_data` CSV files, which contain one `draw` column per ecological
+replicate × cost model sample combination. Use these files for uncertainty quantification.
+The EIA files are intended for industry-code cost structure auditing, not for propagating
+uncertainty.

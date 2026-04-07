@@ -612,6 +612,42 @@ def _apply_lm_inventory_model(
     return out
 
 
+def _draw_samples(sp, sample_config, nsims):
+    """
+    Return a DataFrame of parameter samples for a cost model.
+
+    When ``nsims`` is ``None`` or ``1``, skips Sobol' sampling and returns a
+    single row of ``best_point_value`` entries instead.
+
+    Parameters
+    ----------
+    sp : SALib ProblemSpec
+        Problem specification (from ``problem_spec()``).
+    sample_config : DataFrame
+        Factor specification rows with ``best_point_value`` and ``is_cat`` columns
+        (capex/opex rows excluded).
+    nsims : int or None
+        Desired number of samples.  ``None`` or ``1`` triggers best-point mode.
+
+    Returns
+    -------
+    samples : DataFrame
+        One row per sample, columns matching factor names.
+    """
+    if nsims is None or nsims == 1:
+        samples = pd.DataFrame(
+            [dict(zip(sample_config.factor_names, sample_config.best_point_value))]
+        )
+        return convert_factor_types(samples, sample_config.is_cat)
+
+    N, _ = get_NK(nsims, sp["num_vars"])
+    sp.sample_sobol(N, calc_second_order=False)
+    samples = pd.DataFrame(data=sp.samples, columns=sp["names"])
+    samples = convert_factor_types(samples, sample_config.is_cat)
+    samples = apply_discrete_mapping(samples, sample_config)
+    return samples
+
+
 def run_lm_model(cost_model: str, nsims: int, nprocs: int = 1):
     """
     Generate Sobol' samples for the LM model and run.
@@ -632,11 +668,7 @@ def run_lm_model(cost_model: str, nsims: int, nprocs: int = 1):
     sp, model_config = problem_spec("lm")
     sample_config = model_config.loc[~model_config.factor_names.isin(["capex", "opex"])]
 
-    N, _ = get_NK(nsims, sp["num_vars"])
-    sp.sample_sobol(N, calc_second_order=False)
-    samples = pd.DataFrame(data=sp.samples, columns=sp["names"])
-    samples = convert_factor_types(samples, sample_config.is_cat)
-    samples = apply_discrete_mapping(samples, sample_config)
+    samples = _draw_samples(sp, sample_config, nsims)
 
     if nprocs > 1:
         idx_chunks = np.array_split(np.arange(len(samples)), nprocs)
@@ -739,11 +771,7 @@ def run_deployment_model(cost_model: str, nsims: int, nprocs: int = 1):
     sp, model_config = problem_spec("deployment")
     sample_config = model_config.loc[~model_config.factor_names.isin(["capex", "opex"])]
 
-    N, _ = get_NK(nsims, sp["num_vars"])
-    sp.sample_sobol(N, calc_second_order=False)
-    samples = pd.DataFrame(data=sp.samples, columns=sp["names"])
-    samples = convert_factor_types(samples, sample_config.is_cat)
-    samples = apply_discrete_mapping(samples, sample_config)
+    samples = _draw_samples(sp, sample_config, nsims)
 
     if nprocs > 1:
         idx_chunks = np.array_split(np.arange(len(samples)), nprocs)
@@ -796,11 +824,7 @@ def run_production_model(cost_model: str, nsims: int, nprocs: int = 1):
     sp, model_config = problem_spec("production")
     sample_config = model_config.loc[~model_config.factor_names.isin(["capex", "opex"])]
 
-    N, _ = get_NK(nsims, sp["num_vars"])
-    sp.sample_sobol(N, calc_second_order=False)
-    samples = pd.DataFrame(data=sp.samples, columns=sp["names"])
-    samples = convert_factor_types(samples, sample_config.is_cat)
-    samples = apply_discrete_mapping(samples, sample_config)
+    samples = _draw_samples(sp, sample_config, nsims)
 
     if nprocs > 1:
         idx_chunks = np.array_split(np.arange(len(samples)), nprocs)

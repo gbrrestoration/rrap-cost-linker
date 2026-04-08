@@ -1,11 +1,11 @@
 cost_type,sheet,cell_pos,factor_names,variable_type,SA_range_lower,SA_range_upper,best_point_value,range_lower,range_upper,discrete_values,UNC_distribution,is_cat,comments
 lm,Dashboard,J7,capex,output,0,0,0,1,2,,unif,FALSE,dummy lower and upper bounds
 lm,Dashboard,J6,opex,output,0,0,0,1,2,,unif,FALSE,dummy lower and upper bounds
-lm,Dashboard,D6,larval release pools,integer,180,1796,180,180,1796,,unif,TRUE,integer multiple of 5569 (# 1YOC per pool); 180 ~ 1M 1YOC; 1796 ~ 10M 1YOC
-lm,Dashboard,J12,yield_per_pool,integer,4000,50000,5500,5000,20000,,unif,TRUE,Distribution should really be gamma with peak at 5500
+lm,Dashboard,D6,larval release pools,integer,1,1796,180,180,1796,,unif,TRUE,integer multiple of 5569 (# 1YOC per pool); 180 ~ 1M 1YOC; 1796 ~ 10M 1YOC
+lm,Dashboard,J12,yield_per_pool,integer,4000,50000,5569,5000,20000,,unif,TRUE,Distribution should really be gamma with peak at 5500
 lm,Logistics,I44,seedboxes_per_pool,integer,2,12,6,5,8,,unif,TRUE,
-lm,Logistics,I64,pools_per_tender,float,0.25,10,2.0,0.5,10,,unif,FALSE,continuous variable
-lm,Logistics,I79,pools_per_day,integer,5,40,15,10,24,,unif,TRUE,
+lm,Logistics,I64,pools_per_tender,float,0.25,10,4,0.5,10,,unif,FALSE,continuous variable
+lm,Logistics,I79,pools_per_day,integer,5,40,16,10,24,,unif,TRUE,
 lm,Logistics,F101,people_per_tender,integer,2,4,3,2,4,"2,3,4",unif,TRUE,Discrete uniform over 2/3/4; see comments re. normal distribution
-lm,Pricing,E20,culturing_pool,float,6000,8000,7000,6000,8000,,unif,FALSE,
+lm,Pricing,E20,culturing_pool,float,6000,8000,8000,6000,8000,,unif,FALSE,
 lm,Pricing,E22,seedbox_price,float,400,600,500,400,600,,unif,FALSE,

@@ -367,6 +367,20 @@ def apply_discrete_mapping(factors_df, model_spec):
     return factors_df
 
 
+def _com_retry(fn, retries=3, delay=2.0):
+    """Call ``fn()`` retrying on COM/RPC failures up to ``retries`` times."""
+    import time
+    import pywintypes
+
+    for attempt in range(retries):
+        try:
+            return fn()
+        except (pywintypes.com_error, AttributeError):
+            if attempt == retries - 1:
+                raise
+            time.sleep(delay * (attempt + 1))
+
+
 def _run_cost_model(xlapp, wb, wb_path, cost_factors, factor_spec, calculate_cost):
     """
     Run and collect results from a cost model.
@@ -399,25 +413,32 @@ def _run_cost_model(xlapp, wb, wb_path, cost_factors, factor_spec, calculate_cos
     best_point = factor_spec[not_output].set_index("factor_names")["best_point_value"]
 
     def _seed_workbook(wb):
-        for fname, value in best_point.items():
-            row = factor_spec.loc[factor_spec.factor_names == fname].iloc[0]
-            wb.Sheets(row.sheet).Range(row.cell_pos).Value = value
+        xlManual = -4135
+        xlAutomatic = -4105
+        wb.Application.Calculation = xlManual
+        try:
+            for fname, value in best_point.items():
+                row = factor_spec.loc[factor_spec.factor_names == fname].iloc[0]
+                wb.Sheets(row.sheet).Range(row.cell_pos).Value = value
+        finally:
+            wb.Application.Calculation = xlAutomatic
 
     total_cost = np.full((cost_factors.shape[0], 2), np.nan)
     for idx_n in range(len(total_cost)):
-        _seed_workbook(wb)
+        _com_retry(lambda: _seed_workbook(wb))
+        row_params = cost_factors.iloc[idx_n, :]
         try:
-            total_cost[idx_n, :] = calculate_cost(
-                wb, factor_spec, cost_factors.iloc[idx_n, :]
+            total_cost[idx_n, :] = _com_retry(
+                lambda: calculate_cost(wb, factor_spec, row_params)
             )
         except ValueError as e:
             import warnings
 
             warnings.warn(
-                f"Row {idx_n} skipped in '{os.path.basename(wb_path)}' — {e}. Params: {cost_factors.iloc[idx_n].to_dict()}"
+                f"Row {idx_n} skipped in '{os.path.basename(wb_path)}' — {e}. Params: {row_params.to_dict()}"
             )
         if idx_n < len(total_cost) - 1:
-            wb = reset_workbook(xlapp, wb, wb_path)
+            wb = _com_retry(lambda: reset_workbook(xlapp, wb, wb_path))
 
     try:
         cost_factors.loc[:, ["capex", "opex"]] = total_cost

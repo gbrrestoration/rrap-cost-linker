@@ -3,7 +3,7 @@ production,Dashboard,L14,capex,output,0,0,0,1,2,,,FALSE,dummy lower and upper bo
 production,Dashboard,L16,opex,output,0,0,0,1,2,,,FALSE,dummy lower and upper bounds
 production,Dashboard,E5,num_1yoec,integer,1000000,20000000,1000000,1000000,20000000,,unif,TRUE,Indicates target number of 1YOEC - automatically converts to the devices required to get the target number
 production,Dashboard,E10,species_no,integer,5,20,20,15,20,,logunif,TRUE,
-production,Dashboard,E12,coral_yield_1YOEC,incremental,0.3,0.7,0.4,0.3,0.5,"0.3,0.4,0.5",unif,FALSE,
+production,Dashboard,E12,coral_yield_1YOEC,incremental,0.2,0.8,0.3,0.2,0.4,"0.2,0.3,0.4",unif,FALSE,
 production,Conversions,F7,col_spawn_gam_bun,integer,22500,27500,25000,22500,27500,,unif,TRUE,should be norm but need stdev
 production,Conversions,G8,gam_bun_egg,integer,10,14,12,10,14,,unif,TRUE,should be normally distributed but need stdev
 production,Conversions,H9,egg_embryo,incremental,0.7,0.9,0.9,0.7,0.9,"0.7,0.8,0.9",unif,FALSE,

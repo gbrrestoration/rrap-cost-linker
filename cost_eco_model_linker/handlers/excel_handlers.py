@@ -50,10 +50,13 @@ def close_excel(xlapp, wb, quit_app=True):
     """
     try:
         wb.Close(SaveChanges=False)
-    except pywintypes.com_error:
+    except (pywintypes.com_error, AttributeError):
         pass  # wb may be stale if reset_workbook was called; xlapp.Quit() handles cleanup
     if quit_app:
-        xlapp.Quit()
+        try:
+            xlapp.Quit()
+        except (pywintypes.com_error, AttributeError):
+            pass  # xlapp COM object may already be dead (e.g. Excel crashed mid-run)
 
 
 def reset_workbook(xlapp, wb, fp):

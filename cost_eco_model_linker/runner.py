@@ -758,6 +758,21 @@ def sweep_ca(
     prod_params = prod_params or {}
     dep_params = dep_params or {}
     search_range = list(search_range)
+    output_range = search_range  # reported in output; preserved in original caller units
+
+    # num_1yoec is expressed as a coral count by the caller (consistent with evaluate()).
+    # The spreadsheet cell accepts device count, so convert: devices = ceil(corals / yield).
+    # Yield comes from the caller's params if provided, otherwise from the config best-point.
+    device_range = None
+    if sweep_param == "num_1yoec":
+        _, prod_ver = _parse_model_info(prod_model, "production")
+        prod_cfg = pd.read_csv(os.path.join(THIS_DIR, f"{prod_ver}_prod_config.csv"))
+        default_yield = float(
+            prod_cfg.loc[prod_cfg["factor_names"] == "coral_yield_1YOEC", "best_point_value"].iloc[0]
+        )
+        yield_val = float(prod_params.get("coral_yield_1YOEC", dep_params.get("coral_yield_1YOEC", default_yield)))
+        device_range = list(np.ceil(np.array(search_range) / yield_val).astype(int))
+        search_range = device_range
 
     prod_factors = _factor_names(prod_model)
     dep_factors = _factor_names(deploy_model)
@@ -775,7 +790,7 @@ def sweep_ca(
 
     return pd.DataFrame(
         {
-            "search_range": search_range,
+            "search_range": output_range,
             "prod_capex": prod_results["capex"].values,
             "prod_opex": prod_results["opex"].values,
             "dep_capex": dep_results["capex"].values,

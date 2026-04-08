@@ -253,3 +253,21 @@ Per-draw cost totals (CAPEX, contingency, OPEX, etc.) are available in the
 replicate × cost model sample combination. Use these files for uncertainty quantification.
 The EIA files are intended for industry-code cost structure auditing, not for propagating
 uncertainty.
+
+### Do the cost parameter CSV files reflect the actual deployment distance used?
+
+Partially. The files `ID{id}_rep{rep}_cost_params_deployment_pid{pid}.csv` are saved once
+per replicate, before the per-year loop runs. The `distance_from_port` value recorded is
+taken from the **first reefset of the first intervention year** for that replicate, which
+is used as a representative value.
+
+In multi-reefset scenarios, each reefset may have a different distance. Only the distance
+for the first reefset is captured in the params file; distances for other reefsets are
+applied during the year loop via `update_factors` but are not separately recorded.
+
+### Are there any manual changes I need to do to the cost models?
+
+Yes.
+
+In the CA-Production cost models, the "New species batches - count" field (currently
+E11) should be set to zero (0).

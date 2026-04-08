@@ -463,7 +463,25 @@ def calculate_costs(
                     lm_factors,
                 ) = sample_cost_model(nsims)
 
-                # Save sampled parameters so draws can be cross-checked manually
+                # Apply the actual port distance to deploy_factors before saving so
+                # the CSV reflects the value used in the simulation, not the config
+                # best-point. Use the first reefset of the first intervention year as
+                # representative (distance is fixed per reefset across years).
+                _first_yr = iv_years[0]
+                _first_rs = ID_key.loc[
+                    (ID_key.intervention_years == _first_yr) & rep_idx, "reefset"
+                ].iloc[0]
+                _first_distance = ID_key.loc[
+                    (ID_key.intervention_years == _first_yr)
+                    & rep_idx
+                    & (ID_key.reefset == _first_rs),
+                    "distance_to_port_NM",
+                ].iloc[0]
+                deploy_factors.loc[:, "distance_from_port"] = _first_distance
+
+                # Save sampled parameters so draws can be cross-checked manually.
+                # For production and deployment, also include num_devices (the value
+                # written to the spreadsheet) alongside num_1yoec (coral count).
                 for _label, _df in [
                     ("production", prod_factors),
                     ("deployment", deploy_factors),
@@ -473,8 +491,15 @@ def calculate_costs(
                         cost_dir,
                         f"ID{scen_id}_rep{rep}_cost_params_{_label}_pid{p_iter_id}.csv",
                     )
-                    _df.index = np.arange(1, len(_df) + 1)
-                    _df.to_csv(_params_fp, index_label="draw")
+                    _save_df = _df.copy()
+                    if "num_1yoec" in _save_df.columns and "coral_yield_1YOEC" in _save_df.columns:
+                        _save_df.insert(
+                            _save_df.columns.get_loc("num_1yoec") + 1,
+                            "num_devices",
+                            np.ceil(_save_df["num_1yoec"] / _save_df["coral_yield_1YOEC"]).astype(int),
+                        )
+                    _save_df.index = np.arange(1, len(_save_df) + 1)
+                    _save_df.to_csv(_params_fp, index_label="draw")
 
                 # Track cumulative capex (components 1+2) across years for maintenance calc
                 cumulative_capex = np.zeros(nsims)

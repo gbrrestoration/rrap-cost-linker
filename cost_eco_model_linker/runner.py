@@ -38,9 +38,6 @@ from .sampling import (
     THIS_DIR,
 )
 
-import numpy as np
-import pandas as pd
-
 SEMVER_RE = re.compile(r"^(?:.*[/\\])?(\d+\.\d+\.\d+)\b")
 
 _KNOWN_MODEL_TYPES = {
@@ -126,6 +123,7 @@ def evaluate(
     costs_only: bool = False,
     sample_scale: bool = False,
     distance_override_NM: float = None,
+    coral_only: bool = False,
 ) -> list[str]:
     """
     Evaluate costs of intervention scenarios.
@@ -164,6 +162,8 @@ def evaluate(
         fixed value (nautical miles) for all reefsets.  Useful for best-guess
         explorer runs where the config best-point distance (e.g. 27 NM North,
         54 NM Centre) should be used instead of the computed reef distance.
+    coral_only : bool, default=False
+        If True, only use coral-related metrics (RCI_3 and RFI), excluding COTS and Rubble.
 
     Returns
     -------
@@ -184,6 +184,7 @@ def evaluate(
 
     # Check available config aligns with model versions
     m = SEMVER_RE.match(deploy_model_fn)
+    print(deploy_model_fn)
     deploy_m_ver = Version(m.group(1)) if m else None
     if deploy_m_ver is None:
         raise ValueError(f"No version info found in filename {deploy_model_fn}")
@@ -220,7 +221,11 @@ def evaluate(
 
     # Set defaults
     if metrics is None:
-        metrics = [prd.rci, prd.raw_rti, prd.rfi]
+        if coral_only:
+            print("Using 3-metric RCI and excluding RTI (coral-only mode).")
+            metrics = [prd.rci_3, prd.rfi]
+        else:
+            metrics = [prd.rci, prd.raw_rti, prd.rfi]
     if uncertainty_dict is None:
         uncertainty_dict = default_uncertainty_dict()
 
@@ -276,7 +281,6 @@ def evaluate(
         _combine_parallel_outputs(stores.cost_dir, scen_ids, nprocs, nbatches_per_core)
 
         return [path for worker_paths in result for path in worker_paths]
-
     else:
         # Serial path
         int_keys_fn, metric_fps = create_economics_metric_files(
@@ -315,6 +319,72 @@ def evaluate(
             stores.cost_dir, scen_ids, nprocs=1, nbatches_per_core=nsims
         )
         return result_paths
+
+
+def parallel_evaluate(
+    rme_files_path: str,
+    nsims: int,
+    ncores: int,
+    deploy_model_fn: str,
+    prod_model_fn: str,
+    lm_model_fn: str,
+    results_dir: str,
+    metrics: list = None,
+    uncertainty_dict: dict = None,
+    coral_only: bool = False,
+):
+    stores = setup_dirs(results_dir)
+
+    # Set defaults
+    if metrics is None:
+        if coral_only:
+            print("Using 3-metric RCI and excluding RTI (coral-only mode).")
+            metrics = [prd.rci_3, prd.rfi]
+        else:
+            metrics = [prd.rci, prd.raw_rti, prd.rfi]
+    if uncertainty_dict is None:
+        uncertainty_dict = default_uncertainty_dict()
+
+    # Create economics metrics input files, get number of batches needed to complete nsims over ncores
+    from .parallel_cost_sampling import para_sample_econ
+
+    int_keys_fn, nbatches = para_sample_econ(
+        rme_files_path,
+        nsims,
+        stores,
+        ncores=ncores,
+        metrics=metrics,
+        uncertainty_dict=uncertainty_dict,
+    )
+
+    nbatches_per_core = int(np.ceil(nsims / ncores))
+
+    # Run cost sampling in parallel on ncores
+    _fix_main_spec()
+    wrapper = partial(
+        calculate_costs,
+        stores,
+        int_keys_fn,
+        nbatches_per_core,
+        deploy_model_fn,
+        prod_model_fn,
+        lm_model_fn,
+        0.25,  # cont_p
+        active_models=None,
+        sample_scale=False,
+    )
+    with mp.Pool(ncores, initializer=_pool_initializer) as pool:
+        result = pool.map(wrapper, range(ncores))
+
+    post_process_costs(result, nsims)
+
+    scen_ids = [
+        int(re.search(r"ID(\d+)_", os.path.basename(fp)).group(1)) for fp in result[0]
+    ]
+    _combine_parallel_outputs(stores.cost_dir, scen_ids, ncores, nbatches_per_core)
+
+    return [path for worker_paths in result for path in worker_paths]
+
 
 
 def _combine_parallel_outputs(cost_dir, scen_ids, nprocs, nbatches_per_core):

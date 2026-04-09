@@ -154,6 +154,26 @@ def rci(metrics_dict: dict, metrics_df: pd.DataFrame, rci_threshold=0.6):
     return np.transpose(rci * np.array(metrics_df["total_area_nine_zones"]), (1, 0))
 
 
+def rci_3(metrics_dict: dict, metrics_df: pd.DataFrame, rci_threshold=0.6):
+    """
+    Processes metrics dict into area at threshold RCI_3 and above.
+
+    Parameters
+    ----------
+    metrics_dict : dict
+        Dict containing key sampled metrics and the RCI_3
+    metrics_df : dataframe
+        Dataframe containing scenario summary dataframe
+    rci_threshold : float
+        RCI threshold (in (0.0, 1.0)) above which to calculate area saved for.
+    """
+    rci_3 = metrics_dict["RCI_3"]
+    rci_3[rci_3 >= rci_threshold] = 1
+    rci_3[rci_3 < rci_threshold] = 0
+
+    return np.transpose(rci_3 * np.array(metrics_df["total_area_nine_zones"]), (1, 0))
+
+
 def coral_area_saved(metrics_dict: dict, metrics_df: pd.DataFrame):
     """
     Processes metrics dict into total area of coral cover in hectares.
@@ -207,6 +227,20 @@ def raw_reefcond(metrics_dict: dict, metrics_df: pd.DataFrame):
         Dataframe containing scenario summary dataframe
     """
     return np.transpose(metrics_dict["RCI"], (1, 0))
+
+
+def raw_reefcond_3(metrics_dict: dict, metrics_df: pd.DataFrame):
+    """
+    Processes metrics dict into raw RCI_3 for table storage.
+
+    Parameters
+    ----------
+    metrics_dict : dict
+        Array containing key sampled metrics and the RCI_3
+    metrics_df : dataframe
+        Dataframe containing scenario summary dataframe
+    """
+    return np.transpose(metrics_dict["RCI_3"], (1, 0))
 
 
 def raw_rti(metrics_dict: dict, metrics_df: pd.DataFrame):

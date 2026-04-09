@@ -90,8 +90,19 @@ def indicator_params(
             # interventions
             raise ValueError("Interventions cannot start in the first year.")
 
+        # Determine which juvenile variable to use
+        if "coral_juv_m2" in result_set.variables:
+            juv_var = "coral_juv_m2"
+        elif "relative_juveniles" in result_set.variables:
+            juv_var = "relative_juveniles"
+            print("Using 'relative_juveniles' for juvenile baseline.")
+        else:
+            raise ValueError(
+                "Neither 'coral_juv_m2' nor 'relative_juveniles' found in results."
+            )
+
         max_coral_juv = np.max(
-            result_set["coral_juv_m2"][scen_ids, :, juv_max_years[0] : juv_max_years[1]]
+            result_set[juv_var][scen_ids, :, juv_max_years[0] : juv_max_years[1]]
         )
 
     ## SHELTER VOLUME UNCERTAINTY
@@ -226,6 +237,69 @@ def indicator_params(
     )
 
 
+def load_indicator_data(results_data, scen_ids, nsims, ecol_uncert, curr_eco_sim_idx=None):
+    """
+    Helper function to load and normalize ecological indicator data from NetCDF results.
+    Handles fallback from total_taxa_cover to total_cover.
+    """
+    if ecol_uncert == 0:
+        # Take mean across all specified scenarios, preserving nsims dimension
+        curr_eco_sim = [scen_ids[0]] * nsims
+        indices = scen_ids
+        reduction_axis = 0
+    else:
+        curr_eco_sim = (
+            curr_eco_sim_idx
+            if curr_eco_sim_idx is not None
+            else random.choices(scen_ids, k=nsims)
+        )
+        indices = curr_eco_sim
+        reduction_axis = None
+
+    def _load(var_name):
+        vals = results_data[var_name][indices, ...]
+        if reduction_axis is not None:
+            vals = np.mean(vals, axis=reduction_axis, keepdims=True)
+        return vals
+
+    # Load base variables
+    data = {
+        "cots": _load("cots"),
+        "rubble": _load("rubble"),
+        "relative_shelter_volume": _load("relative_shelter_volume"),
+    }
+
+    # Load juveniles with fallback
+    if "coral_juv_m2" in results_data.variables:
+        data["coral_juv_m2"] = _load("coral_juv_m2")
+    elif "relative_juveniles" in results_data.variables:
+        data["coral_juv_m2"] = _load("relative_juveniles")
+    else:
+        raise ValueError(
+            "Neither 'coral_juv_m2' nor 'relative_juveniles' found in results."
+        )
+
+    # Load cover data with fallback
+    if "total_taxa_cover" in results_data.variables:
+        taxa_cover = _load("total_taxa_cover")
+        # Handle both (nsims, ntaxa, nreefs, nyrs) and (ntaxa, nreefs, nyrs)
+        taxa_axis = 1 if taxa_cover.ndim == 4 else 0
+        data["total_cover"] = np.sum(taxa_cover, axis=taxa_axis) / 100
+    else:
+        total_cover = _load("total_cover")
+        # Normalize 0-100 to 0-1
+        data["total_cover"] = (
+            total_cover / 100 if total_cover.max() > 1.0 else total_cover
+        )
+
+    # Ensure all have (nsims, nreefs, nyrs) shape
+    for key in data:
+        if data[key].shape[0] == 1 and nsims > 1:
+            data[key] = np.tile(data[key], (nsims, 1, 1))
+
+    return data, curr_eco_sim
+
+
 def reef_condition_rme(
     results_data,
     scen_ids,
@@ -270,44 +344,18 @@ def reef_condition_rme(
     cots_outbreak_threshold = 11  # number of CoTS per hectare to classify as outbreak, corresponds to 0.22 cots per mantatow (Moran and De'ath 1992)
     n_metrics = 5  # see below for metrics implemented
 
-    if ecol_uncert == 0:  # If we don't want eco model uncertainty, take mean of nsims
-        cots = np.repeat(np.mean(results_data["cots"][scen_ids, :, :], axis=0, keepdims=True), nsims, axis=0)
-        coral_cover_per_taxa = np.repeat(np.mean(
-            results_data["total_taxa_cover"][scen_ids, :, :, :], axis=0, keepdims=True
-        ), nsims, axis=0)
-        # data.nb_coral_adol = np.mean(F.nb_coral_adol, axis=0)
-        # data.nb_coral_adult = np.mean(F.nb_coral_adult, axis=0)
-        coral_juv_m2 = np.repeat(np.mean(
-            results_data["coral_juv_m2"][scen_ids, :, :], axis=0, keepdims=True
-        ), nsims, axis=0)
-        rubble = np.repeat(np.mean(results_data["rubble"][scen_ids, :, :], axis=0, keepdims=True), nsims, axis=0)
-        relative_shelter_volume = np.repeat(np.mean(
-            results_data["relative_shelter_volume"][scen_ids, :, :],
-            axis=0,
-            keepdims=True,
-        ), nsims, axis=0)
-        curr_eco_sim = scen_ids[0]
+    # Load and normalize data using helper
+    data, curr_eco_sim = load_indicator_data(
+        results_data, scen_ids, nsims, ecol_uncert, curr_eco_sim_idx
+    )
 
-    if (
-        ecol_uncert == 1
-    ):  # If we want eco model uncertainty, sample from reefmod simulations
-        curr_eco_sim = random.choices(scen_ids, k=nsims)
+    total_cover = data["total_cover"]
+    cots = data["cots"]
+    coral_juv_m2 = data["coral_juv_m2"]
+    rubble = data["rubble"]
+    relative_shelter_volume = data["relative_shelter_volume"]
 
-        if (
-            curr_eco_sim_idx is not None
-        ):  # To use provided index of reefmod simulation, instead of random sampling
-            curr_eco_sim = curr_eco_sim_idx
-
-        cots = results_data["cots"][curr_eco_sim, :, :]
-        coral_cover_per_taxa = results_data["total_taxa_cover"][curr_eco_sim, :, :, :]
-        coral_juv_m2 = results_data["coral_juv_m2"][curr_eco_sim, :, :]
-        rubble = results_data["rubble"][curr_eco_sim, :, :]
-        relative_shelter_volume = results_data["relative_shelter_volume"][
-            curr_eco_sim, :, :
-        ]
-
-    # Extract constants and variables
-    nsims, ngroups, nreefs, nyrs = coral_cover_per_taxa.shape
+    nsims_actual, nreefs, nyrs = total_cover.shape
 
     # The following code is for calculating SV from number of corals, which is not currently possible with default
     # metrics saved in ReefModEngine.jl runs
@@ -334,11 +382,6 @@ def reef_condition_rme(
     # elif ngroups == 6:
     #     for tax = 1:6 # Get total numbers of each coral, across unenhanced and enhanced groups
     #         coral_numbers[:, :, :, tax, :] = corals[:, :, :, tax, :];
-
-    # Calculate total cover
-    total_cover = (
-        np.sum(coral_cover_per_taxa, axis=1) / 100
-    )  # first calculate total coral cover
 
     # Coral juveniles
     coraljuv_relative = coral_juv_m2 / (
@@ -429,6 +472,59 @@ def rfi_rme(total_cover, intercept1, slope1, intercept2, slope2):
     return 0.01 * (intercept2 + slope2 * (intercept1 + slope1 * total_cover * 100))
 
 
+def reef_condition_3_metrics_rme(
+    results_data,
+    scen_ids,
+    ecol_uncert,
+    sheltervolume_parameters,
+    rci_crit,
+    maxcoraljuv,
+    nsims,
+    curr_eco_sim_idx=None,
+):
+    """
+    Calculates reef condition using only 3 metrics (Coral Cover, Shelter Volume, Juveniles).
+    Requires at least 2 out of 3 criteria to be met for a category to be satisfied.
+    """
+    criteria_threshold = 2 / 3
+    n_metrics = 3
+
+    data, _ = load_indicator_data(
+        results_data, scen_ids, nsims, ecol_uncert, curr_eco_sim_idx
+    )
+
+    total_cover = data["total_cover"]
+    coral_juv_m2 = data["coral_juv_m2"]
+    relative_shelter_volume = data["relative_shelter_volume"]
+
+    nsims_actual, nreefs, nyrs = total_cover.shape
+
+    coraljuv_relative = coral_juv_m2 / maxcoraljuv
+    shelterVolume = np.clip(relative_shelter_volume * 9.33, 0, 1)
+
+    crit_val = [0.9, 0.7, 0.5, 0.3]
+    reefcondition = np.zeros((nsims, nreefs, nyrs))
+    rci_mask = np.zeros((nsims, nreefs, nyrs, n_metrics))
+
+    for curr_crit in range(len(crit_val)):
+        rci_mask[:, :, :, 0] = total_cover >= rci_crit[0, curr_crit]
+        rci_mask[:, :, :, 1] = shelterVolume >= rci_crit[1, curr_crit]
+        rci_mask[:, :, :, 2] = coraljuv_relative >= rci_crit[2, curr_crit]
+
+        curr_mask = np.sum(rci_mask, axis=3) / n_metrics
+        curr_mask = np.where(curr_mask >= criteria_threshold, crit_val[curr_crit], 0)
+        reefcondition += curr_mask
+
+    # Final category mapping
+    reefcondition[reefcondition == sum(crit_val)] = 0.9
+    reefcondition[reefcondition == sum(crit_val[1:])] = 0.7
+    reefcondition[reefcondition == sum(crit_val[2:])] = 0.5
+    reefcondition[reefcondition == sum(crit_val[3:])] = 0.3
+    reefcondition[reefcondition == 0.0] = 0.1
+
+    return reefcondition
+
+
 def extract_metrics(
     results_data,
     scen_ids,
@@ -509,6 +605,16 @@ def extract_metrics(
         maxcoraljuv,
         nsims,
         curr_eco_sim_idx=curr_eco_sim_idx,
+    )
+    ecol_indicators["RCI_3"] = reef_condition_3_metrics_rme(
+        results_data,
+        scen_ids,
+        uncertainty_dict["ecol_uncert"],
+        sheltervolume_parameters,
+        rci_crit,
+        maxcoraljuv,
+        nsims,
+        curr_eco_sim_idx=ecol_sample_ids,
     )
     ecol_indicators["RTI"] = rti_rme(
         ecol_indicators,

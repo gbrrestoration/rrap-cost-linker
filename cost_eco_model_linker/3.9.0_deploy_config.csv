@@ -1,5 +1,5 @@
 cost_type,sheet,cell_pos,factor_names,variable_type,SA_range_lower,SA_range_upper,best_point_value,range_lower,range_upper,discrete_values,UNC_distribution,is_cat,comments
-deployment,Dashboard,K12,capex,output,0,0,0,1,2,,,FALSE,dummy lower and upper bounds
+deployment,Dashboard,K11,capex,output,0,0,0,1,2,,,FALSE,dummy lower and upper bounds
 deployment,Dashboard,K6,opex,output,0,0,0,1,2,,,FALSE,dummy lower and upper bounds
 deployment,Dashboard,D5,num_1yoec,integer,1000000,20000000,1000000,1000000,20000000,,unif,TRUE,"""Indicates target number of 1YOEC - automatically converts to the devices required to get the target number. For simulation costings these are dummy values"""
 deployment,Dashboard,D12,daytrip,boolean,0,1,1,0,1,"0,1",discrete,TRUE,"""For simulation costings, these are dummy values"""

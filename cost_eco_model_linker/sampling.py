@@ -16,7 +16,6 @@ DEFAULT_PROD_VER = "3.9.1"
 DEFAULT_DEPLOY_VER = "3.9.0"
 DEFAULT_LM_VER = "3.9.6"
 
-LM_REPLACEMENT_RATE = 0.20
 
 
 def get_NK(
@@ -565,68 +564,55 @@ def collect_lm_costs(xlapp, wb, wb_path, cost_factors, factor_spec):
     )
 
 
-def _apply_lm_inventory_model(
-    df: pd.DataFrame, replacement_rate: float = LM_REPLACEMENT_RATE
-) -> pd.DataFrame:
+def _apply_lm_inventory_model(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Apply the LM year-by-year inventory and replacement model to a YearTable.
+    Apply the year-by-year inventory/replacement model to a YearTable.
 
-    For each year t the model:
-      1. Allows up to ``replacement_rate`` of last year's inventory to retire.
-      2. Replaces as much retired capacity as needed to reach the required capex.
-      3. Fills any remaining gap with new (scaling) capex.
-      4. Ends the year exactly at the required capex level.
+    For each year t:
+      - retained_capacity = 0.8 * inventory[t-1]
+      - additional_required = max(0, required_capex[t] - retained_capacity)
+      - total_capex = 0.2 * inventory[t-1] + additional_required
+      - inventory[t] = retained_capacity + additional_required
 
-    Year 1 is treated as the initial installed base (no spend tracked separately).
+    Year 1: inventory[t-1] = 0, so full required_capex is charged and sets
+    the initial inventory.
 
     Parameters
     ----------
     df : pd.DataFrame
-        YearTable from the LM workbook; must have ``capex``, ``opex``, and
-        ``corals`` columns.
-    replacement_rate : float
-        Maximum fraction of prior-year inventory that may retire each year.
-        Default is ``LM_REPLACEMENT_RATE`` (0.20).
+        Must have ``capex``, ``opex``, and ``corals`` columns.
 
     Returns
     -------
     pd.DataFrame
         Input DataFrame extended with columns: ``inventory``,
-        ``new_capex_scale``, ``new_capex_replacement``, ``total_capex``,
+        ``retained_capacity``, ``additional_required``, ``total_capex``,
         ``total_capex_opex``, ``ratio``, ``average``.
     """
     T = len(df)
     inventory_vec = np.zeros(T)
-    new_capex_scale_vec = np.zeros(T)
-    new_capex_replacement_vec = np.zeros(T)
+    retained_capacity_vec = np.zeros(T)
+    additional_required_vec = np.zeros(T)
     total_capex_vec = np.zeros(T)
 
     for t in range(T):
         req = float(df["capex"].iloc[t])
+        I0 = inventory_vec[t - 1] if t > 0 else 0.0
 
-        if t == 0:
-            inventory_now = req
-            new_capex_replacement = 0.0
-            new_capex_scale = req
-        else:
-            I0 = inventory_vec[t - 1]
-            retire_capacity = replacement_rate * I0
-            survivors = (1.0 - replacement_rate) * I0
-            replaced_dollars = max(0.0, min(retire_capacity, req - survivors))
-            inventory_after_repl = survivors + replaced_dollars
-            new_capex_scale = max(0.0, req - inventory_after_repl)
-            inventory_now = inventory_after_repl + new_capex_scale
-            new_capex_replacement = replaced_dollars
+        retained_capacity = 0.8 * I0
+        additional_required = max(0.0, req - retained_capacity)
+        total_capex = 0.2 * I0 + additional_required
+        inventory_now = retained_capacity + additional_required
 
         inventory_vec[t] = inventory_now
-        new_capex_scale_vec[t] = new_capex_scale
-        new_capex_replacement_vec[t] = new_capex_replacement
-        total_capex_vec[t] = new_capex_replacement + new_capex_scale
+        retained_capacity_vec[t] = retained_capacity
+        additional_required_vec[t] = additional_required
+        total_capex_vec[t] = total_capex
 
     out = df.copy()
     out["inventory"] = inventory_vec
-    out["new_capex_scale"] = new_capex_scale_vec
-    out["new_capex_replacement"] = new_capex_replacement_vec
+    out["retained_capacity"] = retained_capacity_vec
+    out["additional_required"] = additional_required_vec
     out["total_capex"] = total_capex_vec
     out["total_capex_opex"] = out["total_capex"] + out["opex"]
 

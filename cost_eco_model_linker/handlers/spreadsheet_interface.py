@@ -61,9 +61,11 @@ def find_table(ws: w32client.CDispatch, first_header: str) -> pd.DataFrame:
 
     data = table_range.Value
     df = pd.DataFrame(data[1:], columns=data[0])
+
     # Drop columns that are entirely empty (e.g. "batch" in the production model)
-    # before dropping rows with any NA, to avoid losing valid data rows.
-    df = df.dropna(axis=1, how="all").dropna().reset_index(drop=True)
+    # to avoid including rows that are just blank cells.
+    df = df.loc[~df.loc[:, first_header].isna(), :].reset_index(drop=True)
+
     # If duplicate column names exist (e.g. two "Cost" columns), keep the last occurrence
     return df.loc[:, ~df.columns.duplicated(keep="last")]
 
@@ -202,7 +204,12 @@ def fill_industry_costs(eia_template, next_idx, cost_df, ind_codes, unique_ind_c
     """Single-pass update of industry costs in EIA template. Accumulates into existing
     values."""
     for code in unique_ind_codes:
-        matches_code = ind_codes[cost_df.index] == code
+        try:
+            matches_code = ind_codes[cost_df.index] == code
+        except:
+            import ipdb
+
+            ipdb.set_trace()
 
         if matches_code.sum() == 0:
             continue

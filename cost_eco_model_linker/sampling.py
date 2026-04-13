@@ -729,6 +729,13 @@ def _fix_main_spec():
 def _pool_initializer():
     """Initialise each worker process."""
     _fix_main_spec()
+    # Each worker must initialise its own COM apartment so that DispatchEx
+    # creates an isolated Excel instance. Without this, workers can share a
+    # COM apartment and a process exit in one worker disconnects Excel in others
+    # (RPC_E_DISCONNECTED / pywintypes.com_error).
+    import pythoncom
+
+    pythoncom.CoInitialize()
     # Switch to a non-interactive backend so that tkinter is never imported in
     # worker processes. Without this, tkinter objects inherited from the main
     # process are garbage-collected in worker threads, raising

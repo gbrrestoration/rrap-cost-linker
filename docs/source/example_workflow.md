@@ -271,3 +271,8 @@ Yes.
 
 In the CA-Production cost models, the "New species batches - count" field (currently
 E11) should be set to zero (0).
+
+### Can I change the production facility?
+
+No, currently it is assumed that the production facility is always in Townsville and so
+this is hardcoded in.

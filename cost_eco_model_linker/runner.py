@@ -336,12 +336,6 @@ def parallel_evaluate(
     stores = setup_dirs(results_dir)
 
     # Set defaults
-    if metrics is None:
-        if coral_only:
-            print("Using 3-metric RCI and excluding RTI (coral-only mode).")
-            metrics = [prd.rci_3, prd.rfi]
-        else:
-            metrics = [prd.rci, prd.raw_rti, prd.rfi]
     if uncertainty_dict is None:
         uncertainty_dict = default_uncertainty_dict()
 
@@ -355,6 +349,7 @@ def parallel_evaluate(
         ncores=ncores,
         metrics=metrics,
         uncertainty_dict=uncertainty_dict,
+        coral_only=coral_only,
     )
 
     nbatches_per_core = int(np.ceil(nsims / ncores))

@@ -184,7 +184,6 @@ def evaluate(
 
     # Check available config aligns with model versions
     m = SEMVER_RE.match(deploy_model_fn)
-    print(deploy_model_fn)
     deploy_m_ver = Version(m.group(1)) if m else None
     if deploy_m_ver is None:
         raise ValueError(f"No version info found in filename {deploy_model_fn}")

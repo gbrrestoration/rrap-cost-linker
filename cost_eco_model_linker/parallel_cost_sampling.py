@@ -19,6 +19,7 @@ def para_sample_econ(
     ncores=5,
     uncertainty_dict=None,
     metrics=None,
+    coral_only=False,
 ):
     """
     Run economics metrics data creation files so that corresponding cost data can be sampled in parallel.
@@ -37,13 +38,19 @@ def para_sample_econ(
         Number of cores to sample cost models over.
     uncertainty_dict : dict
         Contains information on what uncertainty types to sample.
+    coral_only : bool, default=False
+        If True, only use coral-related metrics (RCI_3 and RFI), excluding COTS and Rubble.
     """
     nbatches = math.ceil(nsims / ncores)
 
     economics_spatial_filepath = path_join(THIS_DIR, "datasets", "econ_spatial.csv")
 
     if metrics is None:
-        metrics = [prd.rci, prd.raw_rti, prd.rfi]
+        if coral_only:
+            print("Using 3-metric RCI and excluding RTI (coral-only mode).")
+            metrics = [prd.rci_3, prd.rfi]
+        else:
+            metrics = [prd.rci, prd.raw_rti, prd.rfi]
 
     if uncertainty_dict is None:
         uncertainty_dict = prd.default_uncertainty_dict()

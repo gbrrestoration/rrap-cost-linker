@@ -1133,6 +1133,22 @@ def calculate_costs(
                     index=False,
                 )
 
+            # DEBUG HERE
+            # Copies current state of excel sheets for each worker into current working dir.
+            # import ipdb
+
+            # ipdb.set_trace()
+
+            # import shutil
+
+            # shutil.copy(
+            #     deploy_model_fp, path_join(cost_dir, f"debug_deploy_ID{scen_id}.xlsx")
+            # )
+            # shutil.copy(
+            #     prod_model_fp, path_join(cost_dir, f"debug_prod_ID{scen_id}.xlsx")
+            # )
+            # shutil.copy(lm_model_fp, path_join(cost_dir, f"debug_lm_ID{scen_id}.xlsx"))
+
             _write_eia_outputs(
                 cost_dir,
                 scen_id,

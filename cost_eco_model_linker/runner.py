@@ -575,7 +575,10 @@ def run_cost_model(
         finally:
             close_excel(xlapp, wb)
     finally:
-        os.remove(tmp_path)
+        try:
+            os.remove(tmp_path)
+        except PermissionError:
+            pass  # Excel may still hold the file lock after a COM error; temp file will be cleaned up by the OS
 
     return params_df.assign(
         capex=results[:, 0],

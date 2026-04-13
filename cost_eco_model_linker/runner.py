@@ -206,14 +206,14 @@ def evaluate(
     except FileNotFoundError:
         raise ValueError(f"No config available for production model {str(prod_m_ver)}")
 
-    m = SEMVER_RE.match(lm_model_fn)
-    lm_m_ver = Version(m.group(1)) if m else None
-    if lm_m_ver is None:
-        raise ValueError(f"No version info found in filename {lm_model_fn}")
-    try:
-        load_internal_config(f"{str(lm_m_ver)}_LM_config.csv")
-    except FileNotFoundError:
-        raise ValueError(f"No config available for LM model {str(lm_m_ver)}")
+    #m = SEMVER_RE.match(lm_model_fn)
+    #lm_m_ver = Version(m.group(1)) if m else None
+    #if lm_m_ver is None:
+    #    raise ValueError(f"No version info found in filename {lm_model_fn}")
+    #try:
+    #    load_internal_config(f"{str(lm_m_ver)}_LM_config.csv")
+    #except FileNotFoundError:
+    #    raise ValueError(f"No config available for LM model {str(lm_m_ver)}")
 
     # Setup data stores
     stores = setup_dirs(results_dir)
@@ -222,7 +222,12 @@ def evaluate(
     if metrics is None:
         if coral_only:
             print("Using 3-metric RCI and excluding RTI (coral-only mode).")
-            metrics = [prd.rci_3, prd.rfi]
+
+            # Wrapper to use rci_3 logic but keep 'rci' name for filename mapping
+            def rci(metrics_dict, metrics_df):
+                return prd.rci_3(metrics_dict, metrics_df)
+
+            metrics = [rci, prd.rfi]
         else:
             metrics = [prd.rci, prd.raw_rti, prd.rfi]
     if uncertainty_dict is None:
@@ -335,6 +340,16 @@ def parallel_evaluate(
     stores = setup_dirs(results_dir)
 
     # Set defaults
+    if metrics is None:
+        if coral_only:
+            # Wrapper to use rci_3 logic but keep 'rci' name for filename mapping
+            def rci(metrics_dict, metrics_df):
+                return prd.rci_3(metrics_dict, metrics_df)
+
+            metrics = [rci, prd.rfi]
+        else:
+            metrics = [prd.rci, prd.raw_rti, prd.rfi]
+
     if uncertainty_dict is None:
         uncertainty_dict = default_uncertainty_dict()
 
@@ -378,7 +393,6 @@ def parallel_evaluate(
     _combine_parallel_outputs(stores.cost_dir, scen_ids, ncores, nbatches_per_core)
 
     return [path for worker_paths in result for path in worker_paths]
-
 
 
 def _combine_parallel_outputs(cost_dir, scen_ids, nprocs, nbatches_per_core):

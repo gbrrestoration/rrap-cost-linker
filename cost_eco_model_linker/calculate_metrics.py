@@ -101,9 +101,7 @@ def indicator_params(
                 "Neither 'coral_juv_m2' nor 'relative_juveniles' found in results."
             )
 
-        max_coral_juv = np.max(
-            result_set[juv_var][scen_ids, :, juv_max_years[0] : juv_max_years[1]]
-        )
+        max_coral_juv = np.max(result_set[juv_var][scen_ids, :, juv_max_years[0] : juv_max_years[1]])
 
     ## SHELTER VOLUME UNCERTAINTY
     if uncertainty_dict["shelt_uncert"] == 0:
@@ -157,7 +155,7 @@ def indicator_params(
         uncertainty_dict["expert_uncert"] == 0
     ):  # If there is no uncertainty from survey, use median results
         G = pd.read_csv(path_join(THIS_DIR, "datasets", "Heneghan_RCI.csv"))
-        rci_crit = np.array(G.loc[:, G.columns[[1, 3, 4, 6, 8]]])
+        rci_crit = np.array(G.loc[:, G.columns[[1, 3, 4, 6, 8]]]).T
     else:
         # If there is uncertainty from survey, draw each metric's thresholds randomly from pool of experts
         G = pd.read_csv(
@@ -425,11 +423,14 @@ def reef_condition_rme(
 
         reefcondition += curr_mask
 
-    reefcondition[reefcondition == sum(crit_val)] = 0.9
-    reefcondition[reefcondition == sum(crit_val[1:])] = 0.7
-    reefcondition[reefcondition == sum(crit_val[2:])] = 0.5
-    reefcondition[reefcondition == sum(crit_val[3:])] = 0.3
-    reefcondition[reefcondition == 0.0] = 0.1
+    # Final category mapping using tolerance to avoid floating point errors
+    # (e.g. 2.4 might be 2.4000000000000004)
+    eps = 1e-5
+    reefcondition[reefcondition >= sum(crit_val) - eps] = 0.9
+    reefcondition[(reefcondition >= sum(crit_val[1:]) - eps) & (reefcondition < sum(crit_val) - eps)] = 0.7
+    reefcondition[(reefcondition >= sum(crit_val[2:]) - eps) & (reefcondition < sum(crit_val[1:]) - eps)] = 0.5
+    reefcondition[(reefcondition >= sum(crit_val[3:]) - eps) & (reefcondition < sum(crit_val[2:]) - eps)] = 0.3
+    reefcondition[reefcondition < sum(crit_val[3:]) - eps] = 0.1
 
     return {
         "total_cover": total_cover,
@@ -515,12 +516,12 @@ def reef_condition_3_metrics_rme(
         curr_mask = np.where(curr_mask >= criteria_threshold, crit_val[curr_crit], 0)
         reefcondition += curr_mask
 
-    # Final category mapping
+    # Final category mapping using tolerance to avoid floating point errors
     reefcondition[reefcondition == sum(crit_val)] = 0.9
     reefcondition[reefcondition == sum(crit_val[1:])] = 0.7
     reefcondition[reefcondition == sum(crit_val[2:])] = 0.5
     reefcondition[reefcondition == sum(crit_val[3:])] = 0.3
-    reefcondition[reefcondition == 0.0] = 0.1
+    reefcondition[reefcondition < sum(crit_val[3:])] = 0.1
 
     return reefcondition
 

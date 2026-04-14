@@ -206,14 +206,14 @@ def evaluate(
     except FileNotFoundError:
         raise ValueError(f"No config available for production model {str(prod_m_ver)}")
 
-    #m = SEMVER_RE.match(lm_model_fn)
-    #lm_m_ver = Version(m.group(1)) if m else None
-    #if lm_m_ver is None:
-    #    raise ValueError(f"No version info found in filename {lm_model_fn}")
-    #try:
-    #    load_internal_config(f"{str(lm_m_ver)}_LM_config.csv")
-    #except FileNotFoundError:
-    #    raise ValueError(f"No config available for LM model {str(lm_m_ver)}")
+    m = SEMVER_RE.match(lm_model_fn)
+    lm_m_ver = Version(m.group(1)) if m else None
+    if lm_m_ver is None:
+        raise ValueError(f"No version info found in filename {lm_model_fn}")
+    try:
+        load_internal_config(f"{str(lm_m_ver)}_LM_config.csv")
+    except FileNotFoundError:
+        raise ValueError(f"No config available for LM model {str(lm_m_ver)}")
 
     # Setup data stores
     stores = setup_dirs(results_dir)

@@ -501,7 +501,7 @@ def reef_condition_3_metrics_rme(
     nsims_actual, nreefs, nyrs = total_cover.shape
 
     coraljuv_relative = coral_juv_m2 / maxcoraljuv
-    shelterVolume = np.clip(relative_shelter_volume * 9.33, 0, 1)
+    shelterVolume = np.clip(relative_shelter_volume, 0, 1)
 
     crit_val = [0.9, 0.7, 0.5, 0.3]
     reefcondition = np.zeros((nsims, nreefs, nyrs))

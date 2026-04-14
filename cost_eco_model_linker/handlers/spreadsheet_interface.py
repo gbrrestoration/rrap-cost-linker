@@ -357,32 +357,38 @@ def fill_lm_EIA_info(
     ind_codes = get_industry_codes(ws)
     unique_ind_codes = pd.unique(ind_codes)
 
-    # iv_start_year is accepted for API consistency with fill_EIA_info but not used:
-    # the LM model has no CAPEX/OPEX split so no incremental adjustment is applied.
     _ = iv_start_year
 
-    next_idx = find_or_fill_row(eia_template, it, year, intervention, port, "Expenses")
-    eia_template.iloc[next_idx, 0:5] = (it, year, intervention, port, "Expenses")
+    is_labour = cost_df["OPEX types"].fillna("").str.lower() == "labour"
+    non_labour_df = cost_df.loc[~is_labour]
 
-    is_labour = cost_df["Type"].str.lower() == "labour"
+    # Create one EIA row per expense type (Capex, Opex, etc.) as declared in the sheet.
+    for expense_type in non_labour_df["Type"].unique():
+        normalized_type = expense_type.title()
+        type_rows = non_labour_df[non_labour_df["Type"] == expense_type]
+        next_idx = find_or_fill_row(
+            eia_template, it, year, intervention, port, normalized_type
+        )
+        eia_template.iloc[next_idx, 0:5] = (it, year, intervention, port, normalized_type)
 
-    existing_labour = eia_template.loc[next_idx, "labour"]
+        for code in unique_ind_codes:
+            matches_code = ind_codes[type_rows.index] == code
+
+            if code not in eia_template.columns:
+                eia_template[code] = 0.0
+
+            existing = eia_template.loc[next_idx, code]
+            existing = float(existing) if pd.notna(existing) else 0.0
+            eia_template.loc[next_idx, code] = existing + float(
+                type_rows.loc[matches_code, "Total cost"].sum()
+            )
+
+    # Labour rows accumulate into the Opex row's labour column.
+    opex_idx = find_or_fill_row(eia_template, it, year, intervention, port, "Opex")
+    existing_labour = eia_template.loc[opex_idx, "labour"]
     labour_total = float(existing_labour) if pd.notna(existing_labour) else 0.0
     labour_total += float(cost_df.loc[is_labour, "Total cost"].sum())
-    eia_template.loc[next_idx, "labour"] = labour_total
-
-    non_labour_df = cost_df.loc[~is_labour]
-    for code in unique_ind_codes:
-        matches_code = ind_codes[non_labour_df.index] == code
-
-        if code not in eia_template.columns:
-            eia_template[code] = 0.0
-
-        existing = eia_template.loc[next_idx, code]
-        existing = float(existing) if pd.notna(existing) else 0.0
-        eia_template.loc[next_idx, code] = existing + float(
-            non_labour_df.loc[matches_code, "Total cost"].sum()
-        )
+    eia_template.loc[opex_idx, "labour"] = labour_total
 
     eia_template.fillna(0.0, inplace=True)
     eia_template["labour"] = eia_template.pop("labour")
@@ -431,11 +437,13 @@ def fill_EIA_info(
         this_row = (eia_template.year == year) & capex_rows & is_intervention
         init_row = (eia_template.year == iv_start_year) & capex_rows & is_intervention
         if this_row.any() and init_row.any():
+            _meta_cols = {"iteration", "year", "intervention", "location", "type"}
+            cost_cols = [c for c in eia_template.columns if c not in _meta_cols]
             incremental = (
-                eia_template.iloc[this_row, 6:].values
-                - eia_template.iloc[init_row, 6:].values
+                eia_template.loc[this_row, cost_cols].values
+                - eia_template.loc[init_row, cost_cols].values
             )
-            eia_template.iloc[this_row, 6:] = incremental.clip(min=0)
+            eia_template.loc[this_row, cost_cols] = incremental.clip(min=0)
 
     # Move labour column to last position
     eia_template["labour"] = eia_template.pop("labour")

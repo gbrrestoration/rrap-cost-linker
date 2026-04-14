@@ -388,6 +388,8 @@ class _OverviewAccumulator:
         self.lm_yield_per_pool = np.zeros((n, s))
         self.lm_raw_capex = np.zeros((n, s))
         self.lm_raw_opex = np.zeros((n, s))
+        self.lm_opex_pre_mult = np.zeros((n, s))  # raw opex before distance multiplier
+        self.lm_opex_mult = np.zeros(n)  # distance multiplier (scalar per year)
 
 
 # ---------------------------------------------------------------------------
@@ -505,45 +507,6 @@ def _process_outplant_reefset(
     raw_prod_capex = prod_factors["capex"].values[0:nsims].copy()
     raw_deploy_capex = deploy_factors["capex"].values[0:nsims].copy()
 
-    # CAPEX comparison block — commented out, superseded by inventory model.
-    # To restore: also pass ID_key, rep_idx, rs, reefset_years_map to this function.
-    # rs_yr_idx = rs_years.index(iv_yr)
-    # if rs_yr_idx > 0:
-    #     prior_years = rs_years[:rs_yr_idx]
-    #     curr_devices = (
-    #         deploy_factors["num_1yoec"]
-    #         .values[0:nsims]
-    #         .copy()
-    #     )
-    #     max_prior_devices = np.zeros(nsims)
-    #     for prior_yr in prior_years:
-    #         prior_selector = (
-    #             (ID_key.intervention_years == prior_yr)
-    #             & rep_idx
-    #             & (ID_key.reefset == rs)
-    #         )
-    #         prior_devices = calc_production_requirement(
-    #             deploy_factors,
-    #             ID_key.loc[
-    #                 prior_selector,
-    #                 ["number_of_1YO_corals", "rep"],
-    #             ],
-    #         )
-    #         max_prior_devices = np.maximum(
-    #             max_prior_devices, prior_devices
-    #         )
-    #
-    #     additional = np.maximum(
-    #         curr_devices - max_prior_devices, 0
-    #     )
-    #     no_additional = additional == 0
-    #     prod_factors.loc[:, "capex"] = np.where(
-    #         no_additional, 0.0, raw_prod_capex
-    #     )
-    #     deploy_factors.loc[:, "capex"] = np.where(
-    #         no_additional, 0.0, raw_deploy_capex
-    #     )
-
     yr_capex += (deploy_factors["capex"] + prod_factors["capex"]).values[0:nsims]
     yr_opex += (deploy_factors["opex"] + prod_factors["opex"]).values[0:nsims]
 
@@ -562,6 +525,19 @@ def _process_outplant_reefset(
         deploy_wb, "CA_D", rep, min_rs_yr, iv_yr, departure_port, eia_template_deploy
     )
 
+    # DEBUG HERE
+    # Copies current state of excel sheets for each worker into current working dir.
+    # import ipdb
+
+    # ipdb.set_trace()
+
+    # import shutil
+
+    # shutil.copy(prod_model_fp, path_join(f"debug_prod_IDx.xlsx"))
+    # shutil.copy(deploy_model_fp, path_join(f"debug_deploy_IDx.xlsx"))
+    # shutil.copy(lm_model_fp, path_join(f"debug_lm_IDx.xlsx"))
+
+    # Reset workbooks, discarding any changes
     deploy_wb = reset_workbook(xlapp, deploy_wb, deploy_model_fp)
     prod_wb = reset_workbook(xlapp, prod_wb, prod_model_fp)
 
@@ -615,8 +591,11 @@ def _process_lm_reefset(
     lm_wb, lm_factors = collect_lm_costs(xlapp, lm_wb, lm_model_fp, lm_factors, lm_spec)
 
     opex_mult = lm_opex_distance_multiplier(rs_distance)
+    raw_opex = lm_factors["opex"].values[0:nsims]
     acc.lm_raw_capex[yr_idx] += lm_factors["capex"].values[0:nsims]
-    acc.lm_raw_opex[yr_idx] += lm_factors["opex"].values[0:nsims] * opex_mult
+    acc.lm_raw_opex[yr_idx] += raw_opex * opex_mult
+    acc.lm_opex_pre_mult[yr_idx] += raw_opex
+    acc.lm_opex_mult[yr_idx] = opex_mult
     acc.lm_num_larval_pool[yr_idx] += lm_factors["larval release pools"].values[0:nsims]
     acc.lm_yield_per_pool[yr_idx] += lm_factors["yield_per_pool"].values[0:nsims]
 
@@ -724,6 +703,8 @@ def _build_overview_rows_and_update_costs(
             post_deploy_capex = total_outplant * deploy_share
 
             lm_capex = float(lm_inv["total_capex"].iloc[yr_idx])
+            lm_opex_pre_distance = float(acc.lm_opex_pre_mult[yr_idx, draw_i])
+            lm_opex_mult = float(acc.lm_opex_mult[yr_idx])
             lm_opex = float(lm_inv["opex"].iloc[yr_idx])
             subtotal_capex = post_prod_capex + post_deploy_capex
             subtotal_opex = (
@@ -745,6 +726,8 @@ def _build_overview_rows_and_update_costs(
                     "deployment_capex": post_deploy_capex,
                     "deployment_opex": acc.deploy_opex[yr_idx, draw_i],
                     "lm_capex": lm_capex,
+                    "lm_opex_pre_distance": lm_opex_pre_distance,
+                    "lm_opex_multiplier": lm_opex_mult,
                     "lm_opex": lm_opex,
                     "subtotal_capex_CA_P_D": subtotal_capex,
                     "total_capex_CA_P_D_LM": subtotal_capex + lm_capex,
@@ -763,39 +746,127 @@ def _write_eia_outputs(
     eia_template_deploy,
     eia_template_lm,
     all_sim_years,
+    cost_df,
+    lm_opex_mult_by_year=None,
 ):
-    """Fill missing years, compute running CAPEX totals, and write EIA CSVs."""
+    """Fill missing years, compute row totals, and write EIA CSVs."""
     eia_template_prod = _fill_eia_missing_years(eia_template_prod, all_sim_years)
     eia_template_deploy = _fill_eia_missing_years(eia_template_deploy, all_sim_years)
     eia_template_lm = _fill_eia_missing_years(eia_template_lm, all_sim_years)
 
+    # Build (year, iteration) → total Series for each cost component.
+    def _component_series(component):
+        comp = cost_df[cost_df["component"] == component].drop(columns="component")
+        draw_cols = [c for c in comp.columns if c.startswith("draw")]
+        melted = comp.melt(
+            id_vars="year", value_vars=draw_cols, var_name="_draw", value_name="total"
+        )
+        melted["iteration"] = melted["_draw"].str.removeprefix("draw").astype(int)
+        return melted.set_index(["year", "iteration"])["total"]
+
+    capex_total = _component_series(1)
+
+    _meta_cols = ["iteration", "year", "intervention", "location", "type"]
+
+    def _total_last(df):
+        """Reorder columns so 'total' is always the final column."""
+        cols = [c for c in df.columns if c != "total"] + ["total"]
+        return df[cols]
+
+    # --- Raw outputs (all three types) ---
+    raw_templates = {}
     for eia_template, label in [
         (eia_template_prod, "production"),
         (eia_template_deploy, "deployment"),
         (eia_template_lm, "lm"),
     ]:
-        cost_cols = eia_template.columns[5:]
-        row_totals = (
+        cost_cols = [c for c in eia_template.columns if c not in _meta_cols]
+        eia_template["total"] = (
             eia_template[cost_cols].apply(pd.to_numeric, errors="coerce").sum(axis=1)
         )
-        capex_mask = eia_template["type"].str.lower() == "capex"
-        capex_row_totals = row_totals.where(capex_mask, 0.0).astype(float)
-        cumulative_capex_col = (
-            eia_template.assign(_row_total=capex_row_totals)
-            .sort_values("year")
-            .groupby(["iteration", "intervention", "location"])["_row_total"]
-            .cumsum()
-            .reindex(eia_template.index)
+        eia_template.sort_values(_meta_cols, inplace=True)
+        _total_last(eia_template).to_csv(
+            path_join(cost_dir, f"EIA_raw_{scen_id}_{label}.csv"), index=False
         )
-        eia_template["running_capex_total"] = cumulative_capex_col.where(
-            capex_mask, 0.0
+        raw_templates[label] = eia_template
+
+    # --- Proportional and scaled outputs (production, deployment, and lm) ---
+    # The combined denominator for proportions is the sum of raw totals across
+    # all three templates for each (iteration, year, type), so that proportions
+    # sum to 1.0 collectively across all three files.
+    _non_cost = set(_meta_cols) | {"total", "labour"}
+
+    # Combined denominator uses Capex industry-code costs only (labour and Opex
+    # excluded) — proportional adjustment only applies to Capex.
+    _denom_keys = ["iteration", "year", "type"]
+
+    def _capex_industry_code_total(df):
+        capex_df = df[df["type"].str.lower() == "capex"]
+        ind_cols = [c for c in capex_df.columns if c not in _non_cost]
+        return (
+            capex_df[_denom_keys + ind_cols]
+            .groupby(_denom_keys)[ind_cols]
+            .sum()
+            .sum(axis=1)
         )
-        eia_template.sort_values(
-            ["iteration", "year", "intervention", "location", "type"],
-            inplace=True,
+
+    combined_denom = (
+        pd.concat([_capex_industry_code_total(df) for df in raw_templates.values()])
+        .groupby(level=list(range(len(_denom_keys))))
+        .sum()
+    )
+
+    for eia_template, label in [
+        (raw_templates["production"], "production"),
+        (raw_templates["deployment"], "deployment"),
+        (raw_templates["lm"], "lm"),
+    ]:
+        cost_cols = [c for c in eia_template.columns if c not in _non_cost]
+        numeric_cols = cost_cols + ["total"]
+
+        # Proportional file: Capex rows only, shares relative to combined Capex denominator.
+        capex_rows = eia_template[eia_template["type"].str.lower() == "capex"]
+        denom_idx = pd.MultiIndex.from_frame(capex_rows[_denom_keys])
+        row_denom = combined_denom.reindex(denom_idx).to_numpy()
+
+        shares = capex_rows[_meta_cols].copy()
+        shares[numeric_cols] = (
+            capex_rows[numeric_cols].apply(pd.to_numeric, errors="coerce").to_numpy()
+            / np.where(row_denom == 0, np.nan, row_denom)[:, None]
         )
-        eia_template.to_csv(
-            path_join(cost_dir, f"EIA_{scen_id}_{label}.csv"), index=False
+        shares[numeric_cols] = shares[numeric_cols].fillna(0.0)
+        _total_last(shares).to_csv(
+            path_join(cost_dir, f"EIA_proportional_{scen_id}_{label}.csv"), index=False
+        )
+
+        # Scaled Capex: proportional shares × component 1 total.
+        scaled_capex = shares[_meta_cols].copy()
+        scaled_capex[numeric_cols] = 0.0
+        cap_idx = pd.MultiIndex.from_frame(shares[["year", "iteration"]])
+        cap_scalars = capex_total.reindex(cap_idx).fillna(0.0).to_numpy()
+        scaled_capex[numeric_cols] = (
+            shares[numeric_cols].to_numpy() * cap_scalars[:, None]
+        )
+
+        # Scaled Opex: raw values passed through, with labour included in total.
+        # For LM, apply the distance multiplier to all cost values.
+        opex_rows = eia_template[eia_template["type"].str.lower() == "opex"].copy()
+        raw_ind = opex_rows[cost_cols].apply(pd.to_numeric, errors="coerce").fillna(0.0)
+        raw_labour = pd.to_numeric(opex_rows["labour"], errors="coerce").fillna(0.0)
+        if label == "lm" and lm_opex_mult_by_year:
+            mult_vec = (
+                opex_rows["year"].map(lm_opex_mult_by_year).fillna(1.0).to_numpy()
+            )
+            raw_ind = raw_ind.multiply(mult_vec, axis=0)
+            raw_labour = raw_labour * mult_vec
+        opex_rows[cost_cols] = raw_ind.to_numpy()
+        opex_rows["labour"] = raw_labour.to_numpy()
+        opex_rows["total"] = raw_ind.sum(axis=1).to_numpy() + raw_labour.to_numpy()
+        scaled_opex = opex_rows[_meta_cols + cost_cols + ["labour", "total"]].copy()
+
+        scaled = pd.concat([scaled_capex, scaled_opex]).sort_values(_meta_cols)
+        _total_last(scaled).to_csv(
+            path_join(cost_dir, f"EIA_scaled_{scen_id}_{label}.csv"), index=False
         )
 
 
@@ -1133,22 +1204,11 @@ def calculate_costs(
                     index=False,
                 )
 
-            # DEBUG HERE
-            # Copies current state of excel sheets for each worker into current working dir.
-            # import ipdb
-
-            # ipdb.set_trace()
-
-            # import shutil
-
-            # shutil.copy(
-            #     deploy_model_fp, path_join(cost_dir, f"debug_deploy_ID{scen_id}.xlsx")
-            # )
-            # shutil.copy(
-            #     prod_model_fp, path_join(cost_dir, f"debug_prod_ID{scen_id}.xlsx")
-            # )
-            # shutil.copy(lm_model_fp, path_join(cost_dir, f"debug_lm_ID{scen_id}.xlsx"))
-
+            lm_opex_mult_by_year = {
+                row["year"]: row["lm_opex_multiplier"]
+                for row in all_overview_rows
+                if row.get("lm_opex_multiplier", 0) != 0
+            }
             _write_eia_outputs(
                 cost_dir,
                 scen_id,
@@ -1156,6 +1216,8 @@ def calculate_costs(
                 eia_template_deploy,
                 eia_template_lm,
                 all_sim_years,
+                combined,
+                lm_opex_mult_by_year=lm_opex_mult_by_year,
             )
 
     finally:

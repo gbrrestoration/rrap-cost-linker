@@ -423,14 +423,11 @@ def reef_condition_rme(
 
         reefcondition += curr_mask
 
-    # Final category mapping using tolerance to avoid floating point errors
-    # (e.g. 2.4 might be 2.4000000000000004)
-    eps = 1e-5
-    reefcondition[reefcondition >= sum(crit_val) - eps] = 0.9
-    reefcondition[(reefcondition >= sum(crit_val[1:]) - eps) & (reefcondition < sum(crit_val) - eps)] = 0.7
-    reefcondition[(reefcondition >= sum(crit_val[2:]) - eps) & (reefcondition < sum(crit_val[1:]) - eps)] = 0.5
-    reefcondition[(reefcondition >= sum(crit_val[3:]) - eps) & (reefcondition < sum(crit_val[2:]) - eps)] = 0.3
-    reefcondition[reefcondition < sum(crit_val[3:]) - eps] = 0.1
+    reefcondition[reefcondition == sum(crit_val)] = 0.9
+    reefcondition[reefcondition == sum(crit_val[1:])] = 0.7
+    reefcondition[reefcondition == sum(crit_val[2:])] = 0.5
+    reefcondition[reefcondition == sum(crit_val[3:])] = 0.3
+    reefcondition[reefcondition == 0.0] = 0.1
 
     return {
         "total_cover": total_cover,

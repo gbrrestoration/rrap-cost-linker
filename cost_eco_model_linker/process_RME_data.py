@@ -456,7 +456,12 @@ def create_economics_metric_files(
             scen_id_start = iv_idx * n_reps
             scen_id_end = scen_id_start + n_reps
             iv_scens = unique_iv_scens[scen_id_start:scen_id_end]
-            cf_scens = unique_cf_scens[scen_id_start:scen_id_end]
+
+            if "counterfactual_mapping" in iv_dict:
+                # Map intervention scenarios to counterfactuals using the provided mapping
+                cf_scens = np.array(iv_dict["counterfactual_mapping"])[iv_scens] - 1
+            else:
+                cf_scens = unique_cf_scens[scen_id_start:scen_id_end]
 
             # Create intervention key dataframe
             scen_cols = [

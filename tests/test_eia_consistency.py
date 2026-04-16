@@ -49,6 +49,8 @@ def test_scaled_eia_totals_match_overview(
     if not eia_path.exists():
         pytest.skip(f"EIA scaled file not found: {eia_path}")
 
+    # TODO: both reads could be moved to module-scoped fixtures to avoid reloading
+    # the same files once per parametrised case.
     overview = pd.read_csv(overview_path)
     eia_df = pd.read_csv(eia_path)
 

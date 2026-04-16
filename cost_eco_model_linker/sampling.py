@@ -564,6 +564,8 @@ def collect_lm_costs(xlapp, wb, wb_path, cost_factors, factor_spec):
     )
 
 
+# TODO: the per-step inventory logic here is identical to _apply_outplant_inventory in
+# cost_calculations.py — see comment there for consolidation opportunity.
 def _apply_lm_inventory_model(df: pd.DataFrame) -> pd.DataFrame:
     """
     Apply the year-by-year inventory/replacement model to a YearTable.
@@ -571,8 +573,10 @@ def _apply_lm_inventory_model(df: pd.DataFrame) -> pd.DataFrame:
     For each year t:
       - retained_capacity = 0.8 * inventory[t-1]
       - additional_required = max(0, required_capex[t] - retained_capacity)
-      - total_capex = 0.2 * inventory[t-1] + additional_required
-      - inventory[t] = retained_capacity + additional_required
+      - If scaling up (required_capex > retained):
+          total_capex = additional_required; inventory[t] = required_capex
+      - If sufficient capacity (required_capex <= retained):
+          total_capex = 0; inventory[t] = retained_capacity
 
     Year 1: inventory[t-1] = 0, so full required_capex is charged and sets
     the initial inventory.
@@ -601,8 +605,9 @@ def _apply_lm_inventory_model(df: pd.DataFrame) -> pd.DataFrame:
 
         retained_capacity = 0.8 * I0
         additional_required = max(0.0, req - retained_capacity)
-        total_capex = 0.2 * I0 + additional_required
-        inventory_now = retained_capacity + additional_required
+        needs_additional = req > retained_capacity
+        total_capex = additional_required if needs_additional else 0.0
+        inventory_now = req if needs_additional else retained_capacity
 
         inventory_vec[t] = inventory_now
         retained_capacity_vec[t] = retained_capacity

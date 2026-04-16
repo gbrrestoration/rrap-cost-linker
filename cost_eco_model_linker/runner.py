@@ -218,6 +218,8 @@ def evaluate(
     return result_paths
 
 
+# TODO: parallel_evaluate is missing the model version checks, post_process_metrics
+# call, and results_dir setup that evaluate() performs. Bring into parity before use.
 def parallel_evaluate(
     rme_files_path: str,
     nsims: int,

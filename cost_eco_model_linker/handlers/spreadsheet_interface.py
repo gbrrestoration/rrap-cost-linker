@@ -230,6 +230,9 @@ def fill_industry_costs(eia_template, next_idx, cost_df, ind_codes, unique_ind_c
             )
 
 
+# TODO: fill_opex and fill_capex share the same _setup_EIA_calculation / fillna
+# skeleton; the only difference is the labour split in fill_opex. Both could be
+# merged into a single function with an expense_type parameter.
 def fill_opex(it, _, year, intervention, port, eia_template, wb):
     """Fill OPEX industry costs and labour, summing all relevant costs for each industry code.
 
@@ -369,7 +372,13 @@ def fill_lm_EIA_info(
         next_idx = find_or_fill_row(
             eia_template, it, year, intervention, port, normalized_type
         )
-        eia_template.iloc[next_idx, 0:5] = (it, year, intervention, port, normalized_type)
+        eia_template.iloc[next_idx, 0:5] = (
+            it,
+            year,
+            intervention,
+            port,
+            normalized_type,
+        )
 
         for code in unique_ind_codes:
             matches_code = ind_codes[type_rows.index] == code
@@ -427,23 +436,6 @@ def fill_EIA_info(
     """
     shared_args = (it, iv_start_year, year, intervention, port)
     eia_template = _process_cost_section(eia_template, wb, shared_args)
-
-    # Adjust CAPEX costs relative to initial intervention year.
-    # CAPEX is a one-time setup cost; in subsequent years only the *incremental*
-    # increase matters (i.e. the cost of scaling up from the initial deployment).
-    if year > iv_start_year:
-        capex_rows = eia_template.type == "Capex"
-        is_intervention = eia_template.intervention == intervention
-        this_row = (eia_template.year == year) & capex_rows & is_intervention
-        init_row = (eia_template.year == iv_start_year) & capex_rows & is_intervention
-        if this_row.any() and init_row.any():
-            _meta_cols = {"iteration", "year", "intervention", "location", "type"}
-            cost_cols = [c for c in eia_template.columns if c not in _meta_cols]
-            incremental = (
-                eia_template.loc[this_row, cost_cols].values
-                - eia_template.loc[init_row, cost_cols].values
-            )
-            eia_template.loc[this_row, cost_cols] = incremental.clip(min=0)
 
     # Move labour column to last position
     eia_template["labour"] = eia_template.pop("labour")

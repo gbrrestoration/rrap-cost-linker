@@ -512,7 +512,7 @@ def _process_outplant_reefset(
     departure_port,
     rs_years,
     iv_yr,
-    rep,
+    it_id,
     nsims,
     yr_prod_capex,
     yr_deploy_capex,
@@ -576,10 +576,10 @@ def _process_outplant_reefset(
 
     min_rs_yr = rs_years[0]
     eia_template_prod = fill_EIA_info(
-        prod_wb, "CA_P", rep, min_rs_yr, iv_yr, "Townsville", eia_template_prod
+        prod_wb, "CA_P", it_id, min_rs_yr, iv_yr, "Townsville", eia_template_prod
     )
     eia_template_deploy = fill_EIA_info(
-        deploy_wb, "CA_D", rep, min_rs_yr, iv_yr, departure_port, eia_template_deploy
+        deploy_wb, "CA_D", it_id, min_rs_yr, iv_yr, departure_port, eia_template_deploy
     )
 
     # DEBUG HERE
@@ -621,7 +621,7 @@ def _process_lm_reefset(
     departure_port,
     rs_years,
     iv_yr,
-    rep,
+    it_id,
     nsims,
     acc,
     yr_idx,
@@ -668,7 +668,7 @@ def _process_lm_reefset(
     acc.lm_yield_per_pool[yr_idx] += lm_factors["yield_per_pool"].values[0:nsims]
 
     eia_template_lm = fill_lm_EIA_info(
-        lm_wb, "LM", rep, rs_years[0], iv_yr, departure_port, eia_template_lm
+        lm_wb, "LM", it_id, rs_years[0], iv_yr, departure_port, eia_template_lm
     )
     lm_wb = reset_workbook(xlapp, lm_wb, lm_model_fp)
 
@@ -898,6 +898,8 @@ def _write_eia_outputs(
         scaled_capex = shares[_meta_cols].copy()
         scaled_capex[numeric_cols] = 0.0
         cap_idx = pd.MultiIndex.from_frame(shares[["year", "iteration"]])
+        print(f"cap_idx: {cap_idx}")
+        print(f"model_totals: {model_totals[label]["capex"]}")
         cap_scalars = (
             model_totals[label]["capex"].reindex(cap_idx).fillna(0.0).to_numpy()
         )
@@ -944,8 +946,11 @@ def _merge_rep_costs(rep_cost_dfs):
     all_overview_rows = []
 
     for _, cost_df, overview_rows in rep_cost_dfs:
-        all_overview_rows.extend(overview_rows)
         rep_draw_cols = [c for c in cost_df.columns if c.startswith("draw")]
+        for row in overview_rows:
+            row["draw"] += draw_offset
+        all_overview_rows.extend(overview_rows)
+
         rename_map = {
             c: f"draw{draw_offset + i + 1}" for i, c in enumerate(rep_draw_cols)
         }
@@ -1063,9 +1068,11 @@ def calculate_costs(
             unique_reps = np.unique(ID_key.rep[scen_idx])
 
             rep_cost_dfs = []
+            draw_offset = 0
 
             for rep in unique_reps:
                 rep_idx = scen_idx & (ID_key.rep == rep)
+                temp_it_id = f"TEMP_{rep}"
 
                 cost_df = initialize_cost_df(all_sim_years, nsims)
 
@@ -1178,7 +1185,7 @@ def calculate_costs(
                                     departure_port,
                                     reefset_years_map[rs],
                                     iv_yr,
-                                    rep,
+                                    temp_it_id,
                                     nsims,
                                     yr_prod_capex,
                                     yr_deploy_capex,
@@ -1243,7 +1250,7 @@ def calculate_costs(
                                         departure_port,
                                         reefset_years_map[rs],
                                         iv_yr,
-                                        rep,
+                                        temp_it_id,
                                         nsims,
                                         acc,
                                         yr_idx,
@@ -1276,6 +1283,36 @@ def calculate_costs(
                 )
 
                 rep_cost_dfs.append((rep, cost_df, overview_rows))
+
+                # Expand EIA templates from the single temporary ID to all draws in this rep
+                for template in [eia_template_prod, eia_template_deploy, eia_template_lm]:
+                    if template.empty:
+                        continue
+                    mask = template.iteration == temp_it_id
+                    rows_to_expand = template[mask]
+                    if rows_to_expand.empty:
+                        continue
+
+                    # Remove the temporary rows
+                    template.drop(template.index[mask], inplace=True)
+
+                    # Add a row for each draw in the rep
+                    new_rows = []
+                    for draw_i in range(nsims):
+                        dup = rows_to_expand.copy()
+                        dup["iteration"] = draw_offset + draw_i + 1
+                        new_rows.append(dup)
+
+                    # Update template in-place (since they are passed around)
+                    expanded = pd.concat(new_rows, ignore_index=True)
+                    if template is eia_template_prod:
+                        eia_template_prod = pd.concat([template, expanded], ignore_index=True)
+                    elif template is eia_template_deploy:
+                        eia_template_deploy = pd.concat([template, expanded], ignore_index=True)
+                    elif template is eia_template_lm:
+                        eia_template_lm = pd.concat([template, expanded], ignore_index=True)
+
+                draw_offset += nsims
 
             combined, all_overview_rows = _merge_rep_costs(rep_cost_dfs)
 

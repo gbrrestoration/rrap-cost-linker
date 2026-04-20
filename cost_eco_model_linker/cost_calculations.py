@@ -208,7 +208,7 @@ def sample_cost_model(nsims):
         # Sample production model factors
         nfactors = np.min([specs_dep.shape[0], specs_prod.shape[0]]) - 2
         N, K = get_NK(nsims, nfactors, calc_second_order=False)
-        sp_prod.sample_sobol(N, calc_second_order=False, skip_values=2**N)
+        sp_prod.sample_sobol(N, calc_second_order=False, skip_values=N)
         factors_df_prod = pd.DataFrame(
             data=sp_prod.samples, columns=specs_prod.factor_names
         )
@@ -216,14 +216,14 @@ def sample_cost_model(nsims):
         # Sample deployment model factors
         nfactors = np.min([specs_dep.shape[0], specs_prod.shape[0]]) - 2
         N, K = get_NK(nsims, nfactors, calc_second_order=False)
-        sp_dep.sample_sobol(N, calc_second_order=False, skip_values=2**N)
+        sp_dep.sample_sobol(N, calc_second_order=False, skip_values=N)
         factors_df_dep = pd.DataFrame(
             data=sp_dep.samples, columns=specs_dep.factor_names
         )
 
         # Sample LM model factors
         N, K = get_NK(nsims, specs_lm.shape[0], calc_second_order=False)
-        sp_lm.sample_sobol(N, calc_second_order=False, skip_values=2**N)
+        sp_lm.sample_sobol(N, calc_second_order=False, skip_values=N)
         factors_df_lm = pd.DataFrame(data=sp_lm.samples, columns=specs_lm.factor_names)
 
         # Subset to just the number of sims as the scenarios beyond `nsims` do not get used

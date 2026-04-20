@@ -95,7 +95,6 @@ def indicator_params(
             juv_var = "coral_juv_m2"
         elif "relative_juveniles" in result_set.variables:
             juv_var = "relative_juveniles"
-            print("Using 'relative_juveniles' for juvenile baseline.")
         else:
             raise ValueError(
                 "Neither 'coral_juv_m2' nor 'relative_juveniles' found in results."

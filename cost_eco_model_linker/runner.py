@@ -249,9 +249,10 @@ def evaluate(
             uncertainty_dict=uncertainty_dict,
             costs_only=costs_only,
         )
+        from tqdm import tqdm
 
         if not costs_only:
-            for filepaths in metric_fps:
+            for filepaths in tqdm(metric_fps, desc="Post-processing metrics"):
                 for filetype in ["intervention", "counterfactual"]:
                     file_list = [fn for fn in filepaths if filetype in fn]
                     post_process_metrics(stores, file_list, metrics, nsims)
@@ -293,9 +294,10 @@ def evaluate(
             costs_only=costs_only,
             distance_override_NM=distance_override_NM,
         )
+        from tqdm import tqdm
 
         if not costs_only:
-            for filepaths in metric_fps:
+            for filepaths in tqdm(metric_fps, desc="Post-processing metrics"):
                 for filetype in ["intervention", "counterfactual"]:
                     file_list = [fn for fn in filepaths if filetype in fn]
                     post_process_metrics(stores, file_list, metrics, nsims)

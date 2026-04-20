@@ -273,7 +273,7 @@ def lm_opex_distance_multiplier(distance_nm: float) -> float:
     return 0.2495 * (distance_nm**0.517)
 
 
-def update_lm_factors(lm_factors, iv_spec, pool_min, pool_max):
+def update_lm_factors(lm_factors, iv_spec, pool_min, pool_max, sample_scale=False):
     """
     Update sampled LM factor dataframe with the year-specific larval release
     pool count derived from coral counts in the intervention specification.
@@ -289,11 +289,19 @@ def update_lm_factors(lm_factors, iv_spec, pool_min, pool_max):
         Minimum valid pool count (``range_lower`` from LM config).
     pool_max : int
         Maximum valid pool count (``range_upper`` from LM config).
+    sample_scale : bool, optional
+        When ``True`` (cost exploration mode), the larval pool count is already
+        sampled from the Sobol sequence and must not be overwritten.  The RME
+        template coral counts are ignored.  Defaults to ``False``.
 
     Returns
     -------
     lm_factors : DataFrame
     """
+    if sample_scale:
+        # Pool count already sampled — leave it untouched.
+        return lm_factors
+
     n_corals = iv_spec["number_of_1YO_corals"].sum()
     pools = np.clip(
         np.ceil(n_corals / lm_factors["yield_per_pool"].values),
@@ -305,7 +313,7 @@ def update_lm_factors(lm_factors, iv_spec, pool_min, pool_max):
     return lm_factors
 
 
-def update_factors(prod_factors, deploy_factors, iv_spec):
+def update_factors(prod_factors, deploy_factors, iv_spec, sample_scale=False):
     """
     Update sampled cost model parameter dataframes with intervention specific parameters
     for a single ecological repeat.
@@ -319,23 +327,36 @@ def update_factors(prod_factors, deploy_factors, iv_spec):
     iv_spec : dataframe
         Intervention specification dataframe for the current rep and year,
         containing one row per reefset.
+    sample_scale : bool, optional
+        When ``True`` (cost exploration mode), ``num_1yoec`` is already sampled
+        from the Sobol sequence and must not be overwritten with the fixed coral
+        count from the RME template.  ``coral_yield_1YOEC`` is still synced
+        between models and ``distance_from_port`` is still set from ``iv_spec``.
+        Defaults to ``False``.
     """
-    # Sum coral count over reefsets for this rep and year.
-    # Convert to device count — the spreadsheet expects devices at the num_1yoec cell.
-    n_1yo_corals = iv_spec["number_of_1YO_corals"].sum()
-    yield_1yo = deploy_factors["coral_yield_1YOEC"]
-    n_devices = np.ceil(n_1yo_corals / yield_1yo)
+    if not sample_scale:
+        # Sum coral count over reefsets for this rep and year.
+        # Convert to device count — the spreadsheet expects devices at the num_1yoec cell.
+        n_1yo_corals = iv_spec["number_of_1YO_corals"].sum()
+        yield_1yo = deploy_factors["coral_yield_1YOEC"]
+        n_devices = np.ceil(n_1yo_corals / yield_1yo)
 
-    deploy_factors.loc[:, "num_1yoec"] = n_devices
-    prod_factors.loc[:, "num_1yoec"] = n_devices
+        deploy_factors.loc[:, "num_1yoec"] = n_devices
+        prod_factors.loc[:, "num_1yoec"] = n_devices
+    else:
+        # Device count already sampled — sync prod to deploy so both models
+        # receive the same scale.
+        prod_factors.loc[:, "num_1yoec"] = deploy_factors["num_1yoec"].values
 
-    # Make sure the production and deployment models have the same 1YO coral yield per device
+    # Always sync coral_yield_1YOEC between models.
     prod_factors.loc[:, "coral_yield_1YOEC"] = deploy_factors[
         "coral_yield_1YOEC"
     ].values
 
-    # Use distance override
-    deploy_factors.loc[:, "distance_from_port"] = iv_spec["distance_to_port_NM"].iloc[0]
+    # In exploration mode distance_from_port is already sampled; in normal mode
+    # use the actual reef distance from the intervention spec.
+    if not sample_scale:
+        deploy_factors.loc[:, "distance_from_port"] = iv_spec["distance_to_port_NM"].iloc[0]
 
     return prod_factors, deploy_factors
 
@@ -384,13 +405,13 @@ class _OverviewAccumulator:
         self.prod_total_capex = np.zeros((n, s))
         self.deploy_total_capex = np.zeros((n, s))
         self.num_devices = np.zeros((n, s))
-        self.num_1yoec = np.zeros(n)  # scalar per year (not per draw)
+        self.num_1yoec = np.zeros((n, s))
         self.lm_num_larval_pool = np.zeros((n, s))
         self.lm_yield_per_pool = np.zeros((n, s))
         self.lm_raw_capex = np.zeros((n, s))
         self.lm_raw_opex = np.zeros((n, s))
         self.lm_opex_pre_mult = np.zeros((n, s))  # raw opex before distance multiplier
-        self.lm_opex_mult = np.zeros(n)  # distance multiplier (scalar per year)
+        self.lm_opex_mult = np.zeros((n, s))  # distance multiplier (per draw)
 
 
 # ---------------------------------------------------------------------------
@@ -422,30 +443,55 @@ def _copy_workbooks(tmp_dir, deploy_filepath, prod_filepath, lm_filepath, iter_i
 
 
 def _save_cost_params(
-    cost_dir, scen_id, rep, p_iter_id, prod_factors, deploy_factors, lm_factors
+    cost_dir, scen_id, rep, p_iter_id, prod_factors, deploy_factors, lm_factors,
+    active_models=None,
 ):
     """Save sampled cost parameters to CSV for manual cross-checking.
 
-    For production and deployment, a ``num_devices`` column derived from
-    ``num_1yoec / coral_yield_1YOEC`` is inserted alongside ``num_1yoec``.
+    Only models that were actually run (i.e. present in ``active_models``) are
+    saved — writing params for a model whose spreadsheet was never executed
+    would produce a file with no cost output columns, which is misleading.
+
+    Called after the year loop so the factors reflect the second (assessment)
+    intervention year.  For production and deployment a ``num_devices`` column
+    derived from ``num_1yoec / coral_yield_1YOEC`` is inserted alongside
+    ``num_1yoec`` for convenient cross-checking against the cost_overview.
     """
+    if active_models is None:
+        active_models = {"outplant", "lm"}
+
+    _model_gate = {
+        "production": "outplant",
+        "deployment": "outplant",
+        "lm": "lm",
+    }
+
     for _label, _df in [
         ("production", prod_factors),
         ("deployment", deploy_factors),
         ("lm", lm_factors),
     ]:
+        if _model_gate[_label] not in active_models:
+            continue
         _params_fp = path_join(
             cost_dir,
             f"ID{scen_id}_rep{rep}_cost_params_{_label}_pid{p_iter_id}.csv",
         )
         _save_df = _df.copy()
         if "num_1yoec" in _save_df.columns and "coral_yield_1YOEC" in _save_df.columns:
+            # update_factors() stores device count in the num_1yoec column
+            # (n_devices = ceil(n_corals / yield) then assigned to num_1yoec).
+            # Recover the actual coral count by multiplying back, then rename
+            # the column so the output shows num_devices first, num_1yoec second.
+            n_devices = _save_df["num_1yoec"].values.copy()
+            n_corals = np.round(
+                n_devices * _save_df["coral_yield_1YOEC"].values
+            ).astype(int)
+            _save_df = _save_df.rename(columns={"num_1yoec": "num_devices"})
             _save_df.insert(
-                _save_df.columns.get_loc("num_1yoec") + 1,
-                "num_devices",
-                np.ceil(_save_df["num_1yoec"] / _save_df["coral_yield_1YOEC"]).astype(
-                    int
-                ),
+                _save_df.columns.get_loc("num_devices") + 1,
+                "num_1yoec",
+                n_corals,
             )
         _save_df.index = np.arange(1, len(_save_df) + 1)
         _save_df.to_csv(_params_fp, index_label="draw")
@@ -475,6 +521,7 @@ def _process_outplant_reefset(
     yr_idx,
     eia_template_prod,
     eia_template_deploy,
+    sample_scale=False,
 ):
     """Run spreadsheet models for one outplant reefset and accumulate results.
 
@@ -496,7 +543,7 @@ def _process_outplant_reefset(
     -------
     deploy_wb, prod_wb, deploy_factors, prod_factors, eia_template_prod, eia_template_deploy
     """
-    prod_factors, deploy_factors = update_factors(prod_factors, deploy_factors, rs_spec)
+    prod_factors, deploy_factors = update_factors(prod_factors, deploy_factors, rs_spec, sample_scale=sample_scale)
     deploy_wb, deploy_factors = collect_deployment_costs(
         xlapp, deploy_wb, deploy_model_fp, deploy_factors, deploy_spec
     )
@@ -517,8 +564,15 @@ def _process_outplant_reefset(
     acc.prod_opex[yr_idx] += prod_factors["opex"].values[0:nsims]
     acc.deploy_raw_capex[yr_idx] += raw_deploy_capex
     acc.deploy_opex[yr_idx] += deploy_factors["opex"].values[0:nsims]
-    acc.num_devices[yr_idx] += deploy_factors["num_1yoec"].values[0:nsims]
-    acc.num_1yoec[yr_idx] += rs_num_1yoec
+    n_devices_this_rs = deploy_factors["num_1yoec"].values[0:nsims]
+    acc.num_devices[yr_idx] += n_devices_this_rs
+    if sample_scale:
+        # Recover per-draw coral count from sampled device count × yield.
+        acc.num_1yoec[yr_idx] += np.round(
+            n_devices_this_rs * deploy_factors["coral_yield_1YOEC"].values[0:nsims]
+        ).astype(int)
+    else:
+        acc.num_1yoec[yr_idx] += rs_num_1yoec  # scalar broadcasts across draws
 
     min_rs_yr = rs_years[0]
     eia_template_prod = fill_EIA_info(
@@ -572,6 +626,7 @@ def _process_lm_reefset(
     acc,
     yr_idx,
     eia_template_lm,
+    sample_scale=False,
 ):
     """Run the LM spreadsheet model for one reefset and accumulate results.
 
@@ -585,20 +640,30 @@ def _process_lm_reefset(
         Distance from port in nautical miles for this reefset.
     acc : _OverviewAccumulator
         Overview tracking arrays; modified in-place.
+    sample_scale : bool, optional
+        When ``True`` (cost exploration mode), the larval pool count is already
+        sampled and the template coral counts are ignored.  Defaults to ``False``.
 
     Returns
     -------
     lm_wb, lm_factors, eia_template_lm
     """
-    lm_factors = update_lm_factors(lm_factors, rs_spec_corals, lm_pool_min, lm_pool_max)
+    lm_factors = update_lm_factors(lm_factors, rs_spec_corals, lm_pool_min, lm_pool_max, sample_scale=sample_scale)
     lm_wb, lm_factors = collect_lm_costs(xlapp, lm_wb, lm_model_fp, lm_factors, lm_spec)
 
-    opex_mult = lm_opex_distance_multiplier(rs_distance)
+    if sample_scale:
+        # Per-draw distances sampled from deploy_factors; compute a per-draw multiplier.
+        opex_mult = np.array(
+            [lm_opex_distance_multiplier(d) for d in rs_distance]
+        )
+    else:
+        opex_mult = lm_opex_distance_multiplier(rs_distance)
+
     raw_opex = lm_factors["opex"].values[0:nsims]
     acc.lm_raw_capex[yr_idx] += lm_factors["capex"].values[0:nsims]
     acc.lm_raw_opex[yr_idx] += raw_opex * opex_mult
     acc.lm_opex_pre_mult[yr_idx] += raw_opex
-    acc.lm_opex_mult[yr_idx] = opex_mult
+    acc.lm_opex_mult[yr_idx] += opex_mult  # broadcast scalar or add per-draw array
     acc.lm_num_larval_pool[yr_idx] += lm_factors["larval release pools"].values[0:nsims]
     acc.lm_yield_per_pool[yr_idx] += lm_factors["yield_per_pool"].values[0:nsims]
 
@@ -703,7 +768,7 @@ def _build_overview_rows_and_update_costs(
 
             lm_capex = float(lm_inv["total_capex"].iloc[yr_idx])
             lm_opex_pre_distance = float(acc.lm_opex_pre_mult[yr_idx, draw_i])
-            lm_opex_mult = float(acc.lm_opex_mult[yr_idx])
+            lm_opex_mult = float(acc.lm_opex_mult[yr_idx, draw_i])
             lm_opex = float(lm_inv["opex"].iloc[yr_idx])
             subtotal_capex = post_prod_capex + post_deploy_capex
             subtotal_opex = (
@@ -717,7 +782,7 @@ def _build_overview_rows_and_update_costs(
                     "draw": draw_i + 1,
                     "year": int(iv_yr),
                     "num_devices": acc.num_devices[yr_idx, draw_i],
-                    "num_1yoec": acc.num_1yoec[yr_idx],
+                    "num_1yoec": acc.num_1yoec[yr_idx, draw_i],
                     "num_larval_pool": acc.lm_num_larval_pool[yr_idx, draw_i],
                     "yield_per_pool": acc.lm_yield_per_pool[yr_idx, draw_i],
                     "production_capex": post_prod_capex,
@@ -747,6 +812,7 @@ def _write_eia_outputs(
     all_sim_years,
     model_totals,
     lm_opex_mult_by_year=None,
+    p_iter_id=0,
 ):
     """Fill missing years, compute row totals, and write EIA CSVs.
 
@@ -756,12 +822,17 @@ def _write_eia_outputs(
         ``{label: {"capex": Series, "opex": Series}}`` where each Series is
         indexed by ``(year, iteration)`` and gives the post-inventory total for
         that model.  Labels are ``"production"``, ``"deployment"``, ``"lm"``.
+    p_iter_id : int, optional
+        Worker index in a parallel run.  When non-zero, a ``_pid{p_iter_id}``
+        suffix is appended to EIA filenames so workers do not overwrite each
+        other.  Defaults to 0 (serial / worker-0 writes clean names).
     """
     eia_template_prod = _fill_eia_missing_years(eia_template_prod, all_sim_years)
     eia_template_deploy = _fill_eia_missing_years(eia_template_deploy, all_sim_years)
     eia_template_lm = _fill_eia_missing_years(eia_template_lm, all_sim_years)
 
     _meta_cols = ["iteration", "year", "intervention", "location", "type"]
+    _pid = f"_pid{p_iter_id}"
 
     def _total_last(df):
         """Reorder columns so 'total' is always the final column."""
@@ -781,7 +852,7 @@ def _write_eia_outputs(
         )
         eia_template.sort_values(_meta_cols, inplace=True)
         _total_last(eia_template).to_csv(
-            path_join(cost_dir, f"EIA_raw_{scen_id}_{label}.csv"), index=False
+            path_join(cost_dir, f"EIA_raw_{scen_id}_{label}{_pid}.csv"), index=False
         )
         raw_templates[label] = eia_template
 
@@ -802,7 +873,9 @@ def _write_eia_outputs(
 
         # Per-model denominator: sum of all industry-code columns in Capex rows.
         capex_rows = eia_template[eia_template["type"].str.lower() == "capex"]
-        ind_cols = [c for c in capex_rows.columns if c not in _non_cost]  # TODO: same as cost_cols above; could reuse directly
+        ind_cols = [
+            c for c in capex_rows.columns if c not in _non_cost
+        ]  # TODO: same as cost_cols above; could reuse directly
         row_denom = (
             capex_rows[ind_cols]
             .apply(pd.to_numeric, errors="coerce")
@@ -817,7 +890,8 @@ def _write_eia_outputs(
         )
         shares[numeric_cols] = shares[numeric_cols].fillna(0.0)
         _total_last(shares).to_csv(
-            path_join(cost_dir, f"EIA_proportional_{scen_id}_{label}.csv"), index=False
+            path_join(cost_dir, f"EIA_proportional_{scen_id}_{label}{_pid}.csv"),
+            index=False,
         )
 
         # Scaled Capex: proportional shares × this model's own post-inventory Capex total.
@@ -849,7 +923,7 @@ def _write_eia_outputs(
 
         scaled = pd.concat([scaled_capex, scaled_opex]).sort_values(_meta_cols)
         _total_last(scaled).to_csv(
-            path_join(cost_dir, f"EIA_scaled_{scen_id}_{label}.csv"), index=False
+            path_join(cost_dir, f"EIA_scaled_{scen_id}_{label}{_pid}.csv"), index=False
         )
 
 
@@ -903,6 +977,8 @@ def calculate_costs(
     lm_model_filepath: str,
     cont_p: float = 0.25,
     p_iter_id: int = 0,
+    active_models: set = None,
+    sample_scale: bool = False,
 ):
     """
     Sample costs for a set of interventions specified in ID_key, sampling nsims.
@@ -925,7 +1001,18 @@ def calculate_costs(
         Contingency cost proportion.
     p_iter_id : int
         ID used for parallel sampling to keep track of batches for ordered recombination.
+    active_models : set, optional
+        Set of intervention types to compute costs for.  Valid values are
+        ``"outplant"`` and ``"lm"``.  Defaults to both when ``None``.
+        Pass ``{"outplant"}`` for CA-only or ``{"lm"}`` for LM-only scenarios.
+    sample_scale : bool, optional
+        When ``True`` (cost exploration mode), intervention scale (``num_1yoec``
+        for outplant, larval pool count for LM) is drawn from the Sobol samples
+        rather than derived from the RME template coral counts.  Defaults to
+        ``False``.
     """
+    if active_models is None:
+        active_models = {"outplant", "lm"}
     iv_keys_dir = stores.intervention_keys_dir
     cost_dir = stores.cost_dir
 
@@ -992,31 +1079,24 @@ def calculate_costs(
                     lm_factors,
                 ) = sample_cost_model(nsims)
 
-                # Apply the actual port distance to deploy_factors before saving so
+                # In normal mode, apply the actual port distance to deploy_factors so
                 # the CSV reflects the value used in the simulation, not the config
                 # best-point. Use the first reefset of the first intervention year as
                 # representative (distance is fixed per reefset across years).
-                _first_yr = iv_years[0]
-                _first_rs = ID_key.loc[
-                    (ID_key.intervention_years == _first_yr) & rep_idx, "reefset"
-                ].iloc[0]
-                _first_distance = ID_key.loc[
-                    (ID_key.intervention_years == _first_yr)
-                    & rep_idx
-                    & (ID_key.reefset == _first_rs),
-                    "distance_to_port_NM",
-                ].iloc[0]
-                deploy_factors.loc[:, "distance_from_port"] = _first_distance
-
-                _save_cost_params(
-                    cost_dir,
-                    scen_id,
-                    rep,
-                    p_iter_id,
-                    prod_factors,
-                    deploy_factors,
-                    lm_factors,
-                )
+                # In exploration mode (sample_scale=True) the Sobol-sampled distance
+                # is already in deploy_factors — do not overwrite it.
+                if not sample_scale:
+                    _first_yr = iv_years[0]
+                    _first_rs = ID_key.loc[
+                        (ID_key.intervention_years == _first_yr) & rep_idx, "reefset"
+                    ].iloc[0]
+                    _first_distance = ID_key.loc[
+                        (ID_key.intervention_years == _first_yr)
+                        & rep_idx
+                        & (ID_key.reefset == _first_rs),
+                        "distance_to_port_NM",
+                    ].iloc[0]
+                    deploy_factors.loc[:, "distance_from_port"] = _first_distance
 
                 # Track outplant CAPEX inventory separately per model for the inventory/replacement model
                 prod_inventory = np.zeros(nsims)
@@ -1043,6 +1123,9 @@ def calculate_costs(
                     )
 
                     for iv_type in iv_types_this_yr:
+                        if iv_type not in active_models:
+                            continue
+
                         # Reefsets active in this year for this type — run the model once
                         # per reefset and accumulate costs so multi-region deployments are summed.
                         reefsets_this_yr = ID_key.loc[
@@ -1104,6 +1187,7 @@ def calculate_costs(
                                     yr_idx,
                                     eia_template_prod,
                                     eia_template_deploy,
+                                    sample_scale=sample_scale,
                                 )
 
                             # Inventory/replacement model applied separately to production and
@@ -1112,7 +1196,9 @@ def calculate_costs(
                                 _apply_outplant_inventory(yr_prod_capex, prod_inventory)
                             )
                             total_deploy_capex, deploy_inventory = (
-                                _apply_outplant_inventory(yr_deploy_capex, deploy_inventory)
+                                _apply_outplant_inventory(
+                                    yr_deploy_capex, deploy_inventory
+                                )
                             )
                             acc.prod_total_capex[yr_idx] = total_prod_capex
                             acc.deploy_total_capex[yr_idx] = total_deploy_capex
@@ -1130,9 +1216,16 @@ def calculate_costs(
                                 departure_port = ID_key.loc[
                                     rs_selector.idxmax(), "port_name"
                                 ]
-                                rs_distance = ID_key.loc[
-                                    rs_selector, "distance_to_port_NM"
-                                ].iloc[0]
+                                if sample_scale:
+                                    # Use the per-draw sampled distances from the
+                                    # deployment factors (same geographic draw for LM).
+                                    rs_distance = deploy_factors[
+                                        "distance_from_port"
+                                    ].values[0:nsims]
+                                else:
+                                    rs_distance = ID_key.loc[
+                                        rs_selector, "distance_to_port_NM"
+                                    ].iloc[0]
 
                                 lm_wb, lm_factors, eia_template_lm = (
                                     _process_lm_reefset(
@@ -1155,6 +1248,7 @@ def calculate_costs(
                                         acc,
                                         yr_idx,
                                         eia_template_lm,
+                                        sample_scale=sample_scale,
                                     )
                                 )
 
@@ -1162,6 +1256,19 @@ def calculate_costs(
                             raise ValueError(
                                 "Unknown intervention type encountered. Must be one of 'outplant' or 'lm'."
                             )
+
+                # Save sampled cost parameters now that the spreadsheet models have run
+                # and capex/opex output columns have been added to the factor dataframes.
+                _save_cost_params(
+                    cost_dir,
+                    scen_id,
+                    rep,
+                    p_iter_id,
+                    prod_factors,
+                    deploy_factors,
+                    lm_factors,
+                    active_models=active_models,
+                )
 
                 # Single pass over draws: fold LM inventory costs into cost_df and build overview rows
                 overview_rows = _build_overview_rows_and_update_costs(
@@ -1196,11 +1303,14 @@ def calculate_costs(
                     index=False,
                 )
 
-            lm_opex_mult_by_year = {
-                row["year"]: row["lm_opex_multiplier"]
-                for row in all_overview_rows
-                if row.get("lm_opex_multiplier", 0) != 0
-            }
+            # EIA scaled outputs need a single multiplier per year; use the mean
+            # across draws (in exploration mode draws have different distances).
+            _mult_rows = [r for r in all_overview_rows if r.get("lm_opex_multiplier", 0) != 0]
+            if _mult_rows:
+                _mult_df = pd.DataFrame(_mult_rows)[["year", "lm_opex_multiplier"]]
+                lm_opex_mult_by_year = _mult_df.groupby("year")["lm_opex_multiplier"].mean().to_dict()
+            else:
+                lm_opex_mult_by_year = {}
             _ov = (
                 pd.DataFrame(all_overview_rows)
                 .rename(columns={"draw": "iteration"})
@@ -1229,6 +1339,7 @@ def calculate_costs(
                 all_sim_years,
                 model_totals,
                 lm_opex_mult_by_year=lm_opex_mult_by_year,
+                p_iter_id=p_iter_id,
             )
 
     finally:

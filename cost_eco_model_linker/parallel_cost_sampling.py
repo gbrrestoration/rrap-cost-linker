@@ -19,7 +19,6 @@ def para_sample_econ(
     ncores=5,
     uncertainty_dict=None,
     metrics=None,
-    max_dist=25.0,
 ):
     """
     Run economics metrics data creation files so that corresponding cost data can be sampled in parallel.
@@ -38,10 +37,6 @@ def para_sample_econ(
         Number of cores to sample cost models over.
     uncertainty_dict : dict
         Contains information on what uncertainty types to sample.
-    max_dist : float
-        Maximum distance between reefs within a "cluster". Total distance to port is calculated as distance
-        to port for closest reef cluster + distance between each additional further cluster where distance between
-        clusters is calculated as distance between the reefs furthest from port in each cluster.
     """
     nbatches = math.ceil(nsims / ncores)
 
@@ -63,7 +58,6 @@ def para_sample_econ(
         nbatches=nbatches,
         ncores=ncores,
         metrics=metrics,
-        max_dist=max_dist,
         uncertainty_dict=uncertainty_dict,
         economics_spatial_filepath=economics_spatial_filepath,
     )

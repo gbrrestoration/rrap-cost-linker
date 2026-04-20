@@ -301,8 +301,8 @@ def create_economics_metric_files(
     uncertainty_dict: dict = None,
     ncores: int = 1,
     metrics=None,
-    max_dist=25.0,
     economics_spatial_filepath=None,
+    costs_only=False,
 ) -> tuple[str, list[str]]:
     """
     Main function for creating metric file summaries for input to economics modelling.
@@ -323,10 +323,10 @@ def create_economics_metric_files(
         Number of cores for output file generation.
     metrics : list, optional
         List of metric functions to calculate. Defaults to [rci, raw_rti, rfi].
-    max_dist : float, default=25.0
-        Maximum distance (NM) between reefs within a cluster for distance calculations.
     economics_spatial_filepath : str, optional
         Path to economics spatial data (econ_spatial.csv).
+    costs_only : boolean, optional
+        If True, does not produce indicator metrics (RCI, RFI, RTI). Default is False.
 
     Returns
     -------
@@ -419,7 +419,14 @@ def create_economics_metric_files(
         cf_scens = unique_cf_scens[scen_id_start:scen_id_end]
 
         # Create intervention key dataframe
-        scen_cols = ["intervention id", "year", "rep", "number of corals", "type", "reefset"]
+        scen_cols = [
+            "intervention id",
+            "year",
+            "rep",
+            "number of corals",
+            "type",
+            "reefset",
+        ]
         id_key_df = scens_df_iv[scen_cols].assign(port_name="", distance_to_port_NM=0.0)
 
         # Determine distance to nearest port and representative reef per reefset
@@ -427,7 +434,9 @@ def create_economics_metric_files(
         id_key_df["reef"] = reef_name
         for rs_name in reefset_names:
             rs_reefs = iv_dict[rs_name]
-            rs_port_name, rs_distance_NM = find_representative_port(reef_spatial_data, rs_reefs)
+            rs_port_name, rs_distance_NM = find_representative_port(
+                reef_spatial_data, rs_reefs
+            )
             rs_mask = id_key_df["reefset"] == rs_name
             id_key_df.loc[rs_mask, "port_name"] = rs_port_name
             id_key_df.loc[rs_mask, "distance_to_port_NM"] = rs_distance_NM
@@ -481,60 +490,63 @@ def create_economics_metric_files(
                 "slope2": slope2,
             }
 
-            metrics_data_iv, ecol_ids = extract_metrics(
-                results_data,
-                iv_scens,
-                len(batch_sel),
-                uncertainty_dict=uncertainty_dict,
-                curr_eco_sim_idx=None,
-                indicator_param_dict=indicator_params_dict,
-            )
-
-            metrics_data_cf, _ = extract_metrics(
-                results_data,
-                cf_scens,
-                len(batch_sel),
-                uncertainty_dict=uncertainty_dict,
-                curr_eco_sim_idx=ecol_ids
-                - n_reps,  # Use same ecological sample for counterfactual as for intervention, adjusting for scenario index shift
-                indicator_param_dict=indicator_params_dict,  # Use same indicator params for counterfactual as for intervention
-            )
-
-            # Adjust ecological IDs to ignore counterfactuals in cost sampling
-            max_rep = id_key_df["rep"].max()
-            ecol_ids[ecol_ids >= max_rep] -= max_rep
-            store_ecol_ids[batch_sel, iv_idx] = ecol_ids
-
-            # Prepare simulation columns for this batch
-            sim_cols = [f"sim_{b + 1}" for b in batch_sel]
-
-            # Calculate and save metrics for each metric function
-            for met_func in metrics:
-                fn_suffix = f"{base_met_filename}{met_func.__name__}_batch{batch_idx}"
-
-                # Intervention results
-                iv_results = met_func(metrics_data_iv, data_store)
-                iv_filename = f"ID{iv_id}_intervention{fn_suffix}.parq"
-                ds[sim_cols] = iv_results
-
-                ds.to_parquet(
-                    path_join(stores.econ_dir, iv_filename),
-                    index=False,
-                    compression=None,
+            if not costs_only:
+                metrics_data_iv, ecol_ids = extract_metrics(
+                    results_data,
+                    iv_scens,
+                    len(batch_sel),
+                    uncertainty_dict=uncertainty_dict,
+                    curr_eco_sim_idx=None,
+                    indicator_param_dict=indicator_params_dict,
                 )
-                batch_files.append(iv_filename)
 
-                # Counterfactual results (reuse the same dataframe)
-                cf_results = met_func(metrics_data_cf, data_store)
-                cf_filename = f"ID{iv_id}_counterfactual{fn_suffix}.parq"
-                ds[sim_cols] = cf_results
-
-                ds.to_parquet(
-                    path_join(stores.econ_dir, cf_filename),
-                    index=False,
-                    compression=None,
+                metrics_data_cf, _ = extract_metrics(
+                    results_data,
+                    cf_scens,
+                    len(batch_sel),
+                    uncertainty_dict=uncertainty_dict,
+                    curr_eco_sim_idx=ecol_ids
+                    - n_reps,  # Use same ecological sample for counterfactual as for intervention, adjusting for scenario index shift
+                    indicator_param_dict=indicator_params_dict,  # Use same indicator params for counterfactual as for intervention
                 )
-                batch_files.append(cf_filename)
+
+                # Adjust ecological IDs to ignore counterfactuals in cost sampling
+                max_rep = id_key_df["rep"].max()
+                ecol_ids[ecol_ids >= max_rep] -= max_rep
+                store_ecol_ids[batch_sel, iv_idx] = ecol_ids
+
+                # Prepare simulation columns for this batch
+                sim_cols = [f"sim_{b + 1}" for b in batch_sel]
+
+                # Calculate and save metrics for each metric function
+                for met_func in metrics:
+                    fn_suffix = (
+                        f"{base_met_filename}{met_func.__name__}_batch{batch_idx}"
+                    )
+
+                    # Intervention results
+                    iv_results = met_func(metrics_data_iv, data_store)
+                    iv_filename = f"ID{iv_id}_intervention{fn_suffix}.parq"
+                    ds[sim_cols] = iv_results
+
+                    ds.to_parquet(
+                        path_join(stores.econ_dir, iv_filename),
+                        index=False,
+                        compression=None,
+                    )
+                    batch_files.append(iv_filename)
+
+                    # Counterfactual results (reuse the same dataframe)
+                    cf_results = met_func(metrics_data_cf, data_store)
+                    cf_filename = f"ID{iv_id}_counterfactual{fn_suffix}.parq"
+                    ds[sim_cols] = cf_results
+
+                    ds.to_parquet(
+                        path_join(stores.econ_dir, cf_filename),
+                        index=False,
+                        compression=None,
+                    )
+                    batch_files.append(cf_filename)
 
         # Finalize intervention key with metadata
         id_key_df = id_key_df.assign(

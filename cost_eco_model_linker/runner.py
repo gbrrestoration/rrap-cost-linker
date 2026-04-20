@@ -13,14 +13,12 @@ from SALib import ProblemSpec
 import multiprocess as mp
 
 from . import process_RME_data as prd
-from .parallel_cost_sampling import post_process_metrics
+from .parallel_cost_sampling import post_process_metrics, post_process_costs
 from .calculate_metrics import default_uncertainty_dict
 from . import (
     setup_dirs,
     create_economics_metric_files,
-    para_sample_econ,
     calculate_costs,
-    post_process_costs,
 )
 
 from .handlers import open_excel, close_excel, reset_workbook
@@ -123,6 +121,10 @@ def evaluate(
     results_dir: str,
     metrics: list = None,
     uncertainty_dict: dict = None,
+    active_models: set = None,
+    nprocs: int = 1,
+    costs_only: bool = False,
+    sample_scale: bool = False,
 ) -> list[str]:
     """
     Evaluate costs of intervention scenarios.
@@ -145,12 +147,32 @@ def evaluate(
         List of metrics to calculate. Default is None.
     uncertainty_dict : dict, optional
         Dictionary specifying uncertainty parameters. Default is None.
+    active_models : set, optional
+        Intervention types to include in cost calculations.  Valid values are
+        ``"outplant"`` and ``"lm"``.  Defaults to both when ``None``.
+        Pass ``{"outplant"}`` for CA-only or ``{"lm"}`` for LM-only scenarios.
+    nprocs : int, optional
+        Number of parallel worker processes for cost sampling.  Each worker
+        receives ``ceil(nsims / nprocs)`` draws.  Defaults to 1 (serial).
+    costs_only : bool, optional
+        When ``True``, skips post-processing of ecological metric files.
+        Use this when only cost outputs are needed (e.g. in
+        ``run_cost_exploration``).  Defaults to ``False``.
 
     Returns
     -------
     list[str]
         Paths to result files.
     """
+    # On Windows, multiprocessing's spawn start method re-imports __main__ in
+    # each worker during bootstrap. If the user calls evaluate() at the top
+    # level of their script without a __name__ == '__main__' guard, this
+    # function would be re-entered from every worker. Python sets _inheriting=True
+    # on the current process exactly during this bootstrapping phase, so we
+    # detect that and return early before any Pool() call is attempted.
+    if getattr(mp.current_process(), "_inheriting", False):
+        return []
+
     # Check available config aligns with model versions
     m = SEMVER_RE.match(deploy_model_fn)
     deploy_m_ver = Version(m.group(1)) if m else None
@@ -193,80 +215,488 @@ def evaluate(
     if uncertainty_dict is None:
         uncertainty_dict = default_uncertainty_dict()
 
-    # Create metric data files for economics modelling and extract filename for intervention key
-    int_keys_fn, metric_fps = create_economics_metric_files(
-        rme_files_path,
-        nsims,
-        stores,
-        metrics=metrics,
-        uncertainty_dict=uncertainty_dict,
-    )
+    if nprocs > 1:
+        # Parallel path: split nsims across nprocs workers; each worker gets
+        # nbatches_per_core draws and reads its own ID key file (p_iter_id).
+        nbatches_per_core = int(np.ceil(nsims / nprocs))
 
-    # Post process metrics to be in single file
-    for filepaths in metric_fps:
-        for filetype in ["intervention", "counterfactual"]:
-            file_list = [fn for fn in filepaths if filetype in fn]
-            post_process_metrics(stores, file_list, metrics, nsims)
+        int_keys_fn, metric_fps = create_economics_metric_files(
+            rme_files_path,
+            nsims,
+            stores,
+            nbatches=nbatches_per_core,
+            ncores=nprocs,
+            metrics=metrics,
+            uncertainty_dict=uncertainty_dict,
+            costs_only=costs_only,
+        )
 
-    os.remove(os.path.join(stores.econ_dir, "sim_template.parq"))
+        if not costs_only:
+            for filepaths in metric_fps:
+                for filetype in ["intervention", "counterfactual"]:
+                    file_list = [fn for fn in filepaths if filetype in fn]
+                    post_process_metrics(stores, file_list, metrics, nsims)
 
-    # Create cost data files for the intervention run ids in ID_key
-    result_paths = calculate_costs(
-        stores, int_keys_fn, nsims, deploy_model_fn, prod_model_fn, lm_model_fn
-    )
+        os.remove(os.path.join(stores.econ_dir, "sim_template.parq"))
 
-    return result_paths
-
-
-# TODO: parallel_evaluate is missing the model version checks, post_process_metrics
-# call, and results_dir setup that evaluate() performs. Bring into parity before use.
-def parallel_evaluate(
-    rme_files_path: str,
-    nsims: int,
-    ncores: int,
-    deploy_model_fn: str,
-    prod_model_fn: str,
-    lm_model_fn: str,
-    results_dir: str,
-    metrics: list = None,
-    uncertainty_dict: dict = None,
-):
-    stores = setup_dirs(results_dir)
-
-    # Set defaults
-    if metrics is None:
-        metrics = [prd.rci, prd.raw_rti, prd.rfi]
-    if uncertainty_dict is None:
-        uncertainty_dict = default_uncertainty_dict()
-
-    # Create economics metrics input files, get number of batches needed to complete nsims over ncores
-    int_keys_fn, nbatches = para_sample_econ(
-        rme_files_path,
-        nsims,
-        stores,
-        ncores=ncores,
-        metrics=metrics,
-        uncertainty_dict=uncertainty_dict,
-    )
-
-    # Run cost sampling in parallel on ncores
-    _fix_main_spec()
-    with mp.Pool(ncores, initializer=_pool_initializer) as pool:
+        _fix_main_spec()
         wrapper = partial(
             calculate_costs,
             stores,
             int_keys_fn,
-            nbatches,
+            nbatches_per_core,
             deploy_model_fn,
             prod_model_fn,
             lm_model_fn,
             0.25,  # cont_p
+            active_models=active_models,
+            sample_scale=sample_scale,
+        )
+        with mp.Pool(nprocs, initializer=_pool_initializer) as pool:
+            result = pool.map(wrapper, range(nprocs))
+
+        post_process_costs(result, nsims)
+
+        scen_ids = [
+            int(re.search(r"ID(\d+)_", os.path.basename(fp)).group(1))
+            for fp in result[0]
+        ]
+        _combine_parallel_outputs(stores.cost_dir, scen_ids, nprocs, nbatches_per_core)
+
+        return [path for worker_paths in result for path in worker_paths]
+
+    else:
+        # Serial path
+        int_keys_fn, metric_fps = create_economics_metric_files(
+            rme_files_path,
+            nsims,
+            stores,
+            metrics=metrics,
+            uncertainty_dict=uncertainty_dict,
+            costs_only=costs_only,
         )
 
-        result = pool.map(wrapper, range(nbatches + 1))
+        if not costs_only:
+            for filepaths in metric_fps:
+                for filetype in ["intervention", "counterfactual"]:
+                    file_list = [fn for fn in filepaths if filetype in fn]
+                    post_process_metrics(stores, file_list, metrics, nsims)
 
-    # Post-process saved samples to be in single file
-    post_process_costs(result, nsims)
+        os.remove(os.path.join(stores.econ_dir, "sim_template.parq"))
+
+        result_paths = calculate_costs(
+            stores,
+            int_keys_fn,
+            nsims,
+            deploy_model_fn,
+            prod_model_fn,
+            lm_model_fn,
+            active_models=active_models,
+            sample_scale=sample_scale,
+        )
+        scen_ids = [
+            int(re.search(r"ID(\d+)_", os.path.basename(fp)).group(1))
+            for fp in result_paths
+        ]
+        _combine_parallel_outputs(
+            stores.cost_dir, scen_ids, nprocs=1, nbatches_per_core=nsims
+        )
+        return result_paths
+
+
+def _combine_parallel_outputs(cost_dir, scen_ids, nprocs, nbatches_per_core):
+    """Combine per-worker cost overview and EIA files after a parallel run.
+
+    Overview files are concatenated with draw IDs renumbered sequentially
+    across workers.  EIA files (raw, proportional, scaled) are averaged across
+    workers — worker 0 writes the clean filename; workers 1+ append a
+    ``_pid{i}`` suffix.  All per-worker files are deleted after combination.
+
+    Parameters
+    ----------
+    cost_dir : str
+        Directory containing per-worker output files.
+    scen_ids : list[int]
+        Scenario IDs whose files should be combined.
+    nprocs : int
+        Number of workers used.
+    nbatches_per_core : int
+        Draws per worker (used to compute per-worker draw offsets).
+    """
+    _meta_cols = ["iteration", "year", "intervention", "location", "type"]
+
+    for scen_id in scen_ids:
+        # --- Overview: concat all workers, renumber draws sequentially ---
+        overview_dfs = []
+        for i in range(nprocs):
+            fp = os.path.join(cost_dir, f"ID{scen_id}_cost_overview_iter_pid{i}.csv")
+            if os.path.exists(fp):
+                df = pd.read_csv(fp)
+                df["draw"] += i * nbatches_per_core
+                overview_dfs.append(df)
+                os.remove(fp)
+        if overview_dfs:
+            combined_ov = pd.concat(overview_dfs, ignore_index=True).sort_values(
+                ["intervention_id", "rep_id", "year", "draw"]
+            )
+            combined_ov.to_csv(
+                os.path.join(cost_dir, f"ID{scen_id}_cost_overview.csv"),
+                index=False,
+            )
+
+        # --- EIA: average numeric columns across all workers then write clean names ---
+        for file_type in ["raw", "proportional", "scaled"]:
+            for label in ["production", "deployment", "lm"]:
+                worker_fps = [
+                    os.path.join(
+                        cost_dir, f"EIA_{file_type}_{scen_id}_{label}_pid{i}.csv"
+                    )
+                    for i in range(nprocs)
+                ]
+                present = [fp for fp in worker_fps if os.path.exists(fp)]
+                if not present:
+                    continue
+
+                dfs = [pd.read_csv(fp) for fp in present]
+                numeric_cols = [c for c in dfs[0].columns if c not in _meta_cols]
+                avg = sum(df[numeric_cols].fillna(0.0).to_numpy() for df in dfs) / len(
+                    dfs
+                )
+                combined_eia = dfs[0][_meta_cols].copy()
+                combined_eia[numeric_cols] = avg
+                combined_eia.to_csv(
+                    os.path.join(cost_dir, f"EIA_{file_type}_{scen_id}_{label}.csv"),
+                    index=False,
+                )
+
+                for fp in present:
+                    os.remove(fp)
+
+        # --- Cost params: concat draws across workers, renumber draw index ---
+        import glob as _glob
+
+        for label in ["production", "deployment", "lm"]:
+            # Discover which reps exist by looking at worker 0's files.
+            pid0_files = _glob.glob(
+                os.path.join(
+                    cost_dir, f"ID{scen_id}_rep*_cost_params_{label}_pid0.csv"
+                )
+            )
+            for pid0_fp in pid0_files:
+                rep_m = re.search(r"_rep(\w+)_cost_params_", os.path.basename(pid0_fp))
+                if not rep_m:
+                    continue
+                rep = rep_m.group(1)
+
+                dfs = []
+                for i in range(nprocs):
+                    fp = os.path.join(
+                        cost_dir,
+                        f"ID{scen_id}_rep{rep}_cost_params_{label}_pid{i}.csv",
+                    )
+                    if not os.path.exists(fp):
+                        continue
+                    df = pd.read_csv(fp, index_col=0)
+                    df.index = df.index + i * nbatches_per_core
+                    dfs.append(df)
+                    os.remove(fp)
+
+                if dfs:
+                    pd.concat(dfs).sort_index().to_csv(
+                        os.path.join(
+                            cost_dir,
+                            f"ID{scen_id}_rep{rep}_cost_params_{label}.csv",
+                        ),
+                        index_label="draw",
+                    )
+
+
+def _prepare_mc_scenario(
+    rme_template_path: str,
+    assessment_year: int,
+    reefset_CA: list = None,
+    reefset_LM: list = None,
+) -> str:
+    """
+    Prepare a temporary RME scenario directory for MC cost evaluation.
+
+    Copies the template RME directory, filters ``iv_yearly_scenarios.csv`` to
+    year 1 (the first deployment year) through ``assessment_year`` inclusive,
+    and optionally overwrites reef assignments in ``scenario_info.json``.
+
+    Parameters
+    ----------
+    rme_template_path : str
+        Path to the template RME output directory.
+    assessment_year : int
+        The second (target) deployment year.  Rows in
+        ``iv_yearly_scenarios.csv`` beyond this year are dropped.
+    reefset_CA : list, optional
+        Reef IDs to assign to ``reefset_CA`` (e.g. ``["18-096"]``).
+        If ``None``, the template value is kept unchanged.
+    reefset_LM : list, optional
+        Reef IDs to assign to ``reefset_LM`` (e.g. ``["16-071"]``).
+        If ``None``, the template value is kept unchanged.
+
+    Returns
+    -------
+    str
+        Path to the prepared temporary directory.  Caller is responsible
+        for deleting it when done.
+    """
+    import json
+
+    tmp_dir = tempfile.mkdtemp(prefix="ceml_")
+    shutil.copytree(rme_template_path, tmp_dir, dirs_exist_ok=True)
+
+    # Filter iv_yearly_scenarios.csv to year 1 + assessment_year
+    scens_path = os.path.join(tmp_dir, "iv_yearly_scenarios.csv")
+    scens_df = pd.read_csv(scens_path)
+    scens_df = scens_df[scens_df["year"] <= assessment_year].reset_index(drop=True)
+    scens_df.to_csv(scens_path, index=False)
+
+    # Optionally update reef assignments in scenario_info.json
+    if reefset_CA is not None or reefset_LM is not None:
+        info_path = os.path.join(tmp_dir, "scenario_info.json")
+        with open(info_path, "r") as f:
+            iv_dict = json.load(f)
+        if reefset_CA is not None:
+            iv_dict["reefset_CA"] = (
+                reefset_CA if isinstance(reefset_CA, list) else [reefset_CA]
+            )
+        if reefset_LM is not None:
+            iv_dict["reefset_LM"] = (
+                reefset_LM if isinstance(reefset_LM, list) else [reefset_LM]
+            )
+        with open(info_path, "w") as f:
+            json.dump(iv_dict, f)
+
+    return tmp_dir
+
+
+_RPC_UNAVAILABLE = -2147023174  # 0x800706BA — Excel process gone
+
+
+def _evaluate_with_retry(
+    rme_files_path,
+    nsims,
+    deploy_model_fn,
+    prod_model_fn,
+    lm_model_fn,
+    results_dir,
+    retries=3,
+    retry_delay=10.0,
+    **kwargs,
+):
+    """Call ``evaluate()`` retrying on fatal Excel COM crashes (RPC unavailable).
+
+    Each retry restarts from scratch — ``evaluate`` opens its own fresh Excel
+    instance at the top of every call, so no stale COM handles survive.
+    """
+    import time
+    import pywintypes
+
+    for attempt in range(retries):
+        try:
+            return evaluate(
+                rme_files_path,
+                nsims,
+                deploy_model_fn,
+                prod_model_fn,
+                lm_model_fn,
+                results_dir,
+                **kwargs,
+            )
+        except pywintypes.com_error as exc:
+            if exc.hresult != _RPC_UNAVAILABLE or attempt == retries - 1:
+                raise
+            wait = retry_delay * (attempt + 1)
+            print(
+                f"Excel COM server unavailable (attempt {attempt + 1}/{retries}), "
+                f"retrying in {wait:.0f}s…"
+            )
+            time.sleep(wait)
+
+
+def run_cost_exploration(
+    rme_template_path: str,
+    nsims: int,
+    deploy_model_fn: str,
+    prod_model_fn: str,
+    lm_model_fn: str,
+    results_dir: str,
+    assessment_year: int,
+    reefset_CA: list = None,
+    reefset_LM: list = None,
+    metrics: list = None,
+    uncertainty_dict: dict = None,
+    nprocs=1,
+) -> dict:
+    """
+    Explore cost uncertainty across intervention scenarios.
+
+    Prepares a scenario directory from the RME template (filtering to year 1
+    through ``assessment_year`` and optionally updating reef assignments), then
+    calls ``evaluate()`` three times — combined (CA + LM), CA-only, and
+    LM-only, writing each run's cost outputs into a labelled subdirectory
+    under ``results_dir``.  Ecological metric post-processing is skipped as
+    only cost outputs are of interest here.
+
+    Parameters
+    ----------
+    rme_template_path : str
+        Path to the RME output directory to use as a template.
+    nsims : int
+        Number of Monte Carlo draws for cost uncertainty sampling.
+    deploy_model_fn : str
+        Path to deployment spreadsheet model (excluding extension).
+    prod_model_fn : str
+        Path to production spreadsheet model (excluding extension).
+    lm_model_fn : str
+        Path to LM spreadsheet model (excluding extension).
+    results_dir : str
+        Root directory for outputs.  Three subdirectories are created:
+        ``combined/``, ``ca_only/``, and ``lm_only/``.
+    assessment_year : int
+        The second (target) deployment year.  Year 1 (first deployment year)
+        is always included; rows beyond ``assessment_year`` are dropped from
+        the scenario before running.
+    reefset_CA : list, optional
+        Reef IDs to assign to ``reefset_CA`` (e.g. ``["18-096"]``).
+        If ``None``, the template value from ``scenario_info.json`` is used.
+    reefset_LM : list, optional
+        Reef IDs to assign to ``reefset_LM`` (e.g. ``["16-071"]``).
+        If ``None``, the template value from ``scenario_info.json`` is used.
+    metrics : list, optional
+        Passed to ``evaluate()`` for ID key generation.  Ecological metric
+        files are not post-processed.  Defaults to ``[rci, raw_rti, rfi]``.
+    uncertainty_dict : dict, optional
+        Uncertainty parameters for ecological metrics. Defaults to
+        ``default_uncertainty_dict()``.
+    nprocs : int, optional
+        Number of cores to use.
+
+    Returns
+    -------
+    dict
+        Mapping of scenario label to list of result file paths:
+        ``{"combined": [...], "ca_only": [...], "lm_only": [...]}``.
+    """
+    # Same bootstrap guard as in evaluate() — see comment there.
+    if getattr(mp.current_process(), "_inheriting", False):
+        return {}
+
+    scenarios = [
+        ("combined", {"outplant", "lm"}),
+        ("ca_only", {"outplant"}),
+        ("lm_only", {"lm"}),
+    ]
+
+    prepared_dir = _prepare_mc_scenario(
+        rme_template_path, assessment_year, reefset_CA, reefset_LM
+    )
+    try:
+        results = {}
+        for label, active_models in scenarios:
+            scenario_dir = os.path.join(results_dir, label)
+            result_paths = _evaluate_with_retry(
+                prepared_dir,
+                nsims,
+                deploy_model_fn,
+                prod_model_fn,
+                lm_model_fn,
+                scenario_dir,
+                metrics=metrics,
+                uncertainty_dict=uncertainty_dict,
+                active_models=active_models,
+                costs_only=True,
+                nprocs=nprocs,
+                sample_scale=True,
+            )
+            results[label] = result_paths
+    finally:
+        shutil.rmtree(prepared_dir, ignore_errors=True)
+
+    return results
+
+
+def summarise_mc_results(
+    results_dir: str,
+    quantiles: list = None,
+    scenario_id: int = 1,
+) -> dict:
+    """
+    Summarise Monte Carlo cost exploration results produced by ``run_cost_exploration``.
+
+    Reads the combined cost overview CSV from each scenario subdirectory
+    (``combined/``, ``ca_only/``, ``lm_only/``), computes per-year quantiles
+    across draws for each cost column, and returns a nested dict suitable for
+    JSON serialisation and HTML visualisation.
+
+    Parameters
+    ----------
+    results_dir : str
+        Root directory passed to ``run_cost_exploration`` (parent of the
+        ``combined/``, ``ca_only/``, and ``lm_only/`` subdirectories).
+    quantiles : list, optional
+        Quantile levels to compute, e.g. ``[0.05, 0.25, 0.5, 0.75, 0.95]``.
+        Defaults to ``[0.05, 0.25, 0.5, 0.75, 0.95]``.
+    scenario_id : int, optional
+        Scenario ID used in the cost overview filename.  Defaults to ``1``.
+
+    Returns
+    -------
+    dict
+        Structure: ``{scenario: {cost_col: {year: {quantile_label: value}}}}``.
+        Also written to ``<results_dir>/mc_summary.json``.
+    """
+    if quantiles is None:
+        quantiles = [0.05, 0.25, 0.5, 0.75, 0.95]
+
+    cost_cols = [
+        "production_capex",
+        "production_opex",
+        "deployment_capex",
+        "deployment_opex",
+        "lm_capex",
+        "lm_opex",
+        "total_capex_CA_P_D_LM",
+        "total_opex_CA_P_D_LM",
+    ]
+    scenarios = ["combined", "ca_only", "lm_only"]
+
+    summary = {}
+    for scenario in scenarios:
+        overview_path = os.path.join(
+            results_dir,
+            scenario,
+            "cost_outputs",
+            f"ID{scenario_id}_cost_overview.csv",
+        )
+        if not os.path.exists(overview_path):
+            continue
+
+        df = pd.read_csv(overview_path)
+        present_cols = [c for c in cost_cols if c in df.columns]
+
+        scenario_summary = {}
+        for col in present_cols:
+            col_by_year = {}
+            for year, grp in df.groupby("year"):
+                col_by_year[int(year)] = {
+                    f"q{int(q * 100)}": float(grp[col].quantile(q)) for q in quantiles
+                }
+            scenario_summary[col] = col_by_year
+
+        summary[scenario] = scenario_summary
+
+    import json
+
+    out_path = os.path.join(results_dir, "mc_summary.json")
+    with open(out_path, "w") as f:
+        json.dump(summary, f, indent=2)
+
+    return summary
 
 
 def evaluate_production_cost(

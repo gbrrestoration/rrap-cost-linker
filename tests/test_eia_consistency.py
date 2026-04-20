@@ -39,9 +39,9 @@ def _eia_totals(eia_df, expense_type):
     ],
 )
 def test_scaled_eia_totals_match_overview(
-    cost_output_dir, scenario_id, p_iter_id, eia_label, expense_type, overview_col
+    cost_output_dir, scenario_id, eia_label, expense_type, overview_col
 ):
-    overview_path = cost_output_dir / f"ID{scenario_id}_cost_overview_iter_pid{p_iter_id}.csv"
+    overview_path = cost_output_dir / f"ID{scenario_id}_cost_overview.csv"
     eia_path = cost_output_dir / f"EIA_scaled_{scenario_id}_{eia_label}.csv"
 
     if not overview_path.exists():

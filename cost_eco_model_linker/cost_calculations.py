@@ -1245,7 +1245,14 @@ def calculate_costs(
         lm_wb = workbook_session.open_workbook(lm_model_fp)
         xlapp = workbook_session.xlapp
 
-        for scen_id in unique_ids:
+        from tqdm import tqdm
+
+        for scen_id in tqdm(
+            unique_ids,
+            desc=f"Calculating costs (worker {p_iter_id})",
+            position=p_iter_id,
+            leave=False,
+        ):
             # Output EIA assessment for each intervention scenario
             eia_template_prod = create_eia_template(prod_wb)
             eia_template_deploy = create_eia_template(deploy_wb)

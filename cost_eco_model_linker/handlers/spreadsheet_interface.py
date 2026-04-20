@@ -229,7 +229,6 @@ def fill_industry_costs(eia_template, next_idx, cost_df, ind_codes, unique_ind_c
                 cost_df.loc[matches_code, "Cost/all"].sum()
             )
 
-
 # TODO: fill_opex and fill_capex share the same _setup_EIA_calculation / fillna
 # skeleton; the only difference is the labour split in fill_opex. Both could be
 # merged into a single function with an expense_type parameter.

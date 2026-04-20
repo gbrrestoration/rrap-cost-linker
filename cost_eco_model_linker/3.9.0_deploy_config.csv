@@ -3,9 +3,9 @@ deployment,Dashboard,K11,capex,output,0,0,0,1,2,,,FALSE,dummy lower and upper bo
 deployment,Dashboard,K6,opex,output,0,0,0,1,2,,,FALSE,dummy lower and upper bounds
 deployment,Dashboard,D5,num_1yoec,integer,1000000,20000000,1000000,1000000,20000000,,unif,TRUE,"""Indicates target number of 1YOEC - automatically converts to the devices required to get the target number. For simulation costings these are dummy values"""
 deployment,Dashboard,D12,daytrip,boolean,0,1,1,0,1,"0,1",discrete,TRUE,"""For simulation costings, these are dummy values"""
-deployment,Dashboard,D22,coral_yield_1YOEC,incremental,0.2,0.8,0.3,0.2,0.4,"0.2,0.3,0.4",discrete,FALSE,in model 3.9.0
+deployment,Dashboard,D22,coral_yield_1YOEC,incremental,0.15,0.6,0.3,0.15,0.6,"0.15,0.2,0.3,0.4,0.5,0.6",discrete,FALSE,Adopted value must match between production and deployment
 deployment,Dashboard,D13,deck_space,integer,10,30,20,18,25,,unif,TRUE,
-deployment,Dashboard,D16,distance_from_port,integer,1,119.99,30,1,119.99,,unif,FALSE,"""in nautical miles - values only used for sensitivity analysis otherwise uses the calculated distance to deployed reefs. 30NM is the best guess as it is the maximum day trip distance. For simulation costings, these are dummy values"""
+deployment,Dashboard,D16,distance_from_port,integer,1,119.99,27,27,54,"27.0,54.0",discrete,TRUE,"""in nautical miles - values only used for sensitivity analysis otherwise uses the calculated distance to deployed reefs. 30NM is the best guess as it is the maximum day trip distance. For simulation costings, these are dummy values"""
 deployment,Lookup Tables,G17,ship_price_LTC,integer,6000,30000,11000,6000,30000,,logunif,FALSE,"If doing day trip, Large Tourism C seems to be a plausible ship-type. **LTC values only applicable for day trips** "
 deployment,Lookup Tables,O17,ship_endurance_LTC,integer,1,10,3,2,7,,unif,TRUE,Endurance is not relevant for day trips. **LTC values only applicable for day trips**
 deployment,Lookup Tables,G18,ship_price_LL,integer,6000,30000,11000,6000,30000,,logunif,FALSE,**Only applicable for overnight trips**

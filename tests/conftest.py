@@ -25,13 +25,6 @@ def pytest_addoption(parser):
         default="1",
         help="Scenario ID used in output filenames (default: 1)",
     )
-    parser.addoption(
-        "--p-iter-id",
-        default="0",
-        help="Process iteration ID used in overview filename (default: 0)",
-    )
-
-
 @pytest.fixture
 def cost_output_dir(request):
     opt = request.config.getoption("--cost-output-dir")
@@ -44,8 +37,3 @@ def cost_output_dir(request):
 @pytest.fixture
 def scenario_id(request):
     return request.config.getoption("--scenario-id")
-
-
-@pytest.fixture
-def p_iter_id(request):
-    return request.config.getoption("--p-iter-id")

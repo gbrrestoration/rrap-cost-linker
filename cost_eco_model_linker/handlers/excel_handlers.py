@@ -32,6 +32,10 @@ def open_excel(fp, xlapp=None):
 
     wb = xlapp.Workbooks.Open(wb_file_path)
 
+    # These properties often fail if set before a workbook is open
+    xlapp.ScreenUpdating = False
+    xlapp.Calculation = -4135  # xlCalculationManual
+
     return xlapp, wb
 
 
@@ -60,10 +64,9 @@ def close_excel(xlapp, wb, quit_app=True):
 
 
 def reset_workbook(xlapp, wb, fp):
-    """Close and reopen workbook to reset to original state"""
-    wb.Close(SaveChanges=False)
-    wb = xlapp.Workbooks.Open(fp)
-
+    """Reset workbook state. (Optimized: No longer re-opens file)"""
+    # In the optimized version, we rely on overwrite-all-inputs behavior
+    # in evaluate_spreadsheet rather than re-opening the file.
     return wb
 
 

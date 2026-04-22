@@ -89,16 +89,17 @@ def evaluate_spreadsheet(wb, model_spec, params) -> tuple[float, float]:
     factor_names = model_spec.factor_names
     not_costs = ~factor_names.isin(["capex", "opex"])
 
-    xlManual = -4135
-    xlAutomatic = -4105
-    wb.Application.Calculation = xlManual
-    try:
-        for _, row in model_spec[not_costs].iterrows():
-            wb.Sheets(row.sheet).Range(row.cell_pos).Value = params[row.factor_names]
-    finally:
-        wb.Application.Calculation = xlAutomatic
+    # Optimized: Cache sheet objects to avoid repeated lookups
+    sheets = {}
 
-    wb.Application.CalculateFull()
+    for _, row in model_spec[not_costs].iterrows():
+        s_name = row.sheet
+        if s_name not in sheets:
+            sheets[s_name] = wb.Sheets(s_name)
+        sheets[s_name].Range(row.cell_pos).Value = params[row.factor_names]
+
+    # Single recalculation for the whole sheet
+    wb.Application.Calculate()
     ws = wb.Sheets("Dashboard")
 
     capex_cell = model_spec.loc[factor_names == "capex", "cell_pos"].values[0]

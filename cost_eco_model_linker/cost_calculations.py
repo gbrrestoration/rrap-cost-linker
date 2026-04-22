@@ -898,8 +898,6 @@ def _write_eia_outputs(
         scaled_capex = shares[_meta_cols].copy()
         scaled_capex[numeric_cols] = 0.0
         cap_idx = pd.MultiIndex.from_frame(shares[["year", "iteration"]])
-        print(f"cap_idx: {cap_idx}")
-        print(f"model_totals: {model_totals[label]["capex"]}")
         cap_scalars = (
             model_totals[label]["capex"].reindex(cap_idx).fillna(0.0).to_numpy()
         )

@@ -89,9 +89,14 @@ def evaluate_spreadsheet(wb, model_spec, params) -> tuple[float, float]:
     factor_names = model_spec.factor_names
     not_costs = ~factor_names.isin(["capex", "opex"])
 
-    # Optimized: We write values while Calculation is Manual (set at open_excel)
+    # Optimized: Cache sheet objects to avoid repeated lookups
+    sheets = {}
+
     for _, row in model_spec[not_costs].iterrows():
-        wb.Sheets(row.sheet).Range(row.cell_pos).Value = params[row.factor_names]
+        s_name = row.sheet
+        if s_name not in sheets:
+            sheets[s_name] = wb.Sheets(s_name)
+        sheets[s_name].Range(row.cell_pos).Value = params[row.factor_names]
 
     # Single recalculation for the whole sheet
     wb.Application.Calculate()

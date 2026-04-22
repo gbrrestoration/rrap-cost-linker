@@ -408,6 +408,7 @@ class _OverviewAccumulator:
         self.num_1yoec = np.zeros((n, s))
         self.lm_num_larval_pool = np.zeros((n, s))
         self.lm_yield_per_pool = np.zeros((n, s))
+        self.lm_num_1yoec = np.zeros((n, s))  # pools * yield, summed correctly across reefsets
         self.lm_raw_capex = np.zeros((n, s))
         self.lm_raw_opex = np.zeros((n, s))
         self.lm_opex_pre_mult = np.zeros((n, s))  # raw opex before distance multiplier
@@ -666,6 +667,10 @@ def _process_lm_reefset(
     acc.lm_opex_mult[yr_idx] += opex_mult  # broadcast scalar or add per-draw array
     acc.lm_num_larval_pool[yr_idx] += lm_factors["larval release pools"].values[0:nsims]
     acc.lm_yield_per_pool[yr_idx] += lm_factors["yield_per_pool"].values[0:nsims]
+    acc.lm_num_1yoec[yr_idx] += (
+        lm_factors["larval release pools"].values[0:nsims]
+        * lm_factors["yield_per_pool"].values[0:nsims]
+    )
 
     eia_template_lm = fill_lm_EIA_info(
         lm_wb, "LM", rep, rs_years[0], iv_yr, departure_port, eia_template_lm
@@ -782,7 +787,7 @@ def _build_overview_rows_and_update_costs(
                     "draw": draw_i + 1,
                     "year": int(iv_yr),
                     "num_devices": acc.num_devices[yr_idx, draw_i],
-                    "num_1yoec": acc.num_1yoec[yr_idx, draw_i],
+                    "num_1yoec": acc.num_1yoec[yr_idx, draw_i] + acc.lm_num_1yoec[yr_idx, draw_i],
                     "num_larval_pool": acc.lm_num_larval_pool[yr_idx, draw_i],
                     "yield_per_pool": acc.lm_yield_per_pool[yr_idx, draw_i],
                     "production_capex": post_prod_capex,
@@ -1096,7 +1101,7 @@ def calculate_costs(
                         & (ID_key.reefset == _first_rs),
                         "distance_to_port_NM",
                     ].iloc[0]
-                    deploy_factors.loc[:, "distance_from_port"] = _first_distance
+                    deploy_factors["distance_from_port"] = float(_first_distance)
 
                 # Track outplant CAPEX inventory separately per model for the inventory/replacement model
                 prod_inventory = np.zeros(nsims)

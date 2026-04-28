@@ -523,6 +523,7 @@ def _process_outplant_reefset(
     eia_template_prod,
     eia_template_deploy,
     sample_scale=False,
+    workbook_session=None,
 ):
     """Run spreadsheet models for one outplant reefset and accumulate results.
 
@@ -539,17 +540,31 @@ def _process_outplant_reefset(
         Running totals across reefsets; modified in-place.
     acc : _OverviewAccumulator
         Overview tracking arrays; modified in-place.
+    workbook_session : WorkbookSession, optional
+        A session object for caching and seeding optimization.
 
     Returns
     -------
     deploy_wb, prod_wb, deploy_factors, prod_factors, eia_template_prod, eia_template_deploy
     """
-    prod_factors, deploy_factors = update_factors(prod_factors, deploy_factors, rs_spec, sample_scale=sample_scale)
+    prod_factors, deploy_factors = update_factors(
+        prod_factors, deploy_factors, rs_spec, sample_scale=sample_scale
+    )
     deploy_wb, deploy_factors = collect_deployment_costs(
-        xlapp, deploy_wb, deploy_model_fp, deploy_factors, deploy_spec
+        xlapp,
+        deploy_wb,
+        deploy_model_fp,
+        deploy_factors,
+        deploy_spec,
+        workbook_session=workbook_session,
     )
     prod_wb, prod_factors = collect_production_costs(
-        xlapp, prod_wb, prod_model_fp, prod_factors, prod_spec
+        xlapp,
+        prod_wb,
+        prod_model_fp,
+        prod_factors,
+        prod_spec,
+        workbook_session=workbook_session,
     )
 
     # Capture raw values before the CAPEX comparison block
@@ -628,6 +643,7 @@ def _process_lm_reefset(
     yr_idx,
     eia_template_lm,
     sample_scale=False,
+    workbook_session=None,
 ):
     """Run the LM spreadsheet model for one reefset and accumulate results.
 
@@ -644,19 +660,23 @@ def _process_lm_reefset(
     sample_scale : bool, optional
         When ``True`` (cost exploration mode), the larval pool count is already
         sampled and the template coral counts are ignored.  Defaults to ``False``.
+    workbook_session : WorkbookSession, optional
+        A session object for caching and seeding optimization.
 
     Returns
     -------
     lm_wb, lm_factors, eia_template_lm
     """
-    lm_factors = update_lm_factors(lm_factors, rs_spec_corals, lm_pool_min, lm_pool_max, sample_scale=sample_scale)
-    lm_wb, lm_factors = collect_lm_costs(xlapp, lm_wb, lm_model_fp, lm_factors, lm_spec)
+    lm_factors = update_lm_factors(
+        lm_factors, rs_spec_corals, lm_pool_min, lm_pool_max, sample_scale=sample_scale
+    )
+    lm_wb, lm_factors = collect_lm_costs(
+        xlapp, lm_wb, lm_model_fp, lm_factors, lm_spec, workbook_session=workbook_session
+    )
 
     if sample_scale:
         # Per-draw distances sampled from deploy_factors; compute a per-draw multiplier.
-        opex_mult = np.array(
-            [lm_opex_distance_multiplier(d) for d in rs_distance]
-        )
+        opex_mult = np.array([lm_opex_distance_multiplier(d) for d in rs_distance])
     else:
         opex_mult = lm_opex_distance_multiplier(rs_distance)
 
@@ -787,7 +807,8 @@ def _build_overview_rows_and_update_costs(
                     "draw": draw_i + 1,
                     "year": int(iv_yr),
                     "num_devices": acc.num_devices[yr_idx, draw_i],
-                    "num_1yoec": acc.num_1yoec[yr_idx, draw_i] + acc.lm_num_1yoec[yr_idx, draw_i],
+                    "num_1yoec": acc.num_1yoec[yr_idx, draw_i]
+                    + acc.lm_num_1yoec[yr_idx, draw_i],
                     "num_larval_pool": acc.lm_num_larval_pool[yr_idx, draw_i],
                     "yield_per_pool": acc.lm_yield_per_pool[yr_idx, draw_i],
                     "production_capex": post_prod_capex,
@@ -987,6 +1008,7 @@ def calculate_costs(
     p_iter_id: int = 0,
     active_models: set = None,
     sample_scale: bool = False,
+    workbook_session=None,
 ):
     """
     Sample costs for a set of interventions specified in ID_key, sampling nsims.
@@ -1018,6 +1040,8 @@ def calculate_costs(
         for outplant, larval pool count for LM) is drawn from the Sobol samples
         rather than derived from the RME template coral counts.  Defaults to
         ``False``.
+    workbook_session : WorkbookSession, optional
+        A session object for caching and seeding optimization.
     """
     if active_models is None:
         active_models = {"outplant", "lm"}
@@ -1032,10 +1056,20 @@ def calculate_costs(
         path_join(iv_keys_dir, f"intervention_{iv_ID_key}_{run_id}.csv")
     )
 
-    tmp_dir = tempfile.mkdtemp(prefix="ceml_")
-    deploy_model_fp, prod_model_fp, lm_model_fp = _copy_workbooks(
-        tmp_dir, deploy_model_filepath, prod_model_filepath, lm_model_filepath, _iter_id
-    )
+    if workbook_session is None:
+        tmp_dir = tempfile.mkdtemp(prefix="ceml_")
+        deploy_model_fp, prod_model_fp, lm_model_fp = _copy_workbooks(
+            tmp_dir,
+            deploy_model_filepath,
+            prod_model_filepath,
+            lm_model_filepath,
+            _iter_id,
+        )
+    else:
+        # Use models from their original locations via the persistent session
+        deploy_model_fp = deploy_model_filepath + ".xlsx"
+        prod_model_fp = prod_model_filepath + ".xlsx"
+        lm_model_fp = lm_model_filepath + ".xlsx"
 
     # Read pool bounds once from config so update_lm_factors can clamp each year
     from .sampling import DEFAULT_LM_VER
@@ -1053,12 +1087,17 @@ def calculate_costs(
     unique_ids = np.unique(ID_key.ID)
     cost_filepaths = []
 
-    # Open all three workbooks in a single Excel application to avoid
-    # RPC_E_DISCONNECTED errors that occur when multiple DispatchEx instances
-    # run simultaneously and one disconnects the others.
-    xlapp, deploy_wb = open_excel(deploy_model_fp)
-    _, prod_wb = open_excel(prod_model_fp, xlapp)
-    _, lm_wb = open_excel(lm_model_fp, xlapp)
+    # Open all three workbooks
+    if workbook_session is None:
+        xlapp, deploy_wb = open_excel(deploy_model_fp)
+        _, prod_wb = open_excel(prod_model_fp, xlapp)
+        _, lm_wb = open_excel(lm_model_fp, xlapp)
+    else:
+        deploy_wb = workbook_session.open_workbook(deploy_model_fp)
+        prod_wb = workbook_session.open_workbook(prod_model_fp)
+        lm_wb = workbook_session.open_workbook(lm_model_fp)
+        xlapp = workbook_session.xlapp
+
     try:
         for scen_id in unique_ids:
             # Output EIA assessment for each intervention scenario
@@ -1198,6 +1237,7 @@ def calculate_costs(
                                     eia_template_prod,
                                     eia_template_deploy,
                                     sample_scale=sample_scale,
+                                    workbook_session=workbook_session,
                                 )
 
                             # Inventory/replacement model applied separately to production and
@@ -1259,6 +1299,7 @@ def calculate_costs(
                                         yr_idx,
                                         eia_template_lm,
                                         sample_scale=sample_scale,
+                                        workbook_session=workbook_session,
                                     )
                                 )
 
@@ -1288,7 +1329,11 @@ def calculate_costs(
                 rep_cost_dfs.append((rep, cost_df, overview_rows))
 
                 # Expand EIA templates from the single temporary ID to all draws in this rep
-                for template in [eia_template_prod, eia_template_deploy, eia_template_lm]:
+                for template in [
+                    eia_template_prod,
+                    eia_template_deploy,
+                    eia_template_lm,
+                ]:
                     if template.empty:
                         continue
                     mask = template.iteration == temp_it_id
@@ -1309,11 +1354,17 @@ def calculate_costs(
                     # Update template in-place (since they are passed around)
                     expanded = pd.concat(new_rows, ignore_index=True)
                     if template is eia_template_prod:
-                        eia_template_prod = pd.concat([template, expanded], ignore_index=True)
+                        eia_template_prod = pd.concat(
+                            [template, expanded], ignore_index=True
+                        )
                     elif template is eia_template_deploy:
-                        eia_template_deploy = pd.concat([template, expanded], ignore_index=True)
+                        eia_template_deploy = pd.concat(
+                            [template, expanded], ignore_index=True
+                        )
                     elif template is eia_template_lm:
-                        eia_template_lm = pd.concat([template, expanded], ignore_index=True)
+                        eia_template_lm = pd.concat(
+                            [template, expanded], ignore_index=True
+                        )
 
                 draw_offset += nsims
 
@@ -1345,10 +1396,14 @@ def calculate_costs(
 
             # EIA scaled outputs need a single multiplier per year; use the mean
             # across draws (in exploration mode draws have different distances).
-            _mult_rows = [r for r in all_overview_rows if r.get("lm_opex_multiplier", 0) != 0]
+            _mult_rows = [
+                r for r in all_overview_rows if r.get("lm_opex_multiplier", 0) != 0
+            ]
             if _mult_rows:
                 _mult_df = pd.DataFrame(_mult_rows)[["year", "lm_opex_multiplier"]]
-                lm_opex_mult_by_year = _mult_df.groupby("year")["lm_opex_multiplier"].mean().to_dict()
+                lm_opex_mult_by_year = (
+                    _mult_df.groupby("year")["lm_opex_multiplier"].mean().to_dict()
+                )
             else:
                 lm_opex_mult_by_year = {}
             _ov = (
@@ -1383,8 +1438,11 @@ def calculate_costs(
             )
 
     finally:
-        close_excel(xlapp, deploy_wb, quit_app=False)
-        close_excel(xlapp, prod_wb, quit_app=False)
-        close_excel(xlapp, lm_wb, quit_app=True)
+        if workbook_session is None:
+            close_excel(xlapp, deploy_wb, quit_app=False)
+            close_excel(xlapp, prod_wb, quit_app=False)
+            close_excel(xlapp, lm_wb, quit_app=True)
+            if os.path.exists(tmp_dir):
+                shutil.rmtree(tmp_dir)
 
     return cost_filepaths

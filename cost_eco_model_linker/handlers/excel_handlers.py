@@ -70,6 +70,69 @@ def reset_workbook(xlapp, wb, fp):
     return wb
 
 
+class WorkbookSession:
+    """
+    Manages a persistent Excel application instance and caches open workbooks.
+
+    This class ensures that only one Excel process is created per worker and
+    that workbooks are reused across evaluations, significantly reducing the
+    overhead of DispatchEx and Workbooks.Open calls.
+    """
+
+    def __init__(self):
+        self.xlapp = None
+        self.workbooks = {}  # path -> wb object
+        self.seeded = set()  # set of paths that have been seeded
+
+    def _get_xlapp(self):
+        if self.xlapp is None:
+            self.xlapp = w32client.DispatchEx("Excel.Application")
+            self.xlapp.Interactive = False
+            self.xlapp.Visible = False
+            self.xlapp.DisplayAlerts = False
+        return self.xlapp
+
+    def open_workbook(self, fp):
+        """Open a workbook or return a cached instance."""
+        fp = os.path.abspath(fp)
+        if fp in self.workbooks:
+            return self.workbooks[fp]
+
+        xlapp = self._get_xlapp()
+        wb = xlapp.Workbooks.Open(fp)
+
+        # Performance properties MUST be set AFTER opening a workbook
+        xlapp.ScreenUpdating = False
+        xlapp.Calculation = -4135  # xlManual
+
+        self.workbooks[fp] = wb
+        return wb
+
+    def is_seeded(self, fp):
+        """Check if a workbook has already been seeded with baseline factors."""
+        return os.path.abspath(fp) in self.seeded
+
+    def mark_seeded(self, fp):
+        """Mark a workbook as seeded."""
+        self.seeded.add(os.path.abspath(fp))
+
+    def cleanup(self):
+        """Close all workbooks and quit the Excel application."""
+        for wb in self.workbooks.values():
+            try:
+                wb.Close(SaveChanges=False)
+            except (pywintypes.com_error, AttributeError):
+                pass
+        if self.xlapp:
+            try:
+                self.xlapp.Quit()
+            except (pywintypes.com_error, AttributeError):
+                pass
+        self.workbooks = {}
+        self.xlapp = None
+        self.seeded = set()
+
+
 # TODO: Use objects to auto-handle state
 # class ExcelConn:
 #     """Excel file connection"""

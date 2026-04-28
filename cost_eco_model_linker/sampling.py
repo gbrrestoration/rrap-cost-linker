@@ -9,7 +9,7 @@ import pandas as pd
 
 import matplotlib.pyplot as plt
 
-from .handlers import open_excel, close_excel, reset_workbook
+from .handlers import open_excel, close_excel, reset_workbook, WorkbookSession
 
 THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_PROD_VER = "3.9.1"
@@ -387,7 +387,9 @@ def _com_retry(fn, retries=3, delay=2.0):
             time.sleep(delay * (attempt + 1))
 
 
-def _run_cost_model(xlapp, wb, wb_path, cost_factors, factor_spec, calculate_cost):
+def _run_cost_model(
+    xlapp, wb, wb_path, cost_factors, factor_spec, calculate_cost, workbook_session=None
+):
     """
     Run and collect results from a cost model.
 
@@ -407,6 +409,8 @@ def _run_cost_model(xlapp, wb, wb_path, cost_factors, factor_spec, calculate_cos
         Function to use to sample cost. One of:
         - "calculate_deployment_cost"
         - "calculate_production_cost"
+    workbook_session : WorkbookSession, optional
+        A session object for caching and seeding optimization.
 
     Returns
     -------
@@ -429,9 +433,14 @@ def _run_cost_model(xlapp, wb, wb_path, cost_factors, factor_spec, calculate_cos
         finally:
             wb.Application.Calculation = xlAutomatic
 
+    # Optimized: Seed once per chunk, or skip if already seeded in a persistent session.
+    if not (workbook_session and workbook_session.is_seeded(wb_path)):
+        _com_retry(lambda: _seed_workbook(wb))
+        if workbook_session:
+            workbook_session.mark_seeded(wb_path)
+
     total_cost = np.full((cost_factors.shape[0], 2), np.nan)
     for idx_n in range(len(total_cost)):
-        _com_retry(lambda: _seed_workbook(wb))
         row_params = cost_factors.iloc[idx_n, :]
         try:
             total_cost[idx_n, :] = _com_retry(
@@ -457,7 +466,9 @@ def _run_cost_model(xlapp, wb, wb_path, cost_factors, factor_spec, calculate_cos
     return wb, cost_factors
 
 
-def collect_production_costs(xlapp, wb, wb_path, cost_factors, factor_spec):
+def collect_production_costs(
+    xlapp, wb, wb_path, cost_factors, factor_spec, workbook_session=None
+):
     """
     Run the production cost model.
 
@@ -473,6 +484,8 @@ def collect_production_costs(xlapp, wb, wb_path, cost_factors, factor_spec):
         Dataframe of factors to input in the cost model
     factor_spec : dataframe
         Factor specification, as loaded from the config.csv
+    workbook_session : WorkbookSession, optional
+        A session object for caching and seeding optimization.
 
     Returns
     -------
@@ -482,11 +495,19 @@ def collect_production_costs(xlapp, wb, wb_path, cost_factors, factor_spec):
         Updated sampled factor dataframe with costs added
     """
     return _run_cost_model(
-        xlapp, wb, wb_path, cost_factors, factor_spec, calculate_production_cost
+        xlapp,
+        wb,
+        wb_path,
+        cost_factors,
+        factor_spec,
+        calculate_production_cost,
+        workbook_session=workbook_session,
     )
 
 
-def collect_deployment_costs(xlapp, wb, wb_path, cost_factors, factor_spec):
+def collect_deployment_costs(
+    xlapp, wb, wb_path, cost_factors, factor_spec, workbook_session=None
+):
     """
     Run the deployment cost model.
 
@@ -502,6 +523,8 @@ def collect_deployment_costs(xlapp, wb, wb_path, cost_factors, factor_spec):
         Dataframe of factors to input in the cost model
     factor_spec : dataframe
         Factor specification, as loaded from the config.csv
+    workbook_session : WorkbookSession, optional
+        A session object for caching and seeding optimization.
 
     Returns
     -------
@@ -511,7 +534,13 @@ def collect_deployment_costs(xlapp, wb, wb_path, cost_factors, factor_spec):
         Updated sampled factor dataframe with costs added
     """
     return _run_cost_model(
-        xlapp, wb, wb_path, cost_factors, factor_spec, calculate_deployment_cost
+        xlapp,
+        wb,
+        wb_path,
+        cost_factors,
+        factor_spec,
+        calculate_deployment_cost,
+        workbook_session=workbook_session,
     )
 
 
@@ -536,7 +565,9 @@ def calculate_lm_cost(wb, factor_spec, factors):
     return evaluate_spreadsheet(wb, factor_spec, factors)
 
 
-def collect_lm_costs(xlapp, wb, wb_path, cost_factors, factor_spec):
+def collect_lm_costs(
+    xlapp, wb, wb_path, cost_factors, factor_spec, workbook_session=None
+):
     """
     Run the LM cost model.
 
@@ -552,6 +583,8 @@ def collect_lm_costs(xlapp, wb, wb_path, cost_factors, factor_spec):
         Dataframe of factors to input in the cost model.
     factor_spec : DataFrame
         Factor specification, as loaded from the config CSV.
+    workbook_session : WorkbookSession, optional
+        A session object for caching and seeding optimization.
 
     Returns
     -------
@@ -561,7 +594,13 @@ def collect_lm_costs(xlapp, wb, wb_path, cost_factors, factor_spec):
         Updated sampled factor dataframe with costs added.
     """
     return _run_cost_model(
-        xlapp, wb, wb_path, cost_factors, factor_spec, calculate_lm_cost
+        xlapp,
+        wb,
+        wb_path,
+        cost_factors,
+        factor_spec,
+        calculate_lm_cost,
+        workbook_session=workbook_session,
     )
 
 

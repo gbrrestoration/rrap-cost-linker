@@ -250,7 +250,7 @@ def _fill_eia_missing_years(eia_template, all_years):
     return eia_template
 
 
-def sample_cost_model(nsims):
+def sample_cost_model(nsims, seed: int = None):
     """
     Sample cost model parameters for production, deployment, and LM models.
 
@@ -260,6 +260,8 @@ def sample_cost_model(nsims):
         Total number of simulations (from metrics sampling).  When ``None``
         or ``1`` Sobol' sampling is skipped and a single row of
         ``best_point_value`` entries is returned instead.
+    seed : int, optional
+        Random seed for reproducibility.
 
     Returns
     -------
@@ -308,7 +310,7 @@ def sample_cost_model(nsims):
         # Sample production model factors
         nfactors = np.min([specs_dep.shape[0], specs_prod.shape[0]]) - 2
         N, K = get_NK(nsims, nfactors, calc_second_order=False)
-        sp_prod.sample_sobol(N, calc_second_order=False, skip_values=N)
+        sp_prod.sample_sobol(N, calc_second_order=False, skip_values=N, seed=seed)
         factors_df_prod = pd.DataFrame(
             data=sp_prod.samples, columns=specs_prod.factor_names
         )
@@ -316,14 +318,14 @@ def sample_cost_model(nsims):
         # Sample deployment model factors
         nfactors = np.min([specs_dep.shape[0], specs_prod.shape[0]]) - 2
         N, K = get_NK(nsims, nfactors, calc_second_order=False)
-        sp_dep.sample_sobol(N, calc_second_order=False, skip_values=N)
+        sp_dep.sample_sobol(N, calc_second_order=False, skip_values=N, seed=seed)
         factors_df_dep = pd.DataFrame(
             data=sp_dep.samples, columns=specs_dep.factor_names
         )
 
         # Sample LM model factors
         N, K = get_NK(nsims, specs_lm.shape[0], calc_second_order=False)
-        sp_lm.sample_sobol(N, calc_second_order=False, skip_values=N)
+        sp_lm.sample_sobol(N, calc_second_order=False, skip_values=N, seed=seed)
         factors_df_lm = pd.DataFrame(data=sp_lm.samples, columns=specs_lm.factor_names)
 
         # Subset to just the number of sims as the scenarios beyond `nsims` do not get used
@@ -1155,6 +1157,7 @@ def calculate_costs(
     active_models: set = None,
     sample_scale: bool = False,
     session_reset_interval: int = _RESET_INTERVAL,
+    seed: int = None,
 ):
     """
     Sample costs for a set of interventions specified in ID_key, sampling nsims.
@@ -1189,7 +1192,14 @@ def calculate_costs(
     session_reset_interval : int, optional
         Recycle the process-local Excel session every N calls to bound memory
         growth.  Defaults to ``_RESET_INTERVAL`` (50).
+    seed : int, optional
+        Random seed for reproducibility.
     """
+    if seed is not None:
+        worker_seed = seed + p_iter_id
+    else:
+        worker_seed = None
+
     if active_models is None:
         active_models = {"outplant", "lm"}
     iv_keys_dir = stores.intervention_keys_dir
@@ -1271,7 +1281,9 @@ def calculate_costs(
 
                 cost_df = initialize_cost_df(all_sim_years, nsims)
 
-                # Sample cost model parameters once per rep — fixed across years
+                # Sample cost model parameters once per rep — fixed across years.
+                # Incorporate rep ID into seed so different reps get different draws.
+                _rep_seed = worker_seed + int(rep) if worker_seed is not None else None
                 (
                     prod_spec,
                     prod_factors,
@@ -1279,7 +1291,7 @@ def calculate_costs(
                     deploy_factors,
                     lm_spec,
                     lm_factors,
-                ) = sample_cost_model(nsims)
+                ) = sample_cost_model(nsims, seed=_rep_seed)
 
                 # In normal mode, apply the actual port distance to deploy_factors so
                 # the CSV reflects the value used in the simulation, not the config

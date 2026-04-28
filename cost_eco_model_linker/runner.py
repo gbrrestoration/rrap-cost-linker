@@ -41,7 +41,7 @@ from .sampling import (
 import numpy as np
 import pandas as pd
 
-SEMVER_RE = re.compile(r"^(?:.*/)?(\d+\.\d+\.\d+)\b")
+SEMVER_RE = re.compile(r"^(?:.*[/\\])?(\d+\.\d+\.\d+)\b")
 
 _KNOWN_MODEL_TYPES = {
     "production": "prod",
@@ -125,6 +125,7 @@ def evaluate(
     nprocs: int = 1,
     costs_only: bool = False,
     sample_scale: bool = False,
+    workbook_session=None,
 ) -> list[str]:
     """
     Evaluate costs of intervention scenarios.
@@ -293,6 +294,7 @@ def evaluate(
             lm_model_fn,
             active_models=active_models,
             sample_scale=sample_scale,
+            workbook_session=workbook_session,
         )
         scen_ids = [
             int(re.search(r"ID(\d+)_", os.path.basename(fp)).group(1))

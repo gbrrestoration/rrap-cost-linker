@@ -124,6 +124,7 @@ def evaluate(
     sample_scale: bool = False,
     distance_override_NM: float = None,
     coral_only: bool = False,
+    seed: int = None,
 ) -> list[str]:
     """
     Evaluate costs of intervention scenarios.
@@ -164,6 +165,8 @@ def evaluate(
         54 NM Centre) should be used instead of the computed reef distance.
     coral_only : bool, default=False
         If True, only use coral-related metrics (RCI_3 and RFI), excluding COTS and Rubble.
+    seed : int, optional
+        Random seed for reproducibility.
 
     Returns
     -------
@@ -248,6 +251,7 @@ def evaluate(
             distance_override_NM=distance_override_NM,
             uncertainty_dict=uncertainty_dict,
             costs_only=costs_only,
+            seed=seed,
         )
         from tqdm import tqdm
 
@@ -271,6 +275,7 @@ def evaluate(
             0.25,  # cont_p
             active_models=active_models,
             sample_scale=sample_scale,
+            seed=seed,
         )
         with mp.Pool(nprocs, initializer=_pool_initializer) as pool:
             result = pool.map(wrapper, range(nprocs))
@@ -293,6 +298,7 @@ def evaluate(
             uncertainty_dict=uncertainty_dict,
             costs_only=costs_only,
             distance_override_NM=distance_override_NM,
+            seed=seed,
         )
         from tqdm import tqdm
 
@@ -313,6 +319,7 @@ def evaluate(
             lm_model_fn,
             active_models=active_models,
             sample_scale=sample_scale,
+            seed=seed,
         )
         scen_ids = [
             int(re.search(r"ID(\d+)_", os.path.basename(fp)).group(1))

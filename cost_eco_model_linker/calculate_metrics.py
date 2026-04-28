@@ -50,7 +50,12 @@ def default_uncertainty_dict() -> dict:
 
 
 def indicator_params(
-    result_set, scen_ids, uncertainty_dict=None, juv_max_years=None, max_coral_juv=None
+    result_set,
+    scen_ids,
+    uncertainty_dict=None,
+    juv_max_years=None,
+    max_coral_juv=None,
+    seed: int = None,
 ):
     """
     Calculates key parameters for shelter volume and RCI calculations given uncertainty sampling choices.
@@ -68,6 +73,8 @@ def indicator_params(
             Interventions cannot start in the first year.
         max_coral_juv : list[float]
             Max juveniles baseline (can be included instead of using hindcasting baseline).
+        seed : int, optional
+            Random seed for reproducibility.
 
     Returns
     -------
@@ -78,6 +85,10 @@ def indicator_params(
         rci_crit : np.array
             Array of thresholds describing reef condition categories.
     """
+    if seed is not None:
+        np.random.seed(seed)
+        random.seed(seed)
+
     if uncertainty_dict is None:
         uncertainty_dict = default_uncertainty_dict()
     if juv_max_years is None:

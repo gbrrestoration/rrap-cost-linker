@@ -179,6 +179,9 @@ def evaluate(
     if getattr(mp.current_process(), "_inheriting", False):
         return []
 
+    if not isinstance(nsims, int) or nsims < 1:
+        raise ValueError(f"nsims must be a positive non-zero integer, got {nsims!r}")
+
     # Check available config aligns with model versions
     m = SEMVER_RE.match(deploy_model_fn)
     deploy_m_ver = Version(m.group(1)) if m else None

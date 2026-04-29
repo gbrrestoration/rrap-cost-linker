@@ -43,9 +43,9 @@ def default_uncertainty_dict() -> dict:
     return {
         "ecol_uncert": 0,
         "shelt_uncert": 0,
-        "expert_uncert": 0,
-        "rti_uncert": 0,
-        "rfi_uncert": 0,
+        "expert_uncert": 1,
+        "rti_uncert": 1,
+        "rfi_uncert": 1,
     }
 
 

@@ -957,7 +957,7 @@ def _write_eia_outputs(
         )
         eia_template.sort_values(_meta_cols, inplace=True)
         _total_last(eia_template).to_csv(
-            path_join(cost_dir, f"EIA_raw_{scen_id}_{label}{_pid}.csv"), index=False
+            path_join(cost_dir, f"EIA_raw_ID{scen_id}_{label}{_pid}.csv"), index=False
         )
         raw_templates[label] = eia_template
 
@@ -995,7 +995,7 @@ def _write_eia_outputs(
         )
         shares[numeric_cols] = shares[numeric_cols].fillna(0.0)
         _total_last(shares).to_csv(
-            path_join(cost_dir, f"EIA_proportional_{scen_id}_{label}{_pid}.csv"),
+            path_join(cost_dir, f"EIA_proportional_ID{scen_id}_{label}{_pid}.csv"),
             index=False,
         )
 
@@ -1028,7 +1028,7 @@ def _write_eia_outputs(
 
         scaled = pd.concat([scaled_capex, scaled_opex]).sort_values(_meta_cols)
         _total_last(scaled).to_csv(
-            path_join(cost_dir, f"EIA_cost_scaled_ID{scen_id}_{label}{_pid}.csv"),
+            path_join(cost_dir, f"EIA_scaled_ID{scen_id}_{label}{_pid}.csv"),
             index=False,
         )
 

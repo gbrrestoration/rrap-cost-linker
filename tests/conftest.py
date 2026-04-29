@@ -10,7 +10,7 @@ _DEFAULT_OUTPUT_DIR = (
     / "two_region_example"
     / "data"
     / "cost_simple_cost_check_w_LM"
-    / "cost_outputs"
+    / "Costs"
 )
 
 

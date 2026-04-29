@@ -68,7 +68,7 @@ def para_sample_econ(
             file_list = [fn for fn in filepaths if sim_type in fn]
             post_process_metrics(stores, file_list, metrics, nsims)
 
-    os.remove(path_join(stores.econ_dir, "sim_template.parq"))
+    os.remove(path_join(stores.cost_dir, "sim_template.parq"))
 
     return int_keys_fn, nbatches
 
@@ -97,9 +97,14 @@ def post_process_metrics(
     -------
     None
     """
-    econ_dir = stores.econ_dir
+    _metric_dir_map = {
+        "rci": stores.rci_dir,
+        "rfi": stores.rfi_dir,
+        "raw_rti": stores.rti_dir,
+    }
 
-    init_metric_df = pd.read_parquet(path_join(econ_dir, "sim_template.parq"))
+    cost_dir = stores.cost_dir
+    init_metric_df = pd.read_parquet(path_join(cost_dir, "sim_template.parq"))
     sim_cols = [f"sim_{i}" for i in range(1, nsims + 1)]
     metric_df = pd.DataFrame(
         np.zeros((init_metric_df.shape[0], nsims), dtype=np.float64), columns=sim_cols
@@ -108,7 +113,7 @@ def post_process_metrics(
     for metric_f in metrics:
         file_list = [fn for fn in metric_filepaths if f"_{metric_f.__name__}_" in fn]
         for metrics_file in file_list:
-            met_file = path_join(econ_dir, metrics_file)
+            met_file = path_join(cost_dir, metrics_file)
             met_temp = pd.read_parquet(met_file)
 
             metric_data_cols = met_temp.columns
@@ -116,13 +121,19 @@ def post_process_metrics(
 
         metric_out = pd.concat((init_metric_df, metric_df), axis=1)
 
-        # Extract common part of filename
+        # Extract common part of filename and route to metric-specific directory
         fn = f"{file_list[0].split('_batch')[0]}.parq"
-        out_file = path_join(econ_dir, fn)
+        out_dir = _metric_dir_map.get(metric_f.__name__)
+        if out_dir is None:
+            raise ValueError(
+                f"No output directory configured for metric '{metric_f.__name__}'. "
+                f"Known metrics: {list(_metric_dir_map)}"
+            )
+        out_file = path_join(out_dir, fn)
         metric_out.to_parquet(out_file, index=False)
 
         for fn in file_list:
-            os.remove(path_join(econ_dir, fn))
+            os.remove(path_join(cost_dir, fn))
 
 
 def post_process_costs(result, nsims):

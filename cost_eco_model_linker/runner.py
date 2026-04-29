@@ -125,7 +125,7 @@ def evaluate(
     nprocs: int = 1,
     costs_only: bool = False,
     sample_scale: bool = False,
-    workbook_session=None,
+    distance_override_NM: float = None,
 ) -> list[str]:
     """
     Evaluate costs of intervention scenarios.
@@ -159,6 +159,11 @@ def evaluate(
         When ``True``, skips post-processing of ecological metric files.
         Use this when only cost outputs are needed (e.g. in
         ``run_cost_exploration``).  Defaults to ``False``.
+    distance_override_NM : float, optional
+        When set, replaces the geographic port-distance calculation with this
+        fixed value (nautical miles) for all reefsets.  Useful for best-guess
+        explorer runs where the config best-point distance (e.g. 27 NM North,
+        54 NM Centre) should be used instead of the computed reef distance.
 
     Returns
     -------
@@ -228,6 +233,7 @@ def evaluate(
             nbatches=nbatches_per_core,
             ncores=nprocs,
             metrics=metrics,
+            distance_override_NM=distance_override_NM,
             uncertainty_dict=uncertainty_dict,
             costs_only=costs_only,
         )
@@ -275,6 +281,7 @@ def evaluate(
             metrics=metrics,
             uncertainty_dict=uncertainty_dict,
             costs_only=costs_only,
+            distance_override_NM=distance_override_NM,
         )
 
         if not costs_only:
@@ -294,7 +301,6 @@ def evaluate(
             lm_model_fn,
             active_models=active_models,
             sample_scale=sample_scale,
-            workbook_session=workbook_session,
         )
         scen_ids = [
             int(re.search(r"ID(\d+)_", os.path.basename(fp)).group(1))
@@ -351,7 +357,7 @@ def _combine_parallel_outputs(cost_dir, scen_ids, nprocs, nbatches_per_core):
             for label in ["production", "deployment", "lm"]:
                 worker_fps = [
                     os.path.join(
-                        cost_dir, f"EIA_{file_type}_{scen_id}_{label}_pid{i}.csv"
+                        cost_dir, f"EIA_{file_type}_ID{scen_id}_{label}_pid{i}.csv"
                     )
                     for i in range(nprocs)
                 ]
@@ -367,7 +373,7 @@ def _combine_parallel_outputs(cost_dir, scen_ids, nprocs, nbatches_per_core):
                 combined_eia = dfs[0][_meta_cols].copy()
                 combined_eia[numeric_cols] = avg
                 combined_eia.to_csv(
-                    os.path.join(cost_dir, f"EIA_{file_type}_{scen_id}_{label}.csv"),
+                    os.path.join(cost_dir, f"EIA_{file_type}_ID{scen_id}_{label}.csv"),
                     index=False,
                 )
 
@@ -380,9 +386,7 @@ def _combine_parallel_outputs(cost_dir, scen_ids, nprocs, nbatches_per_core):
         for label in ["production", "deployment", "lm"]:
             # Discover which reps exist by looking at worker 0's files.
             pid0_files = _glob.glob(
-                os.path.join(
-                    cost_dir, f"ID{scen_id}_rep*_cost_params_{label}_pid0.csv"
-                )
+                os.path.join(cost_dir, f"ID{scen_id}_rep*_cost_params_{label}_pid0.csv")
             )
             for pid0_fp in pid0_files:
                 rep_m = re.search(r"_rep(\w+)_cost_params_", os.path.basename(pid0_fp))

@@ -527,7 +527,7 @@ def extract_metrics(
     # Extract outputs and convert to long-form format, then save
     for m_key in ecol_indicators:
         ecol_indicators[m_key] = np.reshape(
-            ecol_indicators[m_key][:, :, 0:num_years], (nsims, m)
+            ecol_indicators[m_key][:, :, 0:num_years], (-1, m)
         )
 
     return ecol_indicators, np.array(ecol_sample_ids)

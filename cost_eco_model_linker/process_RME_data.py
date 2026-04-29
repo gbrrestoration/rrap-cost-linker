@@ -315,7 +315,7 @@ def create_economics_metric_files(
     nsims : int
         Number of simulations to sample (including uncertainty types as specified).
     stores : object
-        Storage paths object with econ_dir and intervention_keys_dir attributes.
+        Storage paths object with cost_dir and intervention_keys_dir attributes.
     nbatches : int, optional
         Number of batches. If None, defaults to nsims (single batch).
     uncertainty_dict : dict, optional
@@ -453,7 +453,7 @@ def create_economics_metric_files(
 
         # Shared template for all simulations
         data_store.to_parquet(
-            path_join(stores.econ_dir, "sim_template.parq"), index=False
+            path_join(stores.cost_dir, "sim_template.parq"), index=False
         )
 
         for batch_idx, batch_sel in enumerate(batch_chunks):
@@ -537,7 +537,7 @@ def create_economics_metric_files(
                     ds[sim_cols] = iv_results
 
                     ds.to_parquet(
-                        path_join(stores.econ_dir, iv_filename),
+                        path_join(stores.cost_dir, iv_filename),
                         index=False,
                         compression=None,
                     )
@@ -549,7 +549,7 @@ def create_economics_metric_files(
                     ds[sim_cols] = cf_results
 
                     ds.to_parquet(
-                        path_join(stores.econ_dir, cf_filename),
+                        path_join(stores.cost_dir, cf_filename),
                         index=False,
                         compression=None,
                     )

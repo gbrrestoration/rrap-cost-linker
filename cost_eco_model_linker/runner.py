@@ -247,7 +247,7 @@ def evaluate(
                     file_list = [fn for fn in filepaths if filetype in fn]
                     post_process_metrics(stores, file_list, metrics, nsims)
 
-        os.remove(os.path.join(stores.econ_dir, "sim_template.parq"))
+        os.remove(os.path.join(stores.cost_dir, "sim_template.parq"))
 
         _fix_main_spec()
         wrapper = partial(
@@ -293,7 +293,7 @@ def evaluate(
                     file_list = [fn for fn in filepaths if filetype in fn]
                     post_process_metrics(stores, file_list, metrics, nsims)
 
-        os.remove(os.path.join(stores.econ_dir, "sim_template.parq"))
+        os.remove(os.path.join(stores.cost_dir, "sim_template.parq"))
 
         result_paths = calculate_costs(
             stores,
@@ -679,7 +679,7 @@ def summarise_mc_results(
         overview_path = os.path.join(
             results_dir,
             scenario,
-            "cost_outputs",
+            "Costs",
             f"ID{scenario_id}_cost_overview.csv",
         )
         if not os.path.exists(overview_path):

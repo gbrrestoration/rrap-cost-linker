@@ -9,8 +9,10 @@ from dataclasses import dataclass
 
 RESULT_DIRS = OrderedDict(
     {
-        "cost_dir": "cost_outputs",
-        "econ_dir": "econ_outputs",
+        "cost_dir": "Costs",
+        "rci_dir": os.path.join("Indicators", "rci"),
+        "rfi_dir": os.path.join("Indicators", "rfi"),
+        "rti_dir": os.path.join("Indicators", "rti"),
         "intervention_keys_dir": "intervention_keys",
     }
 )
@@ -20,7 +22,9 @@ RESULT_DIRS = OrderedDict(
 @dataclass(frozen=True)
 class OutputStores:
     cost_dir: str
-    econ_dir: str
+    rci_dir: str
+    rfi_dir: str
+    rti_dir: str
     intervention_keys_dir: str
 
 

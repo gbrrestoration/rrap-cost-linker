@@ -42,7 +42,7 @@ def test_scaled_eia_totals_match_overview(
     cost_output_dir, scenario_id, eia_label, expense_type, overview_col
 ):
     overview_path = cost_output_dir / f"ID{scenario_id}_cost_overview.csv"
-    eia_path = cost_output_dir / f"EIA_cost_scaled_ID{scenario_id}_{eia_label}.csv"
+    eia_path = cost_output_dir / f"EIA_scaled_ID{scenario_id}_{eia_label}.csv"
 
     if not overview_path.exists():
         pytest.skip(f"Overview file not found: {overview_path}")

@@ -303,6 +303,7 @@ def create_economics_metric_files(
     metrics=None,
     economics_spatial_filepath=None,
     costs_only=False,
+    distance_override_NM: float = None,
 ) -> tuple[str, list[str]]:
     """
     Main function for creating metric file summaries for input to economics modelling.
@@ -327,6 +328,10 @@ def create_economics_metric_files(
         Path to economics spatial data (econ_spatial.csv).
     costs_only : boolean, optional
         If True, does not produce indicator metrics (RCI, RFI, RTI). Default is False.
+    distance_override_NM : float, optional
+        When set, replaces the geographic port-distance calculation for all reefsets with
+        this fixed value (in nautical miles). Use this for best-guess explorer runs where
+        the config best-point distance should take precedence over computed reef distances.
 
     Returns
     -------
@@ -439,7 +444,9 @@ def create_economics_metric_files(
             )
             rs_mask = id_key_df["reefset"] == rs_name
             id_key_df.loc[rs_mask, "port_name"] = rs_port_name
-            id_key_df.loc[rs_mask, "distance_to_port_NM"] = rs_distance_NM
+            id_key_df.loc[rs_mask, "distance_to_port_NM"] = (
+                distance_override_NM if distance_override_NM is not None else rs_distance_NM
+            )
 
         # Process batches
         batch_files = []

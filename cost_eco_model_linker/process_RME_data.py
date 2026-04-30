@@ -353,236 +353,239 @@ def create_economics_metric_files(
     # Load all required data
     regions_data = load_regions_data(economics_spatial_filepath)
     results_data, scens_df, iv_dict = load_result_files(rme_files_path)
-    reef_spatial_data = load_reef_data()
+    try:
+        reef_spatial_data = load_reef_data()
 
-    # Extract time information
-    years = results_data["timesteps"][:]
-    start_year, end_year = years[0], years[-1]
+        # Extract time information
+        years = results_data["timesteps"][:]
+        start_year, end_year = years[0], years[-1]
 
-    # Get unique intervention IDs
-    intervention_ids = np.unique(scens_df["intervention id"])
+        # Get unique intervention IDs
+        intervention_ids = np.unique(scens_df["intervention id"])
 
-    # Separate intervention and counterfactual scenario indices
-    is_counterfactual = np.array(iv_dict["counterfactual"], dtype=bool)
-    unique_iv_scens = np.where(~is_counterfactual)[0]
-    unique_cf_scens = np.where(is_counterfactual)[0]
+        # Separate intervention and counterfactual scenario indices
+        is_counterfactual = np.array(iv_dict["counterfactual"], dtype=bool)
+        unique_iv_scens = np.where(~is_counterfactual)[0]
+        unique_cf_scens = np.where(is_counterfactual)[0]
 
-    # Create base dataframe structure (without sim columns yet)
-    base_data_store, regions_data = create_base_economics_dataframe(
-        regions_data, reef_spatial_data, years
-    )
-
-    # Setup storage for ecological sample IDs
-    store_ecol_ids = np.zeros((nsims, len(intervention_ids)), dtype=int)
-
-    # Generate batch indices
-    if nsims != nbatches:
-        nmembers = int(np.ceil(nsims / nbatches))
-        batch_chunks = list(batched(range(nsims), nmembers))
-    else:
-        batch_chunks = [
-            list(range(nsims)),
-        ]
-
-    # Setup filenames for outputs
-    ecol_uncert = uncertainty_dict["ecol_uncert"]
-    expert_uncert = uncertainty_dict["expert_uncert"]
-    base_met_filename = f"_uncertainty_ecol{ecol_uncert}_indicator{expert_uncert}_var_"
-
-    run_id = os.path.basename(rme_files_path) + "_run"
-    id_filename = path_join(
-        stores.intervention_keys_dir, f"intervention_ID_key_{run_id}"
-    )
-    ecol_id_filename = path_join(
-        stores.intervention_keys_dir, f"intervention_rep_idx_{run_id}"
-    )
-
-    # Storage for results
-    metric_filepaths = []
-    id_key_dfs = []
-
-    # Process each intervention
-    for iv_idx, iv_id in enumerate(intervention_ids):
-        # Filter scenarios for this intervention
-        scens_df_iv = scens_df[scens_df["intervention id"] == iv_id].copy()
-        n_reps = scens_df_iv["rep"].max()
-
-        # Get intervention reefs
-        reefset_names = scens_df_iv["reefset"].unique()
-        iv_reefs = sum([iv_dict[reefset_name] for reefset_name in reefset_names], [])
-
-        # Calculate relative year (0 on first intervention year)
-        intervention_start = scens_df_iv["year"].min()
-        intervention_start_idx = np.where(years == intervention_start)[0][0]
-        data_store = base_data_store.copy()
-        data_store["year_relative"] = data_store["year_absolute"] - intervention_start
-
-        # Get scenario indices for this intervention and its counterfactual
-        scen_id_start = iv_idx * n_reps
-        scen_id_end = scen_id_start + n_reps
-        iv_scens = unique_iv_scens[scen_id_start:scen_id_end]
-        cf_scens = unique_cf_scens[scen_id_start:scen_id_end]
-
-        # Create intervention key dataframe
-        scen_cols = [
-            "intervention id",
-            "year",
-            "rep",
-            "number of corals",
-            "type",
-            "reefset",
-        ]
-        id_key_df = scens_df_iv[scen_cols].assign(port_name="", distance_to_port_NM=0.0)
-
-        # Determine distance to nearest port and representative reef per reefset
-        reef_name = find_representative_reef(reef_spatial_data, iv_reefs)
-        id_key_df["reef"] = reef_name
-        for rs_name in reefset_names:
-            rs_reefs = iv_dict[rs_name]
-            rs_port_name, rs_distance_NM = find_representative_port(
-                reef_spatial_data, rs_reefs
-            )
-            rs_mask = id_key_df["reefset"] == rs_name
-            id_key_df.loc[rs_mask, "port_name"] = rs_port_name
-            id_key_df.loc[rs_mask, "distance_to_port_NM"] = (
-                distance_override_NM if distance_override_NM is not None else rs_distance_NM
-            )
-
-        # Process batches
-        batch_files = []
-
-        # Shared template for all simulations
-        data_store.to_parquet(
-            path_join(stores.cost_dir, "sim_template.parq"), index=False
+        # Create base dataframe structure (without sim columns yet)
+        base_data_store, regions_data = create_base_economics_dataframe(
+            regions_data, reef_spatial_data, years
         )
 
-        for batch_idx, batch_sel in enumerate(batch_chunks):
-            ds = pd.DataFrame()
+        # Setup storage for ecological sample IDs
+        store_ecol_ids = np.zeros((nsims, len(intervention_ids)), dtype=int)
 
-            # Extract metrics for intervention and counterfactual
-            (
-                maxcoraljuv,
-                sheltervolume_parameters,
-                rci_crit,
-                rti_intercept,
-                rti_cov_slope,
-                rti_shelt_slope,
-                rti_juv_slope,
-                rti_cots_slope,
-                rti_rubble_slope,
-                intercept1,
-                intercept2,
-                slope1,
-                slope2,
-            ) = indicator_params(
-                results_data,
-                iv_scens,
-                uncertainty_dict=uncertainty_dict,
-                juv_max_years=[0, int(intervention_start_idx - 1)],
+        # Generate batch indices
+        if nsims != nbatches:
+            nmembers = int(np.ceil(nsims / nbatches))
+            batch_chunks = list(batched(range(nsims), nmembers))
+        else:
+            batch_chunks = [
+                list(range(nsims)),
+            ]
+
+        # Setup filenames for outputs
+        ecol_uncert = uncertainty_dict["ecol_uncert"]
+        expert_uncert = uncertainty_dict["expert_uncert"]
+        base_met_filename = f"_uncertainty_ecol{ecol_uncert}_indicator{expert_uncert}_var_"
+
+        run_id = os.path.basename(rme_files_path) + "_run"
+        id_filename = path_join(
+            stores.intervention_keys_dir, f"intervention_ID_key_{run_id}"
+        )
+        ecol_id_filename = path_join(
+            stores.intervention_keys_dir, f"intervention_rep_idx_{run_id}"
+        )
+
+        # Storage for results
+        metric_filepaths = []
+        id_key_dfs = []
+
+        # Process each intervention
+        for iv_idx, iv_id in enumerate(intervention_ids):
+            # Filter scenarios for this intervention
+            scens_df_iv = scens_df[scens_df["intervention id"] == iv_id].copy()
+            n_reps = scens_df_iv["rep"].max()
+
+            # Get intervention reefs
+            reefset_names = scens_df_iv["reefset"].unique()
+            iv_reefs = sum([iv_dict[reefset_name] for reefset_name in reefset_names], [])
+
+            # Calculate relative year (0 on first intervention year)
+            intervention_start = scens_df_iv["year"].min()
+            intervention_start_idx = np.where(years == intervention_start)[0][0]
+            data_store = base_data_store.copy()
+            data_store["year_relative"] = data_store["year_absolute"] - intervention_start
+
+            # Get scenario indices for this intervention and its counterfactual
+            scen_id_start = iv_idx * n_reps
+            scen_id_end = scen_id_start + n_reps
+            iv_scens = unique_iv_scens[scen_id_start:scen_id_end]
+            cf_scens = unique_cf_scens[scen_id_start:scen_id_end]
+
+            # Create intervention key dataframe
+            scen_cols = [
+                "intervention id",
+                "year",
+                "rep",
+                "number of corals",
+                "type",
+                "reefset",
+            ]
+            id_key_df = scens_df_iv[scen_cols].assign(port_name="", distance_to_port_NM=0.0)
+
+            # Determine distance to nearest port and representative reef per reefset
+            reef_name = find_representative_reef(reef_spatial_data, iv_reefs)
+            id_key_df["reef"] = reef_name
+            for rs_name in reefset_names:
+                rs_reefs = iv_dict[rs_name]
+                rs_port_name, rs_distance_NM = find_representative_port(
+                    reef_spatial_data, rs_reefs
+                )
+                rs_mask = id_key_df["reefset"] == rs_name
+                id_key_df.loc[rs_mask, "port_name"] = rs_port_name
+                id_key_df.loc[rs_mask, "distance_to_port_NM"] = (
+                    distance_override_NM if distance_override_NM is not None else rs_distance_NM
+                )
+
+            # Process batches
+            batch_files = []
+
+            # Shared template for all simulations
+            data_store.to_parquet(
+                path_join(stores.cost_dir, "sim_template.parq"), index=False
             )
 
-            indicator_params_dict = {
-                "maxcoraljuv": maxcoraljuv,
-                "sheltervolume_parameters": sheltervolume_parameters,
-                "rci_crit": rci_crit,
-                "rti_intercept": rti_intercept,
-                "rti_cov_slope": rti_cov_slope,
-                "rti_shelt_slope": rti_shelt_slope,
-                "rti_juv_slope": rti_juv_slope,
-                "rti_cots_slope": rti_cots_slope,
-                "rti_rubble_slope": rti_rubble_slope,
-                "intercept1": intercept1,
-                "intercept2": intercept2,
-                "slope1": slope1,
-                "slope2": slope2,
-            }
+            for batch_idx, batch_sel in enumerate(batch_chunks):
+                ds = pd.DataFrame()
 
-            if not costs_only:
-                metrics_data_iv, ecol_ids = extract_metrics(
+                # Extract metrics for intervention and counterfactual
+                (
+                    maxcoraljuv,
+                    sheltervolume_parameters,
+                    rci_crit,
+                    rti_intercept,
+                    rti_cov_slope,
+                    rti_shelt_slope,
+                    rti_juv_slope,
+                    rti_cots_slope,
+                    rti_rubble_slope,
+                    intercept1,
+                    intercept2,
+                    slope1,
+                    slope2,
+                ) = indicator_params(
                     results_data,
                     iv_scens,
-                    len(batch_sel),
                     uncertainty_dict=uncertainty_dict,
-                    curr_eco_sim_idx=None,
-                    indicator_param_dict=indicator_params_dict,
+                    juv_max_years=[0, int(intervention_start_idx - 1)],
                 )
 
-                metrics_data_cf, _ = extract_metrics(
-                    results_data,
-                    cf_scens,
-                    len(batch_sel),
-                    uncertainty_dict=uncertainty_dict,
-                    curr_eco_sim_idx=ecol_ids
-                    - n_reps,  # Use same ecological sample for counterfactual as for intervention, adjusting for scenario index shift
-                    indicator_param_dict=indicator_params_dict,  # Use same indicator params for counterfactual as for intervention
-                )
+                indicator_params_dict = {
+                    "maxcoraljuv": maxcoraljuv,
+                    "sheltervolume_parameters": sheltervolume_parameters,
+                    "rci_crit": rci_crit,
+                    "rti_intercept": rti_intercept,
+                    "rti_cov_slope": rti_cov_slope,
+                    "rti_shelt_slope": rti_shelt_slope,
+                    "rti_juv_slope": rti_juv_slope,
+                    "rti_cots_slope": rti_cots_slope,
+                    "rti_rubble_slope": rti_rubble_slope,
+                    "intercept1": intercept1,
+                    "intercept2": intercept2,
+                    "slope1": slope1,
+                    "slope2": slope2,
+                }
 
-                # Adjust ecological IDs to ignore counterfactuals in cost sampling
-                max_rep = id_key_df["rep"].max()
-                ecol_ids[ecol_ids >= max_rep] -= max_rep
-                store_ecol_ids[batch_sel, iv_idx] = ecol_ids
-
-                # Prepare simulation columns for this batch
-                sim_cols = [f"sim_{b + 1}" for b in batch_sel]
-
-                # Calculate and save metrics for each metric function
-                for met_func in metrics:
-                    fn_suffix = (
-                        f"{base_met_filename}{met_func.__name__}_batch{batch_idx}"
+                if not costs_only:
+                    metrics_data_iv, ecol_ids = extract_metrics(
+                        results_data,
+                        iv_scens,
+                        len(batch_sel),
+                        uncertainty_dict=uncertainty_dict,
+                        curr_eco_sim_idx=None,
+                        indicator_param_dict=indicator_params_dict,
                     )
 
-                    # Intervention results
-                    iv_results = met_func(metrics_data_iv, data_store)
-                    iv_filename = f"ID{iv_id}_intervention{fn_suffix}.parq"
-                    ds[sim_cols] = iv_results
-
-                    ds.to_parquet(
-                        path_join(stores.cost_dir, iv_filename),
-                        index=False,
-                        compression=None,
+                    metrics_data_cf, _ = extract_metrics(
+                        results_data,
+                        cf_scens,
+                        len(batch_sel),
+                        uncertainty_dict=uncertainty_dict,
+                        curr_eco_sim_idx=ecol_ids
+                        - n_reps,  # Use same ecological sample for counterfactual as for intervention, adjusting for scenario index shift
+                        indicator_param_dict=indicator_params_dict,  # Use same indicator params for counterfactual as for intervention
                     )
-                    batch_files.append(iv_filename)
 
-                    # Counterfactual results (reuse the same dataframe)
-                    cf_results = met_func(metrics_data_cf, data_store)
-                    cf_filename = f"ID{iv_id}_counterfactual{fn_suffix}.parq"
-                    ds[sim_cols] = cf_results
+                    # Adjust ecological IDs to ignore counterfactuals in cost sampling
+                    max_rep = id_key_df["rep"].max()
+                    ecol_ids[ecol_ids >= max_rep] -= max_rep
+                    store_ecol_ids[batch_sel, iv_idx] = ecol_ids
 
-                    ds.to_parquet(
-                        path_join(stores.cost_dir, cf_filename),
-                        index=False,
-                        compression=None,
-                    )
-                    batch_files.append(cf_filename)
+                    # Prepare simulation columns for this batch
+                    sim_cols = [f"sim_{b + 1}" for b in batch_sel]
 
-        # Finalize intervention key with metadata
-        id_key_df = id_key_df.assign(
-            results_filename=f"ID{iv_id}_{base_met_filename}",
-            number_of_groups=6,
-            start_year=start_year,
-            end_year=end_year,
-            climate_model=scens_df_iv["GCM name"].values,
-        ).rename(
-            columns={
-                "number of corals": "number_of_1YO_corals",
-                "intervention id": "ID",
-                "year": "intervention_years",
-            }
-        )
+                    # Calculate and save metrics for each metric function
+                    for met_func in metrics:
+                        fn_suffix = (
+                            f"{base_met_filename}{met_func.__name__}_batch{batch_idx}"
+                        )
 
-        id_key_dfs.append(id_key_df)
-        metric_filepaths.append(batch_files)
+                        # Intervention results
+                        iv_results = met_func(metrics_data_iv, data_store)
+                        iv_filename = f"ID{iv_id}_intervention{fn_suffix}.parq"
+                        ds[sim_cols] = iv_results
 
-    # Combine all intervention keys
-    id_key_df_all = pd.concat(id_key_dfs, ignore_index=True)
+                        ds.to_parquet(
+                            path_join(stores.cost_dir, iv_filename),
+                            index=False,
+                            compression=None,
+                        )
+                        batch_files.append(iv_filename)
 
-    # Save intervention key and ecological ID files (one per core)
-    for core_idx in range(ncores):
-        id_key_df_all.to_csv(f"{id_filename}{core_idx}.csv", index=False)
+                        # Counterfactual results (reuse the same dataframe)
+                        cf_results = met_func(metrics_data_cf, data_store)
+                        cf_filename = f"ID{iv_id}_counterfactual{fn_suffix}.parq"
+                        ds[sim_cols] = cf_results
 
-        pd.DataFrame(
-            store_ecol_ids[nbatches * core_idx : nbatches * (core_idx + 1), :] + 1,
-            columns=[str(id_val) for id_val in intervention_ids],
-        ).to_csv(f"{ecol_id_filename}{core_idx}.csv", index=False)
+                        ds.to_parquet(
+                            path_join(stores.cost_dir, cf_filename),
+                            index=False,
+                            compression=None,
+                        )
+                        batch_files.append(cf_filename)
+
+            # Finalize intervention key with metadata
+            id_key_df = id_key_df.assign(
+                results_filename=f"ID{iv_id}_{base_met_filename}",
+                number_of_groups=6,
+                start_year=start_year,
+                end_year=end_year,
+                climate_model=scens_df_iv["GCM name"].values,
+            ).rename(
+                columns={
+                    "number of corals": "number_of_1YO_corals",
+                    "intervention id": "ID",
+                    "year": "intervention_years",
+                }
+            )
+
+            id_key_dfs.append(id_key_df)
+            metric_filepaths.append(batch_files)
+
+        # Combine all intervention keys
+        id_key_df_all = pd.concat(id_key_dfs, ignore_index=True)
+
+        # Save intervention key and ecological ID files (one per core)
+        for core_idx in range(ncores):
+            id_key_df_all.to_csv(f"{id_filename}{core_idx}.csv", index=False)
+
+            pd.DataFrame(
+                store_ecol_ids[nbatches * core_idx : nbatches * (core_idx + 1), :] + 1,
+                columns=[str(id_val) for id_val in intervention_ids],
+            ).to_csv(f"{ecol_id_filename}{core_idx}.csv", index=False)
+    finally:
+        results_data.close()
 
     return os.path.basename(rme_files_path), metric_filepaths

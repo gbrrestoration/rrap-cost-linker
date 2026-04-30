@@ -116,20 +116,36 @@ class WorkbookSession:
         """Mark a workbook as seeded."""
         self.seeded.add(os.path.abspath(fp))
 
-    def cleanup(self):
+    def cleanup(self, uninitialize_com=True):
         """Close all workbooks and quit the Excel application."""
-        for wb in self.workbooks.values():
+        import gc
+
+        for wb in list(self.workbooks.values()):
             try:
                 wb.Close(SaveChanges=False)
             except (pywintypes.com_error, AttributeError):
                 pass
+        
+        self.workbooks = {}
+        
         if self.xlapp:
             try:
                 self.xlapp.Quit()
             except (pywintypes.com_error, AttributeError):
                 pass
-        self.workbooks = {}
-        self.xlapp = None
+            self.xlapp = None
+        
+        # Explicitly trigger garbage collection to release COM references
+        gc.collect()
+        
+        if uninitialize_com:
+            # Uninitialize the COM apartment for this thread
+            import pythoncom
+            try:
+                pythoncom.CoUninitialize()
+            except Exception:
+                pass
+            
         self.seeded = set()
 
 

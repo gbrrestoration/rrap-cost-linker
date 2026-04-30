@@ -78,13 +78,19 @@ class _ProcessSession:
         """Increment call counter; recycle the WorkbookSession if the interval is reached."""
         self._call_count += 1
         if self._call_count >= self._reset_interval:
-            self.wb_session.cleanup()
+            # Recycle Excel but keep the COM apartment alive for the worker thread
+            self.wb_session.cleanup(uninitialize_com=False)
             self.wb_session = WorkbookSession()
             self._call_count = 0
 
     def _cleanup(self):
-        self.wb_session.cleanup()
-        shutil.rmtree(self._tmp_dir, ignore_errors=True)
+        # Final cleanup on process exit: quit Excel and uninitialize COM
+        if hasattr(self, 'wb_session'):
+            self.wb_session.cleanup(uninitialize_com=True)
+        
+        # Cleanup temp directory
+        if hasattr(self, '_tmp_dir') and os.path.exists(self._tmp_dir):
+            shutil.rmtree(self._tmp_dir, ignore_errors=True)
 
 
 def _get_process_session(deploy_src, prod_src, lm_src, reset_interval):

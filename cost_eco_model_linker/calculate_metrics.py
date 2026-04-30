@@ -271,21 +271,21 @@ def reef_condition_rme(
     n_metrics = 5  # see below for metrics implemented
 
     if ecol_uncert == 0:  # If we don't want eco model uncertainty, take mean of nsims
-        cots = np.mean(results_data["cots"][scen_ids, :, :], axis=0, keepdims=True)
-        coral_cover_per_taxa = np.mean(
+        cots = np.repeat(np.mean(results_data["cots"][scen_ids, :, :], axis=0, keepdims=True), nsims, axis=0)
+        coral_cover_per_taxa = np.repeat(np.mean(
             results_data["total_taxa_cover"][scen_ids, :, :, :], axis=0, keepdims=True
-        )
+        ), nsims, axis=0)
         # data.nb_coral_adol = np.mean(F.nb_coral_adol, axis=0)
         # data.nb_coral_adult = np.mean(F.nb_coral_adult, axis=0)
-        coral_juv_m2 = np.mean(
+        coral_juv_m2 = np.repeat(np.mean(
             results_data["coral_juv_m2"][scen_ids, :, :], axis=0, keepdims=True
-        )
-        rubble = np.mean(results_data["rubble"][scen_ids, :, :], axis=0, keepdims=True)
-        relative_shelter_volume = np.mean(
+        ), nsims, axis=0)
+        rubble = np.repeat(np.mean(results_data["rubble"][scen_ids, :, :], axis=0, keepdims=True), nsims, axis=0)
+        relative_shelter_volume = np.repeat(np.mean(
             results_data["relative_shelter_volume"][scen_ids, :, :],
             axis=0,
             keepdims=True,
-        )
+        ), nsims, axis=0)
         curr_eco_sim = scen_ids[0]
 
     if (

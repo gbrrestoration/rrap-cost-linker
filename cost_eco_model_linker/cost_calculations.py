@@ -424,6 +424,11 @@ def update_factors(prod_factors, deploy_factors, iv_spec, sample_scale=False):
             "distance_to_port_NM"
         ].iloc[0]
 
+    # Propagate representative reef name so the deployment model can set D6,
+    # which drives the port lookup (land haulage cost per truck-trip).
+    if "reef" in iv_spec.columns:
+        deploy_factors.loc[:, "reef"] = iv_spec["reef"].iloc[0]
+
     return prod_factors, deploy_factors
 
 
@@ -1264,15 +1269,15 @@ def calculate_costs(
 
                         for rs in reefsets_this_yr:
                             rs_selector = curr_selector & (ID_key.reefset == rs)
-                            rs_spec = ID_key.loc[
-                                rs_selector,
-                                [
-                                    "number_of_1YO_corals",
-                                    "distance_to_port_NM",
-                                    "number_of_groups",
-                                    "rep",
-                                ],
+                            _rs_cols = [
+                                "number_of_1YO_corals",
+                                "distance_to_port_NM",
+                                "number_of_groups",
+                                "rep",
                             ]
+                            if "reef" in ID_key.columns:
+                                _rs_cols.append("reef")
+                            rs_spec = ID_key.loc[rs_selector, _rs_cols]
                             departure_port = ID_key.loc[
                                 rs_selector.idxmax(), "port_name"
                             ]

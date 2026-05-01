@@ -139,8 +139,13 @@ def calculate_deployment_cost(wb, model_spec, factors):
         Operational cost (OPEX)
     """
     if "reef" in factors:
-        # Convert 1-based reef index to reef name for cell input
-        factors["reef"] = _read_reef_key(wb)[int(factors["reef"]) - 1]
+        reef_val = factors["reef"]
+        if not isinstance(reef_val, str):
+            # Legacy: convert 1-based reef index to name
+            reef_val = _read_reef_key(wb)[int(reef_val) - 1]
+        # Set Dashboard!D6 so the port lookup (land haulage cost per truck-trip,
+        # road distance) reflects the correct reef/port rather than the default.
+        wb.Sheets("Dashboard").Range("D6").Value = reef_val
 
     # if factors["daytrip"] == 1:
     #     factors["daytrip"] = 1

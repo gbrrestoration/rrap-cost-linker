@@ -433,18 +433,18 @@ def create_economics_metric_files(
                 "type",
                 "reefset",
             ]
-            id_key_df = scens_df_iv[scen_cols].assign(port_name="", distance_to_port_NM=0.0)
+            id_key_df = scens_df_iv[scen_cols].assign(port_name="", distance_to_port_NM=0.0, reef="")
 
             # Determine distance to nearest port and representative reef per reefset
-            reef_name = find_representative_reef(reef_spatial_data, iv_reefs)
-            id_key_df["reef"] = reef_name
             for rs_name in reefset_names:
                 rs_reefs = iv_dict[rs_name]
                 rs_port_name, rs_distance_NM = find_representative_port(
                     reef_spatial_data, rs_reefs
                 )
+                rs_reef_name = find_representative_reef(reef_spatial_data, rs_reefs)
                 rs_mask = id_key_df["reefset"] == rs_name
                 id_key_df.loc[rs_mask, "port_name"] = rs_port_name
+                id_key_df.loc[rs_mask, "reef"] = rs_reef_name
                 id_key_df.loc[rs_mask, "distance_to_port_NM"] = (
                     distance_override_NM if distance_override_NM is not None else rs_distance_NM
                 )

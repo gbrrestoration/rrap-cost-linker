@@ -29,6 +29,7 @@ def open_excel(fp, xlapp=None):
         xlapp.Interactive = False
         xlapp.Visible = False
         xlapp.DisplayAlerts = False
+        xlapp.EnableEvents = False
 
     wb = xlapp.Workbooks.Open(wb_file_path)
 
@@ -90,6 +91,7 @@ class WorkbookSession:
             self.xlapp.Interactive = False
             self.xlapp.Visible = False
             self.xlapp.DisplayAlerts = False
+            self.xlapp.EnableEvents = False
         return self.xlapp
 
     def open_workbook(self, fp):
@@ -116,21 +118,97 @@ class WorkbookSession:
         """Mark a workbook as seeded."""
         self.seeded.add(os.path.abspath(fp))
 
-    def cleanup(self):
+    def cleanup(self, uninitialize_com=True):
         """Close all workbooks and quit the Excel application."""
-        for wb in self.workbooks.values():
+        import gc
+
+        # Pop and close each workbook, deleting the wrapper immediately so no
+        # COM reference lingers as a loop variable past gc.collect().
+        while self.workbooks:
+            _, wb = self.workbooks.popitem()
             try:
                 wb.Close(SaveChanges=False)
             except (pywintypes.com_error, AttributeError):
                 pass
+            del wb
+
         if self.xlapp:
+            xlapp = self.xlapp
+            self.xlapp = None
             try:
-                self.xlapp.Quit()
+                xlapp.Quit()
             except (pywintypes.com_error, AttributeError):
                 pass
-        self.workbooks = {}
-        self.xlapp = None
+            del xlapp
+
+        # All COM wrappers are now explicitly released; gc.collect() handles
+        # any remaining cyclic references before CoUninitialize tears down the apartment.
+        gc.collect()
+
+        if uninitialize_com:
+            # Uninitialize the COM apartment for this thread
+            import pythoncom
+            try:
+                pythoncom.CoUninitialize()
+            except Exception:
+                pass
+
         self.seeded = set()
+
+
+def cleanup_excel_processes():
+    """Quit all running Excel instances via COM.
+
+    Enumerates the Windows Running Object Table (ROT) to find every open
+    Excel workbook, collects their parent Application objects (deduplicated
+    by window handle), and calls Quit() on each one.  This is safer than
+    force-killing excel.exe because Excel gets to free its own COM state
+    before the process exits.
+
+    Returns
+    -------
+    int
+        Number of Excel Application instances that were closed.
+    """
+    import gc
+
+    import pythoncom
+    import win32com.client
+
+    pythoncom.CoInitialize()
+    try:
+        ctx = pythoncom.CreateBindCtx(0)
+        rot = pythoncom.GetRunningObjectTable()
+
+        apps = {}
+        for moniker in rot.EnumRunning():
+            try:
+                name = moniker.GetDisplayName(ctx, None)
+                if not any(
+                    name.lower().endswith(ext)
+                    for ext in (".xlsx", ".xlsm", ".xls", ".xlsb")
+                ):
+                    continue
+                obj = rot.GetObject(moniker)
+                wb = win32com.client.Dispatch(obj.QueryInterface(pythoncom.IID_IDispatch))
+                app = wb.Application
+                apps[app.Hwnd] = app
+            except Exception:
+                pass
+
+        for app in apps.values():
+            try:
+                app.DisplayAlerts = False
+                app.Quit()
+            except Exception:
+                pass
+
+        n = len(apps)
+        del apps
+        gc.collect()
+        return n
+    finally:
+        pythoncom.CoUninitialize()
 
 
 # TODO: Use objects to auto-handle state

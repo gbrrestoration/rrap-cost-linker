@@ -206,10 +206,10 @@ def fill_industry_costs(eia_template, next_idx, cost_df, ind_codes, unique_ind_c
     for code in unique_ind_codes:
         try:
             matches_code = ind_codes[cost_df.index] == code
-        except:
-            import ipdb
-
-            ipdb.set_trace()
+        except Exception as exc:
+            raise RuntimeError(
+                f"Failed to match industry code {code!r} against cost_df index: {exc}"
+            ) from exc
 
         if matches_code.sum() == 0:
             continue

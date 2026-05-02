@@ -264,6 +264,8 @@ def evaluate(
         )
         with mp.Pool(nprocs, initializer=_pool_initializer) as pool:
             result = pool.map(wrapper, range(nprocs))
+            pool.close()
+            pool.join()
 
         post_process_costs(result, nsims)
 

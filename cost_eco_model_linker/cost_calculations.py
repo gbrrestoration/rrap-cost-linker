@@ -62,11 +62,14 @@ class _ProcessSession:
         self._call_count = 0
 
         self._tmp_dir = tempfile.mkdtemp(prefix="ceml_worker_")
-        self.deploy_fp = self._copy(deploy_src)
-        self.prod_fp = self._copy(prod_src)
-        self.lm_fp = self._copy(lm_src)
-
-        self.wb_session = WorkbookSession()
+        try:
+            self.deploy_fp = self._copy(deploy_src)
+            self.prod_fp = self._copy(prod_src)
+            self.lm_fp = self._copy(lm_src)
+            self.wb_session = WorkbookSession()
+        except Exception:
+            shutil.rmtree(self._tmp_dir, ignore_errors=True)
+            raise
         atexit.register(self._cleanup)
 
     def _copy(self, src):
@@ -78,19 +81,45 @@ class _ProcessSession:
         """Increment call counter; recycle the WorkbookSession if the interval is reached."""
         self._call_count += 1
         if self._call_count >= self._reset_interval:
-            self.wb_session.cleanup()
+            # Don't uninitialize COM here — the apartment must stay alive for the
+            # new WorkbookSession() that immediately follows.
+            self.wb_session.cleanup(uninitialize_com=False)
             self.wb_session = WorkbookSession()
             self._call_count = 0
 
     def _cleanup(self):
-        self.wb_session.cleanup()
-        shutil.rmtree(self._tmp_dir, ignore_errors=True)
+        # Guard against double-cleanup: atexit may fire after an eager cleanup
+        # that already ran (e.g. at the end of a worker task).
+        if getattr(self, "_cleaned", False):
+            return
+        self._cleaned = True
+        # CoUninitialize inside cleanup() tears down the COM apartment synchronously,
+        # guaranteeing Excel has released all file locks before rmtree runs.
+        if hasattr(self, "wb_session"):
+            self.wb_session.cleanup(uninitialize_com=True)
+        if hasattr(self, "_tmp_dir") and os.path.exists(self._tmp_dir):
+            shutil.rmtree(self._tmp_dir, ignore_errors=True)
 
 
 def _get_process_session(deploy_src, prod_src, lm_src, reset_interval):
-    """Return (creating if necessary) the process-local session for these model files."""
+    """Return (creating if necessary) the process-local session for these model files.
+
+    If a session already exists for a *different* set of model paths (e.g. the
+    worker is processing a new task whose per-task temp copies live under a
+    different directory), the old session is closed eagerly before creating the
+    new one.  Without this, each task in the explorer's per-task-temp-dir flow
+    would accumulate a separate open Excel instance for the entire worker
+    lifetime, resulting in up to maxtasksperchild simultaneous Excel processes
+    per worker.
+    """
     key = (deploy_src, prod_src, lm_src)
     if key not in _process_sessions:
+        # Eagerly close any stale sessions for old model paths so we never hold
+        # more than one open Excel instance per worker at a time.
+        for old_session in list(_process_sessions.values()):
+            old_session._cleanup()
+        _process_sessions.clear()
+
         _process_sessions[key] = _ProcessSession(
             deploy_src, prod_src, lm_src, reset_interval
         )
@@ -942,6 +971,31 @@ def _write_eia_outputs(
     eia_template_lm = _fill_eia_missing_years(eia_template_lm, all_sim_years)
 
     _meta_cols = ["iteration", "year", "intervention", "location", "type"]
+
+    # If a template is still empty (its intervention type was not active in this
+    # scenario), populate it with zero-cost rows mirroring the structure of the
+    # first non-empty template so downstream processing always receives a valid file.
+    _reference = next(
+        (t for t in [eia_template_prod, eia_template_deploy, eia_template_lm] if not t.empty),
+        None,
+    )
+    if _reference is not None:
+        _ref_meta = _reference[_meta_cols].drop_duplicates()
+
+        def _zero_fill(tmpl):
+            if not tmpl.empty:
+                return tmpl
+            cost_cols = [c for c in tmpl.columns if c not in _meta_cols]
+            rows = [
+                {**row.to_dict(), **{c: 0.0 for c in cost_cols}}
+                for _, row in _ref_meta.iterrows()
+            ]
+            return pd.DataFrame(rows, columns=tmpl.columns)
+
+        eia_template_prod = _zero_fill(eia_template_prod)
+        eia_template_deploy = _zero_fill(eia_template_deploy)
+        eia_template_lm = _zero_fill(eia_template_lm)
+
     _pid = f"_pid{p_iter_id}"
 
     def _total_last(df):
@@ -1157,358 +1211,375 @@ def calculate_costs(
     lm_model_fp = proc_session.lm_fp
     workbook_session = proc_session.wb_session
 
-    # Read pool bounds once from config so update_lm_factors can clamp each year
-    from .sampling import DEFAULT_LM_VER
+    import multiprocess as _mp
 
-    _lm_cfg = pd.read_csv(os.path.join(THIS_DIR, f"{DEFAULT_LM_VER}_LM_config.csv"))
-    _pool_row = _lm_cfg.loc[_lm_cfg["factor_names"] == "larval release pools"].iloc[0]
-    lm_pool_min = int(_pool_row["range_lower"])
-    lm_pool_max = int(_pool_row["range_upper"])
+    _in_worker = _mp.current_process().name != "MainProcess"
 
-    # Full simulation year range — costs are zero for non-intervention years
-    start_year = int(ID_key["start_year"].iloc[0])
-    end_year = int(ID_key["end_year"].iloc[0])
-    all_sim_years = np.arange(start_year, end_year + 1)
+    try:
+        # Read pool bounds once from config so update_lm_factors can clamp each year
+        from .sampling import DEFAULT_LM_VER
 
-    unique_ids = np.unique(ID_key.ID)
-    cost_filepaths = []
+        _lm_cfg = pd.read_csv(os.path.join(THIS_DIR, f"{DEFAULT_LM_VER}_LM_config.csv"))
+        _pool_row = _lm_cfg.loc[_lm_cfg["factor_names"] == "larval release pools"].iloc[0]
+        lm_pool_min = int(_pool_row["range_lower"])
+        lm_pool_max = int(_pool_row["range_upper"])
 
-    # Open all three workbooks (WorkbookSession caches them; subsequent calls are no-ops).
-    deploy_wb = workbook_session.open_workbook(deploy_model_fp)
-    prod_wb = workbook_session.open_workbook(prod_model_fp)
-    lm_wb = workbook_session.open_workbook(lm_model_fp)
-    xlapp = workbook_session.xlapp
+        # Full simulation year range — costs are zero for non-intervention years
+        start_year = int(ID_key["start_year"].iloc[0])
+        end_year = int(ID_key["end_year"].iloc[0])
+        all_sim_years = np.arange(start_year, end_year + 1)
 
-    for scen_id in unique_ids:
-        # Output EIA assessment for each intervention scenario
-        eia_template_prod = create_eia_template(prod_wb)
-        eia_template_deploy = create_eia_template(deploy_wb)
-        eia_template_lm = create_lm_eia_template(lm_wb)
+        unique_ids = np.unique(ID_key.ID)
+        cost_filepaths = []
 
-        scen_idx = ID_key.ID == scen_id
-        iv_years = np.unique(ID_key.intervention_years[scen_idx])
-        unique_reps = np.unique(ID_key.rep[scen_idx])
+        # Open all three workbooks (WorkbookSession caches them; subsequent calls are no-ops).
+        deploy_wb = workbook_session.open_workbook(deploy_model_fp)
+        prod_wb = workbook_session.open_workbook(prod_model_fp)
+        lm_wb = workbook_session.open_workbook(lm_model_fp)
+        xlapp = workbook_session.xlapp
 
-        rep_cost_dfs = []
-        draw_offset = 0
+        for scen_id in unique_ids:
+            # Output EIA assessment for each intervention scenario
+            eia_template_prod = create_eia_template(prod_wb)
+            eia_template_deploy = create_eia_template(deploy_wb)
+            eia_template_lm = create_lm_eia_template(lm_wb)
 
-        for rep in unique_reps:
-            rep_idx = scen_idx & (ID_key.rep == rep)
-            temp_it_id = f"TEMP_{rep}"
+            scen_idx = ID_key.ID == scen_id
+            iv_years = np.unique(ID_key.intervention_years[scen_idx])
+            unique_reps = np.unique(ID_key.rep[scen_idx])
 
-            cost_df = initialize_cost_df(all_sim_years, nsims)
+            rep_cost_dfs = []
+            draw_offset = 0
 
-            # Sample cost model parameters once per rep — fixed across years
-            (
-                prod_spec,
-                prod_factors,
-                deploy_spec,
-                deploy_factors,
-                lm_spec,
-                lm_factors,
-            ) = sample_cost_model(nsims)
+            for rep in unique_reps:
+                rep_idx = scen_idx & (ID_key.rep == rep)
+                temp_it_id = f"TEMP_{rep}"
 
-            # In normal mode, apply the actual port distance to deploy_factors so
-            # the CSV reflects the value used in the simulation, not the config
-            # best-point. Use the first reefset of the first intervention year as
-            # representative (distance is fixed per reefset across years).
-            # In exploration mode (sample_scale=True) the Sobol-sampled distance
-            # is already in deploy_factors — do not overwrite it.
-            if not sample_scale:
-                _first_yr = iv_years[0]
-                _first_rs = ID_key.loc[
-                    (ID_key.intervention_years == _first_yr) & rep_idx, "reefset"
-                ].iloc[0]
-                _first_distance = ID_key.loc[
-                    (ID_key.intervention_years == _first_yr)
-                    & rep_idx
-                    & (ID_key.reefset == _first_rs),
-                    "distance_to_port_NM",
-                ].iloc[0]
-                deploy_factors["distance_from_port"] = float(_first_distance)
+                cost_df = initialize_cost_df(all_sim_years, nsims)
 
-            # Track outplant CAPEX inventory separately per model for the inventory/replacement model
-            prod_inventory = np.zeros(nsims)
-            deploy_inventory = np.zeros(nsims)
+                # Sample cost model parameters once per rep — fixed across years
+                (
+                    prod_spec,
+                    prod_factors,
+                    deploy_spec,
+                    deploy_factors,
+                    lm_spec,
+                    lm_factors,
+                ) = sample_cost_model(nsims)
 
-            # Accumulate costs and metadata across years for the overview CSV
-            acc = _OverviewAccumulator(n_years=len(iv_years), nsims=nsims)
+                # In normal mode, apply the actual port distance to deploy_factors so
+                # the CSV reflects the value used in the simulation, not the config
+                # best-point. Use the first reefset of the first intervention year as
+                # representative (distance is fixed per reefset across years).
+                # In exploration mode (sample_scale=True) the Sobol-sampled distance
+                # is already in deploy_factors — do not overwrite it.
+                if not sample_scale:
+                    _first_yr = iv_years[0]
+                    _first_rs = ID_key.loc[
+                        (ID_key.intervention_years == _first_yr) & rep_idx, "reefset"
+                    ].iloc[0]
+                    _first_distance = ID_key.loc[
+                        (ID_key.intervention_years == _first_yr)
+                        & rep_idx
+                        & (ID_key.reefset == _first_rs),
+                        "distance_to_port_NM",
+                    ].iloc[0]
+                    deploy_factors["distance_from_port"] = float(_first_distance)
 
-            # Precompute per-reefset intervention years so CAPEX comparison
-            # uses the previous year for the same reefset, not a global iv_yr - 1.
-            reefset_years_map = {}
-            for rs in ID_key.loc[rep_idx, "reefset"].unique():
-                rs_mask = rep_idx & (ID_key.reefset == rs)
-                reefset_years_map[rs] = sorted(
-                    ID_key.loc[rs_mask, "intervention_years"].unique()
+                # Track outplant CAPEX inventory separately per model for the inventory/replacement model
+                prod_inventory = np.zeros(nsims)
+                deploy_inventory = np.zeros(nsims)
+
+                # Accumulate costs and metadata across years for the overview CSV
+                acc = _OverviewAccumulator(n_years=len(iv_years), nsims=nsims)
+
+                # Precompute per-reefset intervention years so CAPEX comparison
+                # uses the previous year for the same reefset, not a global iv_yr - 1.
+                reefset_years_map = {}
+                for rs in ID_key.loc[rep_idx, "reefset"].unique():
+                    rs_mask = rep_idx & (ID_key.reefset == rs)
+                    reefset_years_map[rs] = sorted(
+                        ID_key.loc[rs_mask, "intervention_years"].unique()
+                    )
+
+                for iv_yr in iv_years:
+                    curr_selector = (ID_key.intervention_years == iv_yr) & rep_idx
+                    yr_idx = iv_years.tolist().index(iv_yr)
+
+                    iv_types_this_yr = (
+                        ID_key.loc[curr_selector, "type"].str.lower().unique()
+                    )
+
+                    for iv_type in iv_types_this_yr:
+                        if iv_type not in active_models:
+                            continue
+
+                        # Reefsets active in this year for this type — run the model once
+                        # per reefset and accumulate costs so multi-region deployments are summed.
+                        reefsets_this_yr = ID_key.loc[
+                            curr_selector & (ID_key["type"].str.lower() == iv_type),
+                            "reefset",
+                        ].unique()
+
+                        if iv_type == "outplant":
+                            yr_prod_capex = np.zeros(nsims)
+                            yr_deploy_capex = np.zeros(nsims)
+                            yr_opex = np.zeros(nsims)
+
+                            for rs in reefsets_this_yr:
+                                rs_selector = curr_selector & (ID_key.reefset == rs)
+                                _rs_cols = [
+                                    "number_of_1YO_corals",
+                                    "distance_to_port_NM",
+                                    "number_of_groups",
+                                    "rep",
+                                ]
+                                if "reef" in ID_key.columns:
+                                    _rs_cols.append("reef")
+                                rs_spec = ID_key.loc[rs_selector, _rs_cols]
+                                departure_port = ID_key.loc[
+                                    rs_selector.idxmax(), "port_name"
+                                ]
+                                rs_num_1yoec = ID_key.loc[
+                                    rs_selector, "number_of_1YO_corals"
+                                ].sum()
+
+                                (
+                                    deploy_wb,
+                                    prod_wb,
+                                    deploy_factors,
+                                    prod_factors,
+                                    eia_template_prod,
+                                    eia_template_deploy,
+                                ) = _process_outplant_reefset(
+                                    xlapp,
+                                    deploy_wb,
+                                    prod_wb,
+                                    deploy_model_fp,
+                                    prod_model_fp,
+                                    deploy_factors,
+                                    deploy_spec,
+                                    prod_factors,
+                                    prod_spec,
+                                    rs_spec,
+                                    rs_num_1yoec,
+                                    departure_port,
+                                    reefset_years_map[rs],
+                                    iv_yr,
+                                    temp_it_id,
+                                    nsims,
+                                    yr_prod_capex,
+                                    yr_deploy_capex,
+                                    yr_opex,
+                                    acc,
+                                    yr_idx,
+                                    eia_template_prod,
+                                    eia_template_deploy,
+                                    sample_scale=sample_scale,
+                                    workbook_session=workbook_session,
+                                )
+
+                            # Inventory/replacement model applied separately to production and
+                            # deployment so each model's retained capacity is tracked independently.
+                            total_prod_capex, prod_inventory = _apply_outplant_inventory(
+                                yr_prod_capex, prod_inventory
+                            )
+                            total_deploy_capex, deploy_inventory = (
+                                _apply_outplant_inventory(yr_deploy_capex, deploy_inventory)
+                            )
+                            acc.prod_total_capex[yr_idx] = total_prod_capex
+                            acc.deploy_total_capex[yr_idx] = total_deploy_capex
+                            total_yr_capex = total_prod_capex + total_deploy_capex
+
+                            cost_sum = np.column_stack([total_yr_capex, yr_opex])
+                            component_costs = cost_types(cost_sum, cont_p, nsims)
+                            cost_df.loc[cost_df.year == iv_yr, cost_df.columns[2:]] = (
+                                component_costs
+                            )
+
+                        elif iv_type == "lm":
+                            for rs in reefsets_this_yr:
+                                rs_selector = curr_selector & (ID_key.reefset == rs)
+                                departure_port = ID_key.loc[
+                                    rs_selector.idxmax(), "port_name"
+                                ]
+                                if sample_scale:
+                                    # Use the per-draw sampled distances from the
+                                    # deployment factors (same geographic draw for LM).
+                                    rs_distance = deploy_factors[
+                                        "distance_from_port"
+                                    ].values[0:nsims]
+                                else:
+                                    rs_distance = ID_key.loc[
+                                        rs_selector, "distance_to_port_NM"
+                                    ].iloc[0]
+
+                                lm_wb, lm_factors, eia_template_lm = _process_lm_reefset(
+                                    xlapp,
+                                    lm_wb,
+                                    lm_model_fp,
+                                    lm_factors,
+                                    lm_spec,
+                                    lm_pool_min,
+                                    lm_pool_max,
+                                    ID_key.loc[
+                                        rs_selector, ["number_of_1YO_corals", "rep"]
+                                    ],
+                                    rs_distance,
+                                    departure_port,
+                                    reefset_years_map[rs],
+                                    iv_yr,
+                                    temp_it_id,
+                                    nsims,
+                                    acc,
+                                    yr_idx,
+                                    eia_template_lm,
+                                    sample_scale=sample_scale,
+                                    workbook_session=workbook_session,
+                                )
+
+                        else:
+                            raise ValueError(
+                                "Unknown intervention type encountered. Must be one of 'outplant' or 'lm'."
+                            )
+
+                # Save sampled cost parameters now that the spreadsheet models have run
+                # and capex/opex output columns have been added to the factor dataframes.
+                _save_cost_params(
+                    cost_dir,
+                    scen_id,
+                    rep,
+                    p_iter_id,
+                    prod_factors,
+                    deploy_factors,
+                    lm_factors,
+                    active_models=active_models,
                 )
 
-            for iv_yr in iv_years:
-                curr_selector = (ID_key.intervention_years == iv_yr) & rep_idx
-                yr_idx = iv_years.tolist().index(iv_yr)
-
-                iv_types_this_yr = (
-                    ID_key.loc[curr_selector, "type"].str.lower().unique()
+                # Single pass over draws: fold LM inventory costs into cost_df and build overview rows
+                overview_rows = _build_overview_rows_and_update_costs(
+                    cost_df, iv_years, nsims, acc, cont_p, scen_id, rep
                 )
 
-                for iv_type in iv_types_this_yr:
-                    if iv_type not in active_models:
+                rep_cost_dfs.append((rep, cost_df, overview_rows))
+
+                # Expand EIA templates from the single temporary ID to all draws in this rep
+                for template in [
+                    eia_template_prod,
+                    eia_template_deploy,
+                    eia_template_lm,
+                ]:
+                    if template.empty:
+                        continue
+                    mask = template.iteration == temp_it_id
+                    rows_to_expand = template[mask]
+                    if rows_to_expand.empty:
                         continue
 
-                    # Reefsets active in this year for this type — run the model once
-                    # per reefset and accumulate costs so multi-region deployments are summed.
-                    reefsets_this_yr = ID_key.loc[
-                        curr_selector & (ID_key["type"].str.lower() == iv_type),
-                        "reefset",
-                    ].unique()
+                    # Remove the temporary rows
+                    template.drop(template.index[mask], inplace=True)
 
-                    if iv_type == "outplant":
-                        yr_prod_capex = np.zeros(nsims)
-                        yr_deploy_capex = np.zeros(nsims)
-                        yr_opex = np.zeros(nsims)
+                    # Add a row for each draw in the rep
+                    new_rows = []
+                    for draw_i in range(nsims):
+                        dup = rows_to_expand.copy()
+                        dup["iteration"] = draw_offset + draw_i + 1
+                        new_rows.append(dup)
 
-                        for rs in reefsets_this_yr:
-                            rs_selector = curr_selector & (ID_key.reefset == rs)
-                            _rs_cols = [
-                                "number_of_1YO_corals",
-                                "distance_to_port_NM",
-                                "number_of_groups",
-                                "rep",
-                            ]
-                            if "reef" in ID_key.columns:
-                                _rs_cols.append("reef")
-                            rs_spec = ID_key.loc[rs_selector, _rs_cols]
-                            departure_port = ID_key.loc[
-                                rs_selector.idxmax(), "port_name"
-                            ]
-                            rs_num_1yoec = ID_key.loc[
-                                rs_selector, "number_of_1YO_corals"
-                            ].sum()
-
-                            (
-                                deploy_wb,
-                                prod_wb,
-                                deploy_factors,
-                                prod_factors,
-                                eia_template_prod,
-                                eia_template_deploy,
-                            ) = _process_outplant_reefset(
-                                xlapp,
-                                deploy_wb,
-                                prod_wb,
-                                deploy_model_fp,
-                                prod_model_fp,
-                                deploy_factors,
-                                deploy_spec,
-                                prod_factors,
-                                prod_spec,
-                                rs_spec,
-                                rs_num_1yoec,
-                                departure_port,
-                                reefset_years_map[rs],
-                                iv_yr,
-                                temp_it_id,
-                                nsims,
-                                yr_prod_capex,
-                                yr_deploy_capex,
-                                yr_opex,
-                                acc,
-                                yr_idx,
-                                eia_template_prod,
-                                eia_template_deploy,
-                                sample_scale=sample_scale,
-                                workbook_session=workbook_session,
-                            )
-
-                        # Inventory/replacement model applied separately to production and
-                        # deployment so each model's retained capacity is tracked independently.
-                        total_prod_capex, prod_inventory = _apply_outplant_inventory(
-                            yr_prod_capex, prod_inventory
+                    # Update template in-place (since they are passed around)
+                    expanded = pd.concat(new_rows, ignore_index=True)
+                    if template is eia_template_prod:
+                        eia_template_prod = pd.concat(
+                            [template, expanded], ignore_index=True
                         )
-                        total_deploy_capex, deploy_inventory = (
-                            _apply_outplant_inventory(yr_deploy_capex, deploy_inventory)
+                    elif template is eia_template_deploy:
+                        eia_template_deploy = pd.concat(
+                            [template, expanded], ignore_index=True
                         )
-                        acc.prod_total_capex[yr_idx] = total_prod_capex
-                        acc.deploy_total_capex[yr_idx] = total_deploy_capex
-                        total_yr_capex = total_prod_capex + total_deploy_capex
+                    elif template is eia_template_lm:
+                        eia_template_lm = pd.concat([template, expanded], ignore_index=True)
 
-                        cost_sum = np.column_stack([total_yr_capex, yr_opex])
-                        component_costs = cost_types(cost_sum, cont_p, nsims)
-                        cost_df.loc[cost_df.year == iv_yr, cost_df.columns[2:]] = (
-                            component_costs
-                        )
+                draw_offset += nsims
 
-                    elif iv_type == "lm":
-                        for rs in reefsets_this_yr:
-                            rs_selector = curr_selector & (ID_key.reefset == rs)
-                            departure_port = ID_key.loc[
-                                rs_selector.idxmax(), "port_name"
-                            ]
-                            if sample_scale:
-                                # Use the per-draw sampled distances from the
-                                # deployment factors (same geographic draw for LM).
-                                rs_distance = deploy_factors[
-                                    "distance_from_port"
-                                ].values[0:nsims]
-                            else:
-                                rs_distance = ID_key.loc[
-                                    rs_selector, "distance_to_port_NM"
-                                ].iloc[0]
+            combined, all_overview_rows = _merge_rep_costs(rep_cost_dfs)
 
-                            lm_wb, lm_factors, eia_template_lm = _process_lm_reefset(
-                                xlapp,
-                                lm_wb,
-                                lm_model_fp,
-                                lm_factors,
-                                lm_spec,
-                                lm_pool_min,
-                                lm_pool_max,
-                                ID_key.loc[
-                                    rs_selector, ["number_of_1YO_corals", "rep"]
-                                ],
-                                rs_distance,
-                                departure_port,
-                                reefset_years_map[rs],
-                                iv_yr,
-                                temp_it_id,
-                                nsims,
-                                acc,
-                                yr_idx,
-                                eia_template_lm,
-                                sample_scale=sample_scale,
-                                workbook_session=workbook_session,
-                            )
+            combined["year"] = combined["year"].astype(int)
+            combined["component"] = combined["component"].astype(int)
 
-                    else:
-                        raise ValueError(
-                            "Unknown intervention type encountered. Must be one of 'outplant' or 'lm'."
-                        )
+            cost_filepath = path_join(
+                cost_dir,
+                f"CBA_cost_scaled_ID{scen_id}_iter_pid{p_iter_id}.csv",
+            )
+            combined.to_csv(cost_filepath, index=False)
+            cost_filepaths.append(cost_filepath)
 
-            # Save sampled cost parameters now that the spreadsheet models have run
-            # and capex/opex output columns have been added to the factor dataframes.
-            _save_cost_params(
+            if all_overview_rows:
+                overview_df = (
+                    pd.DataFrame(all_overview_rows)
+                    .sort_values(["intervention_id", "rep_id", "year"])
+                    .reset_index(drop=True)
+                )
+                overview_df.to_csv(
+                    path_join(
+                        cost_dir,
+                        f"ID{scen_id}_cost_overview_iter_pid{p_iter_id}.csv",
+                    ),
+                    index=False,
+                )
+
+            # EIA scaled outputs need a single multiplier per year; use the mean
+            # across draws (in exploration mode draws have different distances).
+            _mult_rows = [
+                r for r in all_overview_rows if r.get("lm_opex_multiplier", 0) != 0
+            ]
+            if _mult_rows:
+                _mult_df = pd.DataFrame(_mult_rows)[["year", "lm_opex_multiplier"]]
+                lm_opex_mult_by_year = (
+                    _mult_df.groupby("year")["lm_opex_multiplier"].mean().to_dict()
+                )
+            else:
+                lm_opex_mult_by_year = {}
+            _ov = (
+                pd.DataFrame(all_overview_rows)
+                .rename(columns={"draw": "iteration"})
+                .set_index(["year", "iteration"])
+            )
+            model_totals = {
+                "production": {
+                    "capex": _ov["production_capex"],
+                    "opex": _ov["production_opex"],
+                },
+                "deployment": {
+                    "capex": _ov["deployment_capex"],
+                    "opex": _ov["deployment_opex"],
+                },
+                "lm": {
+                    "capex": _ov["lm_capex"],
+                    "opex": _ov["lm_opex"],
+                },
+            }
+            _write_eia_outputs(
                 cost_dir,
                 scen_id,
-                rep,
-                p_iter_id,
-                prod_factors,
-                deploy_factors,
-                lm_factors,
-                active_models=active_models,
-            )
-
-            # Single pass over draws: fold LM inventory costs into cost_df and build overview rows
-            overview_rows = _build_overview_rows_and_update_costs(
-                cost_df, iv_years, nsims, acc, cont_p, scen_id, rep
-            )
-
-            rep_cost_dfs.append((rep, cost_df, overview_rows))
-
-            # Expand EIA templates from the single temporary ID to all draws in this rep
-            for template in [
                 eia_template_prod,
                 eia_template_deploy,
                 eia_template_lm,
-            ]:
-                if template.empty:
-                    continue
-                mask = template.iteration == temp_it_id
-                rows_to_expand = template[mask]
-                if rows_to_expand.empty:
-                    continue
-
-                # Remove the temporary rows
-                template.drop(template.index[mask], inplace=True)
-
-                # Add a row for each draw in the rep
-                new_rows = []
-                for draw_i in range(nsims):
-                    dup = rows_to_expand.copy()
-                    dup["iteration"] = draw_offset + draw_i + 1
-                    new_rows.append(dup)
-
-                # Update template in-place (since they are passed around)
-                expanded = pd.concat(new_rows, ignore_index=True)
-                if template is eia_template_prod:
-                    eia_template_prod = pd.concat(
-                        [template, expanded], ignore_index=True
-                    )
-                elif template is eia_template_deploy:
-                    eia_template_deploy = pd.concat(
-                        [template, expanded], ignore_index=True
-                    )
-                elif template is eia_template_lm:
-                    eia_template_lm = pd.concat([template, expanded], ignore_index=True)
-
-            draw_offset += nsims
-
-        combined, all_overview_rows = _merge_rep_costs(rep_cost_dfs)
-
-        combined["year"] = combined["year"].astype(int)
-        combined["component"] = combined["component"].astype(int)
-
-        cost_filepath = path_join(
-            cost_dir,
-            f"CBA_cost_scaled_ID{scen_id}_iter_pid{p_iter_id}.csv",
-        )
-        combined.to_csv(cost_filepath, index=False)
-        cost_filepaths.append(cost_filepath)
-
-        if all_overview_rows:
-            overview_df = (
-                pd.DataFrame(all_overview_rows)
-                .sort_values(["intervention_id", "rep_id", "year"])
-                .reset_index(drop=True)
-            )
-            overview_df.to_csv(
-                path_join(
-                    cost_dir,
-                    f"ID{scen_id}_cost_overview_iter_pid{p_iter_id}.csv",
-                ),
-                index=False,
+                all_sim_years,
+                model_totals,
+                lm_opex_mult_by_year=lm_opex_mult_by_year,
+                p_iter_id=p_iter_id,
             )
 
-        # EIA scaled outputs need a single multiplier per year; use the mean
-        # across draws (in exploration mode draws have different distances).
-        _mult_rows = [
-            r for r in all_overview_rows if r.get("lm_opex_multiplier", 0) != 0
-        ]
-        if _mult_rows:
-            _mult_df = pd.DataFrame(_mult_rows)[["year", "lm_opex_multiplier"]]
-            lm_opex_mult_by_year = (
-                _mult_df.groupby("year")["lm_opex_multiplier"].mean().to_dict()
-            )
-        else:
-            lm_opex_mult_by_year = {}
-        _ov = (
-            pd.DataFrame(all_overview_rows)
-            .rename(columns={"draw": "iteration"})
-            .set_index(["year", "iteration"])
-        )
-        model_totals = {
-            "production": {
-                "capex": _ov["production_capex"],
-                "opex": _ov["production_opex"],
-            },
-            "deployment": {
-                "capex": _ov["deployment_capex"],
-                "opex": _ov["deployment_opex"],
-            },
-            "lm": {
-                "capex": _ov["lm_capex"],
-                "opex": _ov["lm_opex"],
-            },
-        }
-        _write_eia_outputs(
-            cost_dir,
-            scen_id,
-            eia_template_prod,
-            eia_template_deploy,
-            eia_template_lm,
-            all_sim_years,
-            model_totals,
-            lm_opex_mult_by_year=lm_opex_mult_by_year,
-            p_iter_id=p_iter_id,
-        )
+    finally:
+        # In worker processes (parallel path), eagerly close Excel before the
+        # task returns. Each worker runs exactly one task, so the persistent-
+        # session optimisation is not needed there.  Closing here guarantees
+        # cleanup on both the success path AND on any exception, because a
+        # worker that raises stays alive waiting for more pool tasks — it is
+        # only killed by pool.terminate() when the parent handles the
+        # exception, which skips atexit on Windows.
+        if _in_worker:
+            proc_session._cleanup()
+            _process_sessions.clear()
 
     return cost_filepaths

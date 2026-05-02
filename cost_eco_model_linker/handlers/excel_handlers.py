@@ -87,6 +87,12 @@ class WorkbookSession:
 
     def _get_xlapp(self):
         if self.xlapp is None:
+            # DispatchEx creates an isolated Excel process per worker, which is
+            # required for multiprocessing correctness (no shared COM apartment).
+            # The trade-off vs. gencache.EnsureDispatch is late binding (every
+            # attribute access goes through COM name resolution).  If this project
+            # ever moves to single-process evaluation, switching to EnsureDispatch
+            # would give early-binding performance at the cost of losing isolation.
             self.xlapp = w32client.DispatchEx("Excel.Application")
             self.xlapp.Interactive = False
             self.xlapp.Visible = False

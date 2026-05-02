@@ -64,7 +64,7 @@ def _read_reef_key(wb) -> np.ndarray:
     return np.array(lookup_ws.Range(start_cell, end_cell).Value).flatten()
 
 
-def evaluate_spreadsheet(wb, model_spec, params) -> tuple[float, float]:
+def evaluate_spreadsheet(wb, model_spec, params, factor_ranges=None) -> tuple[float, float]:
     """
     Set input cells, trigger recalculation, and read back capex and opex.
 
@@ -89,14 +89,18 @@ def evaluate_spreadsheet(wb, model_spec, params) -> tuple[float, float]:
     factor_names = model_spec.factor_names
     not_costs = ~factor_names.isin(["capex", "opex"])
 
-    # Optimized: Cache sheet objects to avoid repeated lookups
-    sheets = {}
-
-    for _, row in model_spec[not_costs].iterrows():
-        s_name = row.sheet
-        if s_name not in sheets:
-            sheets[s_name] = wb.Sheets(s_name)
-        sheets[s_name].Range(row.cell_pos).Value = params[row.factor_names]
+    if factor_ranges is not None:
+        # Use pre-built Range objects: eliminates one COM round-trip per factor
+        # compared to creating ws.Range(cell) on every call.
+        for _, row in model_spec[not_costs].iterrows():
+            factor_ranges[row.factor_names].Value = params[row.factor_names]
+    else:
+        sheets = {}
+        for _, row in model_spec[not_costs].iterrows():
+            s_name = row.sheet
+            if s_name not in sheets:
+                sheets[s_name] = wb.Sheets(s_name)
+            sheets[s_name].Range(row.cell_pos).Value = params[row.factor_names]
 
     # Single recalculation for the whole sheet
     wb.Application.Calculate()
@@ -118,7 +122,7 @@ def evaluate_spreadsheet(wb, model_spec, params) -> tuple[float, float]:
     return capex_raw, opex_raw
 
 
-def calculate_deployment_cost(wb, model_spec, factors):
+def calculate_deployment_cost(wb, model_spec, factors, factor_ranges=None):
     """
     Calculates set up and operational costs in the deployment cost model (wb), given a set of parameters to sample.
 
@@ -177,10 +181,10 @@ def calculate_deployment_cost(wb, model_spec, factors):
         inactive = ["ship_price_LL", "ship_endurance_LL"]
     active_spec = model_spec[~model_spec.factor_names.isin(inactive)]
 
-    return evaluate_spreadsheet(wb, active_spec, factors)
+    return evaluate_spreadsheet(wb, active_spec, factors, factor_ranges)
 
 
-def calculate_production_cost(wb, factor_spec, factors):
+def calculate_production_cost(wb, factor_spec, factors, factor_ranges=None):
     """
     Calculates set up and operational costs in the production cost model (wb), given a set of parameters to sample.
 
@@ -200,7 +204,7 @@ def calculate_production_cost(wb, factor_spec, factors):
     opex: float
         Operational cost (OPEX)
     """
-    return evaluate_spreadsheet(wb, factor_spec, factors)
+    return evaluate_spreadsheet(wb, factor_spec, factors, factor_ranges)
 
 
 def load_config():
@@ -392,6 +396,30 @@ def _com_retry(fn, retries=3, delay=2.0):
             time.sleep(delay * (attempt + 1))
 
 
+def _build_factor_ranges(wb, model_spec):
+    """Pre-build COM Range objects for all input factors.
+
+    Returns a dict {factor_name: Range} that callers can cache and reuse
+    across evaluations.  Each Range object is a persistent COM reference to a
+    fixed cell — creating it once and reusing it eliminates one COM round-trip
+    per factor per evaluation compared to ``ws.Range(cell_pos)`` in a loop.
+
+    Note: the returned Range objects are tied to ``wb``.  They become stale
+    if ``wb`` is closed and a new workbook is opened (e.g. if reset_workbook
+    ever re-opens the file).  Currently reset_workbook is a no-op so this is
+    safe.
+    """
+    not_output = ~model_spec.factor_names.isin(["capex", "opex"])
+    sheets = {}
+    ranges = {}
+    for _, row in model_spec[not_output].iterrows():
+        s = row.sheet
+        if s not in sheets:
+            sheets[s] = wb.Sheets(s)
+        ranges[row.factor_names] = sheets[s].Range(row.cell_pos)
+    return ranges
+
+
 def _run_cost_model(
     xlapp, wb, wb_path, cost_factors, factor_spec, calculate_cost, workbook_session=None
 ):
@@ -427,6 +455,13 @@ def _run_cost_model(
     not_output = ~factor_spec.factor_names.isin(["capex", "opex"])
     best_point = factor_spec[not_output].set_index("factor_names")["best_point_value"]
 
+    # Pre-build COM Range objects for all input factors once.  Reusing these
+    # eliminates one COM round-trip per factor per evaluation (no repeated
+    # ws.Range(cell_pos) object creation on each call to evaluate_spreadsheet).
+    # Safe as long as reset_workbook returns the same wb — if the file is ever
+    # re-opened, call _build_factor_ranges again with the new workbook.
+    factor_ranges = _build_factor_ranges(wb, factor_spec)
+
     def _seed_workbook(wb):
         # Write all best-point values with calculation suspended, then do a
         # single explicit recalculation.  DO NOT restore xlAutomatic here —
@@ -438,8 +473,7 @@ def _run_cost_model(
         xlManual = -4135
         wb.Application.Calculation = xlManual
         for fname, value in best_point.items():
-            row = factor_spec.loc[factor_spec.factor_names == fname].iloc[0]
-            wb.Sheets(row.sheet).Range(row.cell_pos).Value = value
+            factor_ranges[fname].Value = value
         wb.Application.Calculate()
 
     # Optimized: Seed once per chunk, or skip if already seeded in a persistent session.
@@ -453,7 +487,7 @@ def _run_cost_model(
         row_params = cost_factors.iloc[idx_n, :]
         try:
             total_cost[idx_n, :] = _com_retry(
-                lambda: calculate_cost(wb, factor_spec, row_params)
+                lambda: calculate_cost(wb, factor_spec, row_params, factor_ranges=factor_ranges)
             )
         except ValueError as e:
             import warnings
@@ -553,7 +587,7 @@ def collect_deployment_costs(
     )
 
 
-def calculate_lm_cost(wb, factor_spec, factors):
+def calculate_lm_cost(wb, factor_spec, factors, factor_ranges=None):
     """
     Calculates setup and operational costs in the LM (Larval Methods) cost model.
 
@@ -565,13 +599,15 @@ def calculate_lm_cost(wb, factor_spec, factors):
         Factor specification, as loaded from the config CSV.
     factors : DataFrameRow
         Factor values to run model with.
+    factor_ranges : dict, optional
+        Pre-built {factor_name: Range} from ``_build_factor_ranges``.
 
     Returns
     -------
     capex : float
     opex : float
     """
-    return evaluate_spreadsheet(wb, factor_spec, factors)
+    return evaluate_spreadsheet(wb, factor_spec, factors, factor_ranges)
 
 
 def collect_lm_costs(

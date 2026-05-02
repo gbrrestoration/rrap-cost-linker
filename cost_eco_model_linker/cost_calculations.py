@@ -87,16 +87,23 @@ class _ProcessSession:
             self.wb_session = WorkbookSession()
             self._call_count = 0
 
-    def _cleanup(self):
+    def _cleanup(self, uninitialize_com=True):
         # Guard against double-cleanup: atexit may fire after an eager cleanup
         # that already ran (e.g. at the end of a worker task).
         if getattr(self, "_cleaned", False):
             return
         self._cleaned = True
-        # CoUninitialize inside cleanup() tears down the COM apartment synchronously,
-        # guaranteeing Excel has released all file locks before rmtree runs.
         if hasattr(self, "wb_session"):
-            self.wb_session.cleanup(uninitialize_com=True)
+            # uninitialize_com=False when called mid-task (worker finally block):
+            # CoUninitialize() must NOT be called before the worker process exits,
+            # because win32com.client's module-level COM caches (CLSIDToClass,
+            # _win32com_module_cache) still hold COM wrapper objects that need a
+            # live apartment to release cleanly during Python's module shutdown.
+            # Calling CoUninitialize() mid-task causes the worker to hang/crash
+            # during module teardown, leaving 300–500 MB of worker memory alive
+            # indefinitely.  The atexit path (uninitialize_com=True) is safe
+            # because Python is already past module cleanup at that point.
+            self.wb_session.cleanup(uninitialize_com=uninitialize_com)
         if hasattr(self, "_tmp_dir") and os.path.exists(self._tmp_dir):
             shutil.rmtree(self._tmp_dir, ignore_errors=True)
 
@@ -1579,7 +1586,9 @@ def calculate_costs(
         # only killed by pool.terminate() when the parent handles the
         # exception, which skips atexit on Windows.
         if _in_worker:
-            proc_session._cleanup()
+            # uninitialize_com=False: defer CoUninitialize() to natural process
+            # exit so win32com.client's module-level COM caches release cleanly.
+            proc_session._cleanup(uninitialize_com=False)
             _process_sessions.clear()
 
     return cost_filepaths

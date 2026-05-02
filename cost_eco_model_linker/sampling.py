@@ -428,15 +428,19 @@ def _run_cost_model(
     best_point = factor_spec[not_output].set_index("factor_names")["best_point_value"]
 
     def _seed_workbook(wb):
+        # Write all best-point values with calculation suspended, then do a
+        # single explicit recalculation.  DO NOT restore xlAutomatic here —
+        # leaving the application in xlManual is intentional: evaluate_spreadsheet
+        # calls Calculate() explicitly, so letting Excel auto-recalculate on
+        # every individual cell write would trigger ~n_factors full recalculations
+        # per draw instead of one, causing severe memory growth in Excel's
+        # calculation engine across hundreds of draws.
         xlManual = -4135
-        xlAutomatic = -4105
         wb.Application.Calculation = xlManual
-        try:
-            for fname, value in best_point.items():
-                row = factor_spec.loc[factor_spec.factor_names == fname].iloc[0]
-                wb.Sheets(row.sheet).Range(row.cell_pos).Value = value
-        finally:
-            wb.Application.Calculation = xlAutomatic
+        for fname, value in best_point.items():
+            row = factor_spec.loc[factor_spec.factor_names == fname].iloc[0]
+            wb.Sheets(row.sheet).Range(row.cell_pos).Value = value
+        wb.Application.Calculate()
 
     # Optimized: Seed once per chunk, or skip if already seeded in a persistent session.
     if not (workbook_session and workbook_session.is_seeded(wb_path)):
@@ -786,6 +790,9 @@ def _pool_initializer():
     import pythoncom
 
     pythoncom.CoInitialize()
+    # CoUninitialize is called by WorkbookSession.cleanup(uninitialize_com=True),
+    # which is invoked from _ProcessSession._cleanup() on worker exit. Registering
+    # it separately here would cause a double-uninit when the session path is used.
     # Switch to a non-interactive backend so that tkinter is never imported in
     # worker processes. Without this, tkinter objects inherited from the main
     # process are garbage-collected in worker threads, raising

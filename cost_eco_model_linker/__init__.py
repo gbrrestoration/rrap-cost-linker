@@ -32,6 +32,7 @@ from .handlers import (
     open_excel,
     close_excel,
     reset_workbook,
+    cleanup_excel_processes,
     get_industry_codes,
     find_table,
     create_eia_template,

@@ -149,22 +149,13 @@ def post_process_costs(result, nsims):
     """
     for iv_id in range(len(result[0])):
         init_cost_df = pd.read_csv(result[0][iv_id])
-        sim_cols = ["year", "component"] + [
-            "draw" + str(i) for i in range(1, nsims + 1)
-        ]
-
-        cost_df = pd.DataFrame(
-            np.zeros((init_cost_df.shape[0], 2 + nsims)), columns=sim_cols
-        )
-        cost_df.loc[:, ["year", "component"]] = init_cost_df[["year", "component"]]
-
         save_fn = result[0][iv_id].split("id")[0][:-6] + ".csv"
 
+        chunks = [init_cost_df[["year", "component"]]]
         for res in result:
             cost_temp = pd.read_csv(res[iv_id])
-            target_cols = cost_temp.columns[2:]  # column id 2 is where data begins
-
-            cost_df[target_cols] = cost_temp[target_cols]
+            chunks.append(cost_temp[cost_temp.columns[2:]])  # column id 2 is where data begins
             os.remove(res[iv_id])
 
+        cost_df = pd.concat(chunks, axis=1)
         cost_df.to_csv(save_fn, index=False)

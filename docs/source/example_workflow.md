@@ -5,8 +5,9 @@ import cost_eco_model_linker as ceml
 
 # Filepath to RME runs to process
 rme_files_path = "./data/eco_linker_example"
-deployment_model = "./3.5.5 CA Deployment Model"
-production_model = "./3.7.0 CA Production Model"
+deployment_model = "./3.9.0 CA Deployment Model.xlsx"
+production_model = "./3.9.1 CA Production Model.xlsx"
+lm_model = "./3.9.6 LM Model.xlsx"
 output_path = "./results"
 unc_config = ceml.default_uncertainty_dict()
 
@@ -21,6 +22,7 @@ ceml.evaluate(
     nsims,
     deployment_model,
     production_model,
+    lm_model,
     output_path,
     uncertainty_dict=unc_config,
 )
@@ -33,14 +35,15 @@ nsims = 10
 ncores = 4
 
 if __name__ == "__main__":
-    ceml.parallel_evaluate(
+    ceml.evaluate(
         rme_files_path,
         nsims,
-        ncores,
         deployment_model,
         production_model,
+        lm_model,
         output_path,
         uncertainty_dict=unc_config,
+        nprocs=ncores,
     )
 ```
 
@@ -128,8 +131,12 @@ if __name__ == "__main__":
 
 ### Parameter sweep
 
-`run_parameter_sweep` evaluates both models over a range of values for a single
-parameter, keeping all other factors at their spreadsheet defaults.
+`sweep_ca` evaluates the CA production and deployment models jointly over a range of values
+for a single parameter, keeping all other factors at their spreadsheet defaults. Shared
+factors (such as `num_1yoec` and `coral_yield_1YOEC`) are kept consistent between the two
+models automatically.
+
+`sweep_lm` does the same for the LM model independently.
 
 ```python
 import numpy as np
@@ -137,9 +144,10 @@ import cost_eco_model_linker as ceml
 
 production_model = "./models/3.9.1 CA Production Model.xlsx"
 deployment_model = "./models/3.9.0 CA Deployment Model.xlsx"
+lm_model = "./models/3.9.6 LM Model.xlsx"
 
-# Sweep num_1yoec, all other factors at spreadsheet defaults
-df = ceml.run_parameter_sweep(
+# Sweep num_1yoec across production and deployment, all other factors at spreadsheet defaults
+df = ceml.sweep_ca(
     production_model,
     deployment_model,
     sweep_param="num_1yoec",
@@ -147,17 +155,26 @@ df = ceml.run_parameter_sweep(
 )
 
 # Fix additional production factors while sweeping coral_yield_1YOEC
-df = ceml.run_parameter_sweep(
+df = ceml.sweep_ca(
     production_model,
     deployment_model,
     sweep_param="coral_yield_1YOEC",
     search_range=np.arange(0.3, 0.51, 0.1),
     prod_params={"num_1yoec": 1_000_000, "species_no": 20},
 )
-#    search_range  prod_capex    prod_opex  dep_capex      dep_opex        totals
+#    search_range  prod_capex    prod_opex  dep_capex      dep_opex      total_cost
 # 0           0.3   5393480.0  1820970.500  1320560.0  7.870774e+06  1.640578e+07
 # 1           0.4   4411200.0  1473854.125  1320560.0  7.870774e+06  1.507639e+07
 # 2           0.5   3394200.0  1265323.000  1320560.0  7.870774e+06  1.385086e+07
+
+# Sweep a parameter in the LM model
+lm_df = ceml.sweep_lm(
+    lm_model,
+    sweep_param="distance_from_port",
+    search_range=range(10, 70, 10),
+)
+#    search_range      capex         opex    total_cost
+# 0            10  ...
 ```
 
 
@@ -276,3 +293,109 @@ E11) should be set to zero (0).
 
 No, currently it is assumed that the production facility is always in Townsville and so
 this is hardcoded in.
+
+## Additional evaluate() parameters
+
+Several parameters of `ceml.evaluate()` are useful for specific workflows but are not
+shown in the basic example above.
+
+`active_models` accepts a Python set controlling which intervention types are costed. Pass
+`{"outplant"}` to run only the CA Production and Deployment models, `{"lm"}` to run only
+the LM model, or omit the argument (or pass both) to run all three. This is useful when
+only one intervention type is present in a given RME result set.
+
+`costs_only` is a boolean that, when set to `True`, skips the ecological metric
+post-processing step and writes only cost output files. This reduces runtime significantly
+when ecological metrics are not needed for a given run.
+
+`distance_override_NM` accepts a float that replaces the computed distance-to-port for all
+reefsets with a fixed value. This is intended for best-estimate explorer runs where the
+exact reef locations are unknown or intentionally abstracted.
+
+`nprocs` controls the number of parallel worker processes. Values greater than 1 distribute
+replicates across workers. Parallel runs must be guarded with `if __name__ == "__main__":`
+on Windows.
+
+`sample_scale` is a boolean that, when `True`, draws the intervention scale
+(`num_1yoec`, larval pool count) from the Sobol samples rather than from the RME template
+coral counts. This is used internally by `run_cost_exploration()` for scenario comparison
+runs and is not typically set manually.
+
+## Cost exploration workflow
+
+`ceml.run_cost_exploration()` runs three scenarios back-to-back — combined (CA + LM),
+CA-only, and LM-only — against a single RME template, filtering the simulation to a
+specified assessment year. This is useful for comparing the relative cost contributions of
+each intervention type.
+
+```python
+import cost_eco_model_linker as ceml
+
+rme_template_path = "./data/rme_template"
+deployment_model = "./models/3.9.0 CA Deployment Model.xlsx"
+production_model = "./models/3.9.1 CA Production Model.xlsx"
+lm_model = "./models/3.9.6 LM Model.xlsx"
+results_dir = "./exploration_results"
+
+results = ceml.run_cost_exploration(
+    rme_template_path,
+    nsims=50,
+    deploy_model_fn=deployment_model,
+    prod_model_fn=production_model,
+    lm_model_fn=lm_model,
+    results_dir=results_dir,
+    assessment_year=10,
+    reefset_CA=["reef_001", "reef_002"],
+    reefset_LM=["reef_003"],
+)
+# results is a dict with keys "combined", "ca_only", "lm_only",
+# each mapping to a list of output file paths.
+```
+
+After running, `ceml.summarise_mc_results()` reads the cost overview CSVs from each
+scenario subdirectory and computes per-year quantiles, returning a nested dict and writing
+a `mc_summary.json` file to the results directory.
+
+```python
+summary = ceml.summarise_mc_results(
+    results_dir,
+    quantiles=[0.05, 0.25, 0.5, 0.75, 0.95],
+    scenario_id=1,
+)
+```
+
+## Joint cost model sampling
+
+`ceml.sample_joint_factors()` generates a single Sobol sample over the combined factor
+space of all three models. Shared factors (e.g., `coral_yield_1YOEC`, `num_1yoec`) are
+sampled once and assigned consistently across models, avoiding inconsistencies that would
+arise from sampling each model independently.
+
+`ceml.run_joint_cost_models()` evaluates all three models against the joint samples and
+returns per-model result DataFrames.
+
+```python
+import cost_eco_model_linker as ceml
+
+production_model = "./models/3.9.1 CA Production Model.xlsx"
+deployment_model = "./models/3.9.0 CA Deployment Model.xlsx"
+lm_model = "./models/3.9.6 LM Model.xlsx"
+
+prod_samples, dep_samples, lm_samples, combined_sp = ceml.sample_joint_factors(
+    nsims=512,
+    seed=42,
+)
+
+prod_results, dep_results, lm_results = ceml.run_joint_cost_models(
+    production_model,
+    deployment_model,
+    lm_model,
+    prod_samples,
+    dep_samples,
+    lm_samples,
+    nprocs=4,
+)
+```
+
+The `combined_sp` ProblemSpec can then be used with SALib to compute sensitivity indices
+across all three models simultaneously.

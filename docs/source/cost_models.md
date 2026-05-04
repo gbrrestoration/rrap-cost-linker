@@ -6,36 +6,47 @@ at QUT).
 
 The compatible versions of the cost models are:
 
-- Coral Aquaculture Deployment : `3.8.0 CA Deployment Model.xlsx`
-- Coral Aquaculture Production : `3.8.0 CA Production Model.xlsx`
+- Coral Aquaculture Deployment : `3.9.0 CA Deployment Model.xlsx`
+- Coral Aquaculture Production : `3.9.1 CA Production Model.xlsx`
+- Larval Maintenance : `3.9.6 LM Model.xlsx`
 
 ## Configuration files
 
-Sampling of cost models are dependent on two configuration files.
-The first is the `config.csv` file which defines the names, cell positions, and sampling
-ranges of cost model parameters. A copy of this CSV file is bundled with the package
-(at `cost_eco_model_linker/config.csv`).
+Sampling of cost models depends on versioned configuration CSV files bundled with the
+package. There is one file per model type, named `{version}_{type}_config.csv`:
 
-It is currently not possible to provide a different `config.csv` file.
+- `3.9.1_prod_config.csv` (Coral Aquaculture Production)
+- `3.9.0_deploy_config.csv` (Coral Aquaculture Deployment)
+- `3.9.6_LM_config.csv` (Larval Maintenance)
 
-An example of this file for the latest compatible cost model versions is below:
+These files are located inside the `cost_eco_model_linker` package directory. It is not
+currently possible to supply alternative config files at runtime.
+
+An example of the production config file for the latest compatible version is below:
 
 ```{csv-table} Config file for latest model version
 :header-rows: 1
 :file: config.csv
 ```
 
-At minimum, the file must include the following columns:
+The file must include the following columns:
 
-- `cost_type` : the model type the parameter belongs to (currently either `production` or `deployment`).
-- `sheet` : the sheet name the parameter occurs on.
+- `cost_type` : the model type the parameter belongs to (`production`, `deployment`, or `lm`).
+- `sheet` : the Excel sheet name the parameter occurs on.
+- `cell_pos` : the cell address for the parameter (e.g., `E5`).
 - `factor_names` : a label for the factor.
-- `cell_row`, `cell_col`: the cell row and column reference for the parameter.
-- `range_lower`, `range_upper` : the upper and lower bounds for sampling the parameter.
-- `is_cat` : a flag designating whether the parameter is categorical or not.
+- `range_lower`, `range_upper` : the lower and upper bounds for uncertainty sampling.
+- `SA_range_lower`, `SA_range_upper` : bounds used for sensitivity analysis sampling (may differ from uncertainty bounds).
+- `best_point_value` : the deterministic default value written to the spreadsheet when no sample is taken.
+- `discrete_values` : a comma-separated list of allowed values for discrete factors (empty if continuous).
+- `UNC_distribution` : the sampling distribution (`unif`, `logunif`, `discrete`, or `norm`).
+- `is_cat` : a flag indicating whether the parameter is categorical (integer-valued).
+- `comments` : free-text notes.
 
-The `config.csv` should include info for `capex` and `opex` parameters for both the `production` and `deployment` models, parameters which are used to extract the setup
-(CAPEX) and operational (OPEX) cost respectively for a given intervention.
+Each config file includes rows for the `capex` and `opex` output cells alongside the
+input factor rows. The `capex` and `opex` rows use `variable_type = output` and are used
+to locate the cells from which setup and operational costs are read after each spreadsheet
+evaluation.
 
 ## Cost model parameter descriptions
 
@@ -57,7 +68,7 @@ through consultation with the Translation to Deployment Team and sensitivity ana
 | deck_space | Deck space on the ship in m2 | Depends on the ship being used | Deployment |
 | cape_ferg_price | Daily rate of the ship being used | Depends on the ship | Deployment |
 | ship_endurance | Number of days the ship can stay out without going back to port | Depends on ship | Deployment |
-| distance_from_port | Distance from port to intervention reef in nautical miles | Depends on intervention reef(s) | Deployment |
+| distance_from_port | Distance from port to intervention reef in nautical miles. The spreadsheet lookup table supports a maximum of 119.99 NM; values above this are capped automatically. When distance exceeds 59 NM, day-trip vessel configuration is disabled and the vessel type is set to Large Liveaboard. | Depends on intervention reef(s) | Deployment |
 | secs_per_dev | On transect deployment rate of devices | (1,2) | Deployment |
 | proportion | Proportion by which device deployment rate is reduced due to poor visibility | (0.5,0.55), but depends on conditions | Deployment |
 | bins_per_tender | Bins holding devices that can fit in each tender | (4,6) but depends on tender | Deployment |
@@ -91,22 +102,19 @@ simulation which are used by `CREAM`. These are described in the following table
 
 ## Calculating costs for interventions over multiple years
 
-For outplanting corals over multiple years, the setup costs of production and deployment
-only scale with the *additional* corals planned for outplanting compared to the previous
-year. For example, if 100,000 corals are deployed in the first year, 200,000 in the second
-year and 200,000 in the third year, the setup costs are \$X, \$X and \$0 respectively. The
-operational costs are calculated the same way regardless of the year. These year-by-year
-setup cost differences are not specified in the Excel models, but are handled within
-the functions `cost_calculations.calc_production_requirement()` and
-`cost_calculations.calculate_costs()`.
+For outplanting corals over multiple years, the CAPEX (setup) cost is subject to an
+inventory and replacement model implemented in `cost_calculations._apply_outplant_inventory()`,
+which is called from `cost_calculations.calculate_costs()`.
 
-In particular, for years beyond the first intervention year, the costs are sampled first
-using the total number of outplants to extract the operational cost. Then the difference in
-number of corals between the current and previous year is calculated. For differences less
-than or equal to 0, the setup cost is set to zero. For differences in number of corals
-greater than zero, the cost is resampled for the difference in number of corals and just
-the setup cost is updated. This requires double sampling, so interventions which
-continuously increase the number of outplanted corals over time can take longer to run.
+The inventory model tracks the value of existing production and deployment infrastructure
+across years. At each year, a maintenance fraction (0.2 × current inventory) and a retained
+fraction (0.8 × current inventory) are computed. If the current year's raw CAPEX exceeds
+the retained inventory, the effective CAPEX for that year is the difference and the inventory
+is updated to the raw CAPEX value. If the raw CAPEX does not exceed the retained inventory,
+the effective CAPEX for that year is zero and the inventory decays to the retained fraction.
+This means that if the scale of intervention stays the same or decreases, no additional
+setup cost is incurred beyond the initial year. Operational costs (OPEX) are calculated
+independently of this inventory logic and reflect the full year's operational spend each year.
 
 ## Calculating distance to port for multiple reefs
 
@@ -127,3 +135,38 @@ calculated as follows:
    port to furthest cluster from port.
 
 <img src="./_static/figs/prod/reef_distances_diagram.png" width="800">
+
+## Larval Maintenance (LM) model
+
+The Larval Maintenance model (`3.9.6 LM Model.xlsx`) costs the ongoing maintenance of
+larval seeding operations. It is evaluated alongside the CA Production and Deployment
+models when both `"outplant"` and `"lm"` are included in the `active_models` argument
+passed to `evaluate()`.
+
+The LM model is evaluated year-by-year, applying an inventory and replacement model
+post-hoc across the full time series (in contrast to the per-year inventory logic used for
+the outplant models). Configuration is loaded from `3.9.6_LM_config.csv`.
+
+### Distance multiplier
+
+The LM model applies a distance-based OPEX multiplier to account for travel costs when
+reef sites are far from port. The multiplier formula is:
+
+```
+multiplier = 0.2495 × distance_NM^0.517
+```
+
+This formula is calibrated so that a distance of 15 NM gives a multiplier of approximately
+1.0 (no adjustment), 30 NM gives approximately 1.5×, and 60 NM gives approximately 2.0×.
+The multiplier is computed by `cost_calculations.lm_opex_distance_multiplier()`.
+
+### Entry points
+
+The LM model can be used through the following public functions:
+
+- `ceml.evaluate_lm_cost(workbook_path, scenarios_df, **factors)` evaluates the LM model
+  over a year-by-year coral scenario DataFrame and applies the inventory model.
+- `ceml.run_lm_model(cost_model, nsims)` generates Sobol samples for the LM model and
+  returns an SALib ProblemSpec with `cost_model_results` populated.
+- `ceml.sweep_lm(lm_model, sweep_param, search_range, lm_params)` evaluates the LM model
+  over a range of values for a single parameter.

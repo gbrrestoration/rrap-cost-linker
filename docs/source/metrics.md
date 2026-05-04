@@ -6,7 +6,8 @@ RCI and RCI, which measures the total reef area in good or very good condition.
 
 ## Raw RCI
 
-The RCI can be calculated using `process_RME_data.raw_rci()`. This metric comprises 5 reef metrics:
+The raw RCI can be computed via the `rci_threshold` argument to the metric extraction
+functions. This metric comprises 5 reef metrics:
 
 - Relative coral cover
 - Relative shelter volume
@@ -30,8 +31,8 @@ when calculating metrics by setting `expert_uncert=1`.
 
 ## RTI
 
-The RTI, or Reef Tourism Index, is a continuous version of the RCI condition categories. RTI can be calculated using
-`process_RME_data.raw_rti()`.
+The RTI, or Reef Tourism Index, is a continuous version of the RCI condition categories.
+Area-weighted RTI can be computed using `process_RME_data.area_weighted_rti()`.
 
 ## RFI
 
@@ -42,22 +43,52 @@ The RFI can be calculated using `process_RME_data.rfi()`.
 ## RCI
 
 The RCI looks at the total area of reef for which the condition is within the Good or Very
-Good categories. RCI can be calculated using `process_RME_data.rci()`.
+Good categories. It is computed using `process_RME_data.rci()`, which accepts an
+`rci_threshold` parameter (default 0.6) defining the minimum condition score required for a
+reef to be counted as being in good or very good condition.
+
+## Coral area saved
+
+`process_RME_data.coral_area_saved()` returns the total live coral cover in hectares across
+all intervention reefs at each timestep. This metric is not a condition index; it provides
+an absolute coverage figure useful for comparing intervention scenarios in terms of total
+reef area maintained.
 
 ## Uncertainty sampling
 
-If `ecol_uncert=1`, ecological uncertainty is sampled in the results by sampling climate
-model repetitions for a particular set of results (stochastic samples within one or more
-climate model). If `ecol_uncert=0` the mean over all ecological reps is instead used.
-`ecol_uncert=0` also uses the mean across all climate reps.
+Uncertainty sampling is controlled by the dictionary returned from
+`ceml.default_uncertainty_dict()`. The defaults are:
 
-If `expert_uncert=1`, expert uncertainty is incorporated in the results
-by sampling a set of expert opinions on what thresholds of the 5 metrics incorporated in
-the Reef Condition Index should be considered as "Poor", "Good", "Very Good", etc.
-condition. If `expert_uncert=0` the mean of the 7 experts opinions is used
-(see `./datasets/ExpertReefCondition_AllResults.csv`).
+```python
+{
+    "ecol_uncert": 0,    # use mean over climate replicates
+    "shelt_uncert": 0,   # shelter volume uncertainty not yet implemented
+    "expert_uncert": 1,  # sample RCI thresholds across experts
+    "rti_uncert": 1,     # sample RTI regression parameters
+    "rfi_uncert": 1,     # sample RFI regression parameters
+}
+```
 
-Currently, shelter volume uncertainty sampling has not been incorporated (`shelt_uncert=0`
-is the default), as it needs access to number of corals in each taxa and size class in the
-`ReefModEngine.jl` resultset. This is currently not available in the result sets from
-`ReefModEngine.jl`, but could be incorporated in future versions.
+When `ecol_uncert=1`, ecological uncertainty is incorporated by sampling over climate model
+replicates for each result set. When `ecol_uncert=0`, the mean across climate replicates is
+used instead.
+
+When `expert_uncert=1`, RCI condition thresholds are sampled across the 8 expert opinions
+collected at the October 2021 workshop. When `expert_uncert=0`, the mean threshold across
+all 8 experts is used instead (see `./datasets/ExpertReefCondition_AllResults.csv`).
+
+When `rti_uncert=1` or `rfi_uncert=1`, the regression parameters used to compute RTI and
+RFI respectively are sampled from their uncertainty distributions rather than using point
+estimates.
+
+Shelter volume uncertainty (`shelt_uncert`) is not yet implemented. It would require
+per-taxa and per-size-class coral counts from `ReefModEngine.jl` result sets, which are
+not currently available in standard RME outputs.
+
+### juv_max_years
+
+The `juv_max_years` parameter (default `[0, 18]`) defines the index range within the
+simulation time series used to establish the baseline maximum juvenile coral count. This
+baseline is used in the RCI juvenile abundance component. The default spans the hindcast
+period before the first intervention year. If the hindcast length differs from 18 years in
+a given RME run, this parameter should be adjusted to match the correct hindcast window.

@@ -1,9 +1,12 @@
 # Output file format
 
-The functions in this library generate two key output file types for the economics modelling:
+The functions in this library generate the following output file types for the economics modelling:
 
-- A metrics summary file (saved by default in `econ_outputs` as parquet files)
-- A cost summary file (saved by default in `cost_outputs` as a CSV file)
+- Metrics summary files (saved by default under `Indicators/rci`, `Indicators/rfi`, and `Indicators/rti` as parquet files)
+- A cost overview file (saved by default in `Costs` as a CSV file)
+- EIA cost breakdown files (saved in `Costs` as CSV files)
+- Cost parameter files (saved in `Costs` as CSV files)
+- An intervention key file (saved in `intervention_keys` as a CSV file)
 
 By default, for a single unique intervention ID (a unique intervention scenario run for any
 number of reps and any number of climate models), the above examples would generate 6
@@ -76,3 +79,39 @@ scenario will have zero cost, so for a given unique intervention ID, one cost fi
 :header-rows: 1
 :file: cost_output_template.csv
 ```
+
+## Cost overview file structure
+
+For each unique intervention scenario, a cost overview file named
+`ID{scen}_cost_overview.csv` is written to the `Costs` directory. This file contains one
+row per combination of intervention year, ecological replicate, and cost model draw. The
+columns record the number of devices and 1YO corals deployed, the raw production and
+deployment CAPEX and OPEX, the LM CAPEX, the LM OPEX before and after applying the
+distance multiplier, and subtotals and totals for CAPEX and OPEX across all model
+components. These files are the primary source for per-draw uncertainty quantification of
+intervention costs.
+
+## EIA output files
+
+For each unique intervention scenario, three EIA files are written per cost model type
+(production, deployment, and LM), named `EIA_{id}_{model}_{variant}.csv`. The three
+variants are:
+
+- `raw` records the cost broken down by ANZSIC industry code for the last cost model draw.
+- `proportional` records each industry code's share as a proportion of total CAPEX for the
+  last draw.
+- `scaled` multiplies the proportional shares by the model's total post-inventory CAPEX,
+  providing cost-weighted industry code values.
+
+EIA files reflect only the last cost model draw and are intended for auditing the industry
+cost structure, not for uncertainty propagation. Per-draw totals are available in the cost
+overview files.
+
+## Cost parameter files
+
+For each replicate of each intervention scenario, a cost parameter file named
+`ID{id}_rep{rep}_cost_params_{model}_pid{pid}.csv` is written to the `Costs` directory.
+This file records the sampled factor values used for that replicate. The
+`distance_from_port` value recorded is taken from the first reefset of the first
+intervention year and serves as a representative value; in multi-reefset scenarios,
+per-reefset distances are applied during evaluation but are not separately logged.

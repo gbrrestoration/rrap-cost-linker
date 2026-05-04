@@ -57,62 +57,70 @@ import cost_eco_model_linker as ceml
 
 # Filepath to RME runs to process
 rme_files_path = "./path_to_RME_outputs"
-deployment_model = "./3.9.0 CA Deployment Model"
-production_model = "./3.9.1 CA Production Model"
+deployment_model = "./3.9.0 CA Deployment Model.xlsx"
+production_model = "./3.9.1 CA Production Model.xlsx"
+lm_model = "./3.9.6 LM Model.xlsx"
 output_path = "./results"
 
 # Number of sims for metrics sampling (default includes ecological and expert uncertainty
 # in RCI calcs)
 nsims = 10
 
-ceml.evaluate(rme_files_path, nsims, deployment_model, production_model, output_path)
+ceml.evaluate(rme_files_path, nsims, deployment_model, production_model, lm_model, output_path)
 
 # Alternatively, run the analyses in parallel
 nsims = 10
 ncores = 4
 
 if __name__ == "__main__":
-    ceml.parallel_evaluate(
+    ceml.evaluate(
         rme_files_path,
         nsims,
-        ncores,
         deployment_model,
         production_model,
-        output_path
+        lm_model,
+        output_path,
+        nprocs=ncores,
     )
 ```
 
 ### Configuration
 
-Two configuration files can be defined for the cost model sampling component of this
+Two sources of configuration are relevant to the cost model sampling component of this
 repository.
 
-The first configuration defines the names of output sub-directories.
+The first controls the names of output sub-directories.
 
 In the quickstart example, note the call to:
 
 ```python
-ceml.evaluate(rme_files_path, nsims, deployment_model, production_model, output_path)
+ceml.evaluate(rme_files_path, nsims, deployment_model, production_model, lm_model, output_path)
 ```
 
 The last argument, `output_path`, indicates where outputs of the analyses will be written
-to. Three sub-directories will be created inside `output_path`, by default, these are:
+to. Five sub-directories will be created inside `output_path`, by default, these are:
 
-- `cost_outputs`
-- `econ_outputs`
-- `intervention_keys_dir`
+- `Costs`
+- `Indicators/rci`
+- `Indicators/rfi`
+- `Indicators/rti`
+- `intervention_keys`
 
 These can be overridden by creating a `.env` file in the project root and specifying the
-keys.
+corresponding keys.
 
 ```env
-cost_dir="cost_outputs_changed"
-econ_dir="econ_outputs_changed"
-intervention_keys_dir="intervention_keys_changed"
+cost_dir="my_costs"
+rci_dir="my_indicators/rci"
+rfi_dir="my_indicators/rfi"
+rti_dir="my_indicators/rti"
+intervention_keys_dir="my_intervention_keys"
 ```
 
-The second is bundled with the package (for now) and is located at `src/config.csv`.
-It defines the names, types and positions of the cost model parameters in the spreadsheets.
+The second source consists of versioned configuration CSV files bundled with the package
+(e.g., `3.9.1_prod_config.csv`, `3.9.0_deploy_config.csv`, `3.9.6_LM_config.csv`).
+These files define the names, cell positions, sampling bounds, and distributions for all
+cost model parameters. See the full documentation for details.
 
 ## Sampled metrics output files
 
@@ -132,10 +140,11 @@ Note that the implementation of the metrics are specific to ReefMod and ReefMod 
 
 Cost-eco-model-linker generates sampled cost output files for each of the interventions
 modelled in a set of ReefModEngine.jl results. Currently the latest version of the cost
-models that Cost-eco-model-linker is compatiable with are:
+models that Cost-eco-model-linker is compatible with are:
 
 - Coral Aquaculture Deployment: "3.9.0 CA Deployment Model.xlsx"
 - Coral Aquaculture Production: "3.9.1 CA Production Model.xlsx"
+- Larval Maintenance: "3.9.6 LM Model.xlsx"
 
 To get access to these models, contact Nick Dendle at QUT.
 

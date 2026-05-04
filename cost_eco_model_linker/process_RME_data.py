@@ -154,6 +154,26 @@ def rci(metrics_dict: dict, metrics_df: pd.DataFrame, rci_threshold=0.6):
     return np.transpose(rci * np.array(metrics_df["total_area_nine_zones"]), (1, 0))
 
 
+def rci_3(metrics_dict: dict, metrics_df: pd.DataFrame, rci_threshold=0.6):
+    """
+    Processes metrics dict into area at threshold RCI_3 and above.
+
+    Parameters
+    ----------
+    metrics_dict : dict
+        Dict containing key sampled metrics and the RCI_3
+    metrics_df : dataframe
+        Dataframe containing scenario summary dataframe
+    rci_threshold : float
+        RCI threshold (in (0.0, 1.0)) above which to calculate area saved for.
+    """
+    rci_3 = metrics_dict["RCI_3"]
+    rci_3[rci_3 >= rci_threshold] = 1
+    rci_3[rci_3 < rci_threshold] = 0
+
+    return np.transpose(rci_3 * np.array(metrics_df["total_area_nine_zones"]), (1, 0))
+
+
 def coral_area_saved(metrics_dict: dict, metrics_df: pd.DataFrame):
     """
     Processes metrics dict into total area of coral cover in hectares.
@@ -207,6 +227,20 @@ def raw_reefcond(metrics_dict: dict, metrics_df: pd.DataFrame):
         Dataframe containing scenario summary dataframe
     """
     return np.transpose(metrics_dict["RCI"], (1, 0))
+
+
+def raw_reefcond_3(metrics_dict: dict, metrics_df: pd.DataFrame):
+    """
+    Processes metrics dict into raw RCI_3 for table storage.
+
+    Parameters
+    ----------
+    metrics_dict : dict
+        Array containing key sampled metrics and the RCI_3
+    metrics_df : dataframe
+        Dataframe containing scenario summary dataframe
+    """
+    return np.transpose(metrics_dict["RCI_3"], (1, 0))
 
 
 def raw_rti(metrics_dict: dict, metrics_df: pd.DataFrame):
@@ -401,6 +435,95 @@ def create_economics_metric_files(
         # Storage for results
         metric_filepaths = []
         id_key_dfs = []
+        from tqdm import tqdm
+
+        # Process each intervention
+        for iv_idx, iv_id in enumerate(tqdm(intervention_ids, desc="Calculating metrics")):
+            # Filter scenarios for this intervention
+            scens_df_iv = scens_df[scens_df["intervention id"] == iv_id].copy()
+            n_reps = scens_df_iv["rep"].max()
+
+            # Get intervention reefs
+            reefset_names = scens_df_iv["reefset"].unique()
+            iv_reefs = sum([iv_dict[reefset_name] for reefset_name in reefset_names], [])
+
+            # Calculate relative year (0 on first intervention year)
+            intervention_start = scens_df_iv["year"].min()
+            intervention_start_idx = np.where(years == intervention_start)[0][0]
+            data_store = base_data_store.copy()
+            data_store["year_relative"] = data_store["year_absolute"] - intervention_start
+
+            # Get scenario indices for this intervention and its counterfactual
+            scen_id_start = iv_idx * n_reps
+            scen_id_end = scen_id_start + n_reps
+            iv_scens = unique_iv_scens[scen_id_start:scen_id_end]
+            if "counterfactual_mapping" in iv_dict:
+                # Map intervention scenarios to counterfactuals using the provided mapping
+                cf_scens = np.array(iv_dict["counterfactual_mapping"])[iv_scens] - 1
+            else:
+                cf_scens = unique_cf_scens[scen_id_start:scen_id_end]
+
+            # Create intervention key dataframe
+            scen_cols = [
+                "intervention id",
+                "year",
+                "rep",
+                "number of corals",
+                "type",
+                "reefset",
+            ]
+            id_key_df = scens_df_iv[scen_cols].assign(port_name="", distance_to_port_NM=0.0, reef="")
+
+            # Determine distance to nearest port and representative reef per reefset
+            for rs_name in reefset_names:
+                rs_reefs = iv_dict[rs_name]
+                rs_port_name, rs_distance_NM = find_representative_port(
+                    reef_spatial_data, rs_reefs
+                )
+                rs_reef_name = find_representative_reef(reef_spatial_data, rs_reefs)
+                rs_mask = id_key_df["reefset"] == rs_name
+                id_key_df.loc[rs_mask, "port_name"] = rs_port_name
+                id_key_df.loc[rs_mask, "reef"] = rs_reef_name
+                id_key_df.loc[rs_mask, "distance_to_port_NM"] = (
+                    distance_override_NM if distance_override_NM is not None else rs_distance_NM
+                )
+
+            # Process batches
+            batch_files = []
+
+            # Shared template for all simulations
+            data_store.to_parquet(
+                path_join(stores.cost_dir, "sim_template.parq"), index=False
+            )
+
+        # Setup storage for ecological sample IDs
+        store_ecol_ids = np.zeros((nsims, len(intervention_ids)), dtype=int)
+
+        # Generate batch indices
+        if nsims != nbatches:
+            nmembers = int(np.ceil(nsims / nbatches))
+            batch_chunks = list(batched(range(nsims), nmembers))
+        else:
+            batch_chunks = [
+                list(range(nsims)),
+            ]
+
+        # Setup filenames for outputs
+        ecol_uncert = uncertainty_dict["ecol_uncert"]
+        expert_uncert = uncertainty_dict["expert_uncert"]
+        base_met_filename = f"_uncertainty_ecol{ecol_uncert}_indicator{expert_uncert}_var_"
+
+        run_id = os.path.basename(rme_files_path) + "_run"
+        id_filename = path_join(
+            stores.intervention_keys_dir, f"intervention_ID_key_{run_id}"
+        )
+        ecol_id_filename = path_join(
+            stores.intervention_keys_dir, f"intervention_rep_idx_{run_id}"
+        )
+
+        # Storage for results
+        metric_filepaths = []
+        id_key_dfs = []
 
         # Process each intervention
         for iv_idx, iv_id in enumerate(intervention_ids):
@@ -422,7 +545,12 @@ def create_economics_metric_files(
             scen_id_start = iv_idx * n_reps
             scen_id_end = scen_id_start + n_reps
             iv_scens = unique_iv_scens[scen_id_start:scen_id_end]
-            cf_scens = unique_cf_scens[scen_id_start:scen_id_end]
+
+            if "counterfactual_mapping" in iv_dict:
+                # Map intervention scenarios to counterfactuals using the provided mapping
+                cf_scens = np.array(iv_dict["counterfactual_mapping"])[iv_scens] - 1
+            else:
+                cf_scens = unique_cf_scens[scen_id_start:scen_id_end]
 
             # Create intervention key dataframe
             scen_cols = [

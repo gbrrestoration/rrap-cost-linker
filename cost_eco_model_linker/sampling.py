@@ -155,6 +155,8 @@ def calculate_deployment_cost(wb, model_spec, factors, factor_ranges=None):
     #     factors["daytrip"] = 1
 
     # Cap distance to the maximum supported by the spreadsheet lookup table.
+    
+    factors = factors.copy()
     factors["distance_from_port"] = min(factors["distance_from_port"], 119.99)
 
     # If distance exceeds day-trip range, force daytrip=0 regardless of sampled value.

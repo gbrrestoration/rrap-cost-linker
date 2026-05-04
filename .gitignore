@@ -24,3 +24,6 @@ src/config.json
 sandbox/
 
 .vscode/
+
+package-lock.json
+model-backup/

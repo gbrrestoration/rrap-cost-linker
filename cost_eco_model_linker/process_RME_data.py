@@ -495,7 +495,6 @@ def create_economics_metric_files(
             data_store.to_parquet(
                 path_join(stores.cost_dir, "sim_template.parq"), index=False
             )
-        )
 
         # Setup storage for ecological sample IDs
         store_ecol_ids = np.zeros((nsims, len(intervention_ids)), dtype=int)

@@ -1062,6 +1062,17 @@ def _write_eia_outputs(
             / np.where(row_denom == 0, np.nan, row_denom)[:, None]
         )
         shares[numeric_cols] = shares[numeric_cols].fillna(0.0)
+
+        # group by year/iteration and average proportions across
+        # locations before scaling by the global CAPEX total.
+        shares = shares.groupby(["year", "iteration"])[numeric_cols].mean().reset_index()
+        for col in _meta_cols:
+            if col not in shares.columns:
+                # Fill static metadata from the first available row per year/iteration
+                shares[col] = shares.set_index(["year", "iteration"]).index.map(
+                    capex_rows.drop_duplicates(["year", "iteration"]).set_index(["year", "iteration"])[col]
+                )
+
         _total_last(shares).to_csv(
             path_join(cost_dir, f"EIA_proportional_ID{scen_id}_{label}{_pid}.csv"),
             index=False,

@@ -389,7 +389,16 @@ def parallel_evaluate(
         sample_scale=False,
     )
     with mp.Pool(ncores, initializer=_pool_initializer) as pool:
-        result = pool.map(wrapper, range(ncores))
+        res = pool.map_async(wrapper, range(ncores))
+        # Use a polling loop to wait for results. On Windows, a blocking .get()
+        # ignores signals like Ctrl+C. polling allows the main thread to
+        # receive the interrupt.
+        while not res.ready():
+            try:
+                res.wait(timeout=1.0)
+            except Exception:
+                pass
+        result = res.get()
 
     post_process_costs(result, nsims)
 
@@ -441,7 +450,7 @@ def _combine_parallel_outputs(cost_dir, scen_ids, nprocs, nbatches_per_core):
                 index=False,
             )
 
-        # --- EIA: average numeric columns across all workers then write clean names ---
+        # --- EIA: concat all workers then write clean names ---
         for file_type in ["raw", "proportional", "scaled"]:
             for label in ["production", "deployment", "lm"]:
                 worker_fps = [
@@ -455,12 +464,7 @@ def _combine_parallel_outputs(cost_dir, scen_ids, nprocs, nbatches_per_core):
                     continue
 
                 dfs = [pd.read_csv(fp) for fp in present]
-                numeric_cols = [c for c in dfs[0].columns if c not in _meta_cols]
-                avg = sum(df[numeric_cols].fillna(0.0).to_numpy() for df in dfs) / len(
-                    dfs
-                )
-                combined_eia = dfs[0][_meta_cols].copy()
-                combined_eia[numeric_cols] = avg
+                combined_eia = pd.concat(dfs, ignore_index=True).sort_values(_meta_cols)
                 combined_eia.to_csv(
                     os.path.join(cost_dir, f"EIA_{file_type}_ID{scen_id}_{label}.csv"),
                     index=False,

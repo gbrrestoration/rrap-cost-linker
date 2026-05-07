@@ -1521,11 +1521,15 @@ def calculate_costs(
                 )
             else:
                 lm_opex_mult_by_year = {}
+
+            _ov = pd.DataFrame(all_overview_rows)
+            rep_draw_pair = _ov[["rep_id", "draw"]].drop_duplicates().sort_values(["rep_id", "draw"]).reset_index(drop=True)
+            rep_draw_pair["iteration"] = rep_draw_pair.index + 1
             _ov = (
-                pd.DataFrame(all_overview_rows)
-                .rename(columns={"draw": "iteration"})
+                _ov.merge(rep_draw_pair, on=["rep_id", "draw"], how="left")
                 .set_index(["year", "iteration"])
             )
+
             model_totals = {
                 "production": {
                     "capex": _ov["production_capex"],

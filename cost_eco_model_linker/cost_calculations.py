@@ -1101,29 +1101,27 @@ def _write_eia_outputs(
         )
 
 
+
 def _merge_rep_costs(rep_cost_dfs):
-    """Merge per-rep cost dataframes, renumbering draws sequentially across reps.
+    """Merge per-rep cost dataframes with draw/rep paired column names."""
 
-    Parameters
-    ----------
-    rep_cost_dfs : list[(rep, cost_df, overview_rows)]
-
-    Returns
-    -------
-    combined : DataFrame
-    all_overview_rows : list[dict]
-    """
     combined = None
     all_overview_rows = []
+    rep_index = 0  # counts reps, NOT draws
 
     for _, cost_df, overview_rows in rep_cost_dfs:
+        rep_index += 1
         all_overview_rows.extend(overview_rows)
+
         rep_draw_cols = [c for c in cost_df.columns if c.startswith("draw")]
 
         rename_map = {
-            c: f"draw{i + 1}" for i, c in enumerate(rep_draw_cols)
+            c: f"draw{i + 1}_rep{rep_index}"
+            for i, c in enumerate(rep_draw_cols)
         }
+
         renamed = cost_df.rename(columns=rename_map)
+
         if combined is None:
             combined = renamed
         else:
@@ -1134,7 +1132,6 @@ def _merge_rep_costs(rep_cost_dfs):
             )
 
     return combined, all_overview_rows
-
 
 # ---------------------------------------------------------------------------
 # Main entry point

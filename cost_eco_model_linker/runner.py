@@ -321,10 +321,12 @@ def evaluate(
             sample_scale=sample_scale,
             seed=seed,
         )
+        post_process_costs([result_paths], nsims)
         scen_ids = [
             int(re.search(r"ID(\d+)_", os.path.basename(fp)).group(1))
             for fp in result_paths
         ]
+
         _combine_parallel_outputs(
             stores.cost_dir, scen_ids, nprocs=1, nbatches_per_core=nsims
         )

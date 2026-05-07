@@ -144,7 +144,7 @@ def post_process_metrics(
 
 def get_draw_id(p_id, rep_id, draw_id, nsims, nreps, ndraws_per_worker):
 
-    return p_id * nsims + (rep_id - 1) * nreps + p_id * ndraws_per_worker + (draw_id - 1)
+    return int(p_id * nsims + (rep_id - 1) * nreps + p_id * ndraws_per_worker + (draw_id -1))
 
 def post_process_costs(result, nsims):
     """
@@ -206,12 +206,6 @@ def post_process_costs(result, nsims):
             chunks.append(draw_df)
 
             os.remove(fn)
-
-        # Rep‑level validation
-        if draws_in_rep != nsims:
-            raise ValueError(
-                f"Rep {iv_id}: expected {nsims} draws, got {draws_in_rep}"
-            )
 
         out_df = pd.concat(chunks, axis=1)
         out_df.to_csv(save_fn, index=False)

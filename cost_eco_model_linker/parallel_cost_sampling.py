@@ -142,9 +142,9 @@ def post_process_metrics(
         for fn in file_list:
             os.remove(path_join(cost_dir, fn))
 
-def get_draw_id(p_id, rep_id, draw_id, nsims, nreps, ndraws_per_worker):
+def get_draw_id(p_id, rep_id, draw_id, nsims, ndraws_per_worker):
 
-    return int(p_id * nsims + (rep_id - 1) * nreps + p_id * ndraws_per_worker + (draw_id -1))
+    return int((rep_id - 1) * nsims + p_id * ndraws_per_worker + (draw_id))
 
 def post_process_costs(result, nsims):
     """
@@ -157,13 +157,13 @@ def post_process_costs(result, nsims):
     """
 
     n_procs = len(result)
-    n_reps = len(result[0])
+    n_iv = len(result[0])
 
     ndraws_per_worker = math.ceil(nsims / n_procs)
 
     global_draw = 0  # NEVER resets
 
-    for iv_id in range(n_reps):
+    for iv_id in range(n_iv):
 
         # Reference frame
         base_df = pd.read_csv(result[0][iv_id])
@@ -186,14 +186,13 @@ def post_process_costs(result, nsims):
 
             draw_df = df.iloc[:, 2:]
             cols = draw_df.columns
-            nreps = len(cols) / nsims
             extracted = cols.str.extract(r"draw(\d+)_rep(\d+)").astype(int)
 
             # convert to lists
             draws = extracted[0].tolist()
             reps  = extracted[1].tolist()
             draw_names = [f"draw{get_draw_id(
-                proc_id, r, d, nsims, nreps, ndraws_per_worker
+                proc_id, r, d, nsims, ndraws_per_worker
             )}" for (d, r) in zip(draws, reps)]
 
             n_local = draw_df.shape[1]
@@ -208,4 +207,20 @@ def post_process_costs(result, nsims):
             os.remove(fn)
 
         out_df = pd.concat(chunks, axis=1)
+
+        fixed_cols = ["year", "component"]
+
+        draw_cols = (
+            out_df
+            .columns
+            .drop(fixed_cols)
+            .to_series()
+            .str.extract(r"draw(\d+)")
+            .astype(int)[0]
+            .sort_values()
+        )
+
+        ordered_cols = fixed_cols + [f"draw{i}" for i in draw_cols]
+
+        out_df = out_df[ordered_cols]
         out_df.to_csv(save_fn, index=False)

@@ -173,6 +173,11 @@ def evaluate(
     list[str]
         Paths to result files.
     """
+    if nsims % nprocs != 0:
+        raise ValueError(
+            f"nsims ({nsims}) must be exactly divisible by nprocs ({nprocs})"
+        )
+
     # On Windows, multiprocessing's spawn start method re-imports __main__ in
     # each worker during bootstrap. If the user calls evaluate() at the top
     # level of their script without a __name__ == '__main__' guard, this
@@ -321,10 +326,12 @@ def evaluate(
             sample_scale=sample_scale,
             seed=seed,
         )
+        post_process_costs([result_paths], nsims)
         scen_ids = [
             int(re.search(r"ID(\d+)_", os.path.basename(fp)).group(1))
             for fp in result_paths
         ]
+
         _combine_parallel_outputs(
             stores.cost_dir, scen_ids, nprocs=1, nbatches_per_core=nsims
         )

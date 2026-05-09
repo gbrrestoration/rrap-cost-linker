@@ -142,27 +142,85 @@ def post_process_metrics(
         for fn in file_list:
             os.remove(path_join(cost_dir, fn))
 
+def get_draw_id(p_id, rep_id, draw_id, nsims, ndraws_per_worker):
+
+    return int((rep_id - 1) * nsims + p_id * ndraws_per_worker + (draw_id))
 
 def post_process_costs(result, nsims):
     """
-    Save cost samples run in parallel in a single file which is in the correct format for the economics modelling.
+    Combine parallel cost outputs into a single file per rep,
+    with draw numbering global across reps and processes.
 
-    Parameters
-    ----------
-    result : list
-        List of filenames for saved parallel cost data runs.
-    nsims : int
-        Total number of draws to sample cost models, should match ecological metrics sampling.
+    Global ordering:
+        rep0: proc0 → proc1 → ...
+        rep1: proc0 → proc1 → ...
     """
-    for iv_id in range(len(result[0])):
-        init_cost_df = pd.read_csv(result[0][iv_id])
+
+    n_procs = len(result)
+    n_iv = len(result[0])
+
+    ndraws_per_worker = math.ceil(nsims / n_procs)
+
+    global_draw = 0  # NEVER resets
+
+    for iv_id in range(n_iv):
+
+        # Reference frame
+        base_df = pd.read_csv(result[0][iv_id])
         save_fn = result[0][iv_id].split("id")[0][:-6] + ".csv"
 
-        chunks = [init_cost_df[["year", "component"]]]
-        for res in result:
-            cost_temp = pd.read_csv(res[iv_id])
-            chunks.append(cost_temp[cost_temp.columns[2:]])  # column id 2 is where data begins
-            os.remove(res[iv_id])
+        base_cols = base_df[["year", "component"]]
+        chunks = [base_cols]
 
-        cost_df = pd.concat(chunks, axis=1)
-        cost_df.to_csv(save_fn, index=False)
+        draws_in_rep = 0
+
+        for proc_id in range(n_procs):
+            fn = result[proc_id][iv_id]
+            df = pd.read_csv(fn)
+
+            # Enforce identical rows
+            if not df[["year", "component"]].equals(base_cols):
+                raise ValueError(
+                    f"Row mismatch in proc {proc_id}, rep {iv_id}"
+                )
+
+            draw_df = df.iloc[:, 2:]
+            cols = draw_df.columns
+            extracted = cols.str.extract(r"draw(\d+)_rep(\d+)").astype(int)
+
+            # convert to lists
+            draws = extracted[0].tolist()
+            reps  = extracted[1].tolist()
+            draw_names = [f"draw{get_draw_id(
+                proc_id, r, d, nsims, ndraws_per_worker
+            )}" for (d, r) in zip(draws, reps)]
+
+            n_local = draw_df.shape[1]
+
+            draw_df = draw_df.copy()
+            draw_df.columns = draw_names
+
+            global_draw += n_local
+            draws_in_rep += n_local
+            chunks.append(draw_df)
+
+            os.remove(fn)
+
+        out_df = pd.concat(chunks, axis=1)
+
+        fixed_cols = ["year", "component"]
+
+        draw_cols = (
+            out_df
+            .columns
+            .drop(fixed_cols)
+            .to_series()
+            .str.extract(r"draw(\d+)")
+            .astype(int)[0]
+            .sort_values()
+        )
+
+        ordered_cols = fixed_cols + [f"draw{i}" for i in draw_cols]
+
+        out_df = out_df[ordered_cols]
+        out_df.to_csv(save_fn, index=False)

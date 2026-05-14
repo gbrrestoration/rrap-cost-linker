@@ -635,6 +635,12 @@ def create_economics_metric_files(
                 store_ecol_ids[nbatches * core_idx : nbatches * (core_idx + 1), :] + 1,
                 columns=[str(id_val) for id_val in intervention_ids],
             ).to_csv(f"{ecol_id_filename}{core_idx}.csv", index=False)
+
+        # Write a single combined file covering all sims across all cores, for use by CREAM
+        pd.DataFrame(
+            store_ecol_ids + 1,
+            columns=[str(id_val) for id_val in intervention_ids],
+        ).to_csv(f"{ecol_id_filename}_combined.csv", index=False)
     finally:
         results_data.close()
 

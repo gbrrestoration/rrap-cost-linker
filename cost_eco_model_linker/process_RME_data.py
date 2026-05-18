@@ -472,21 +472,31 @@ def create_economics_metric_files(
         for iv_idx, iv_id in enumerate(tqdm(intervention_ids, desc="Calculating metrics")):
             # Filter scenarios for this intervention
             scens_df_iv = scens_df[scens_df["intervention id"] == iv_id].copy()
-            n_reps = scens_df_iv["rep"].max()
+            original_n_reps = scens_df_iv["rep"].max()
+
+            # If ecological uncertainty is enabled, aggregate across reps to provide
+            # expected value intervention levels for the cost model (Plan B)
+            if ecol_uncert == 1:
+                scens_df_iv_costs = aggregate_replicates(scens_df_iv)
+                scens_df_iv_costs["rep"] = 1
+                n_reps = 1
+            else:
+                scens_df_iv_costs = scens_df_iv
+                n_reps = original_n_reps
 
             # Get intervention reefs
-            reefset_names = scens_df_iv["reefset"].unique()
+            reefset_names = scens_df_iv_costs["reefset"].unique()
             iv_reefs = sum([iv_dict[reefset_name] for reefset_name in reefset_names], [])
 
             # Calculate relative year (0 on first intervention year)
-            intervention_start = scens_df_iv["year"].min()
+            intervention_start = scens_df_iv_costs["year"].min()
             intervention_start_idx = np.where(years == intervention_start)[0][0]
             data_store = base_data_store.copy()
             data_store["year_relative"] = data_store["year_absolute"] - intervention_start
 
             # Get scenario indices for this intervention and its counterfactual
-            scen_id_start = iv_idx * n_reps
-            scen_id_end = scen_id_start + n_reps
+            scen_id_start = iv_idx * original_n_reps
+            scen_id_end = scen_id_start + original_n_reps
             iv_scens = unique_iv_scens[scen_id_start:scen_id_end]
             if "counterfactual_mapping" in iv_dict:
                 # Map intervention scenarios to counterfactuals using the provided mapping
@@ -503,7 +513,9 @@ def create_economics_metric_files(
                 "type",
                 "reefset",
             ]
-            id_key_df = scens_df_iv[scen_cols].assign(port_name="", distance_to_port_NM=0.0, reef="")
+            id_key_df = scens_df_iv_costs[scen_cols].assign(
+                port_name="", distance_to_port_NM=0.0, reef=""
+            )
 
             # Determine distance to nearest port and representative reef per reefset
             for rs_name in reefset_names:
@@ -592,14 +604,13 @@ def create_economics_metric_files(
                         len(batch_sel),
                         uncertainty_dict=uncertainty_dict,
                         curr_eco_sim_idx=ecol_ids
-                        - n_reps,  # Use same ecological sample for counterfactual as for intervention, adjusting for scenario index shift
+                        - original_n_reps,  # Use same ecological sample for counterfactual as for intervention, adjusting for scenario index shift
                         indicator_param_dict=indicator_params_dict,  # Use same indicator params for counterfactual as for intervention
                     )
 
                     # Adjust ecological IDs to ignore counterfactuals in cost sampling
-                    max_rep = id_key_df["rep"].max()
-                    ecol_ids[ecol_ids >= max_rep] -= max_rep
-                    store_ecol_ids[batch_sel, iv_idx] = ecol_ids
+                    # We map the global NetCDF scenario index back to a local replicate index (0 to original_n_reps-1)
+                    store_ecol_ids[batch_sel, iv_idx] = ecol_ids % original_n_reps
 
                     # Prepare simulation columns for this batch
                     sim_cols = [f"sim_{b + 1}" for b in batch_sel]
@@ -640,7 +651,7 @@ def create_economics_metric_files(
                 number_of_groups=6,
                 start_year=start_year,
                 end_year=end_year,
-                climate_model=scens_df_iv["GCM name"].values,
+                climate_model=scens_df_iv_costs["GCM name"].values,
             ).rename(
                 columns={
                     "number of corals": "number_of_1YO_corals",

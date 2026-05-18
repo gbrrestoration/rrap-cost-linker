@@ -74,6 +74,34 @@ def load_result_files(rme_files_path: str):
     return results_data, scens_df, iv_dict
 
 
+def aggregate_replicates(scens_df: pd.DataFrame):
+    """
+    Aggregates yearly scenario data across climate replicates (reps).
+
+    This consolidates the scenario dataframe so that there is only one row per
+    unique (intervention, GCM, type, year, reefset) combination, with data
+    columns averaged across all reps.
+
+    Parameters
+    ----------
+    scens_df : pd.DataFrame
+        Dataframe containing yearly scenario parameters (typically loaded from
+        iv_yearly_scenarios.csv).
+
+    Returns
+    -------
+    aggregated_df : pd.DataFrame
+        Dataframe with data columns averaged across reps.
+    """
+    group_cols = ["intervention id", "GCM name", "type", "year", "reefset"]
+    data_cols = ["number of corals", "corals per m2", "intervention area km2"]
+
+    # Ensure columns exist before attempting to aggregate
+    available_data_cols = [col for col in data_cols if col in scens_df.columns]
+
+    return scens_df.groupby(group_cols, as_index=False)[available_data_cols].mean()
+
+
 def create_base_economics_dataframe(
     regions_data: pd.DataFrame, reef_spatial_data: pd.DataFrame, years: list
 ):

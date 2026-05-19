@@ -46,6 +46,7 @@ def default_uncertainty_dict() -> dict:
         "expert_uncert": 1,
         "rti_uncert": 1,
         "rfi_uncert": 1,
+        "coral_only": 0,
     }
 
 
@@ -228,6 +229,11 @@ def indicator_params(
     slope1 = 0.007476  # slope of coral cover to structural complexity equation
     slope2 = 1883.3  # slope of shelter volume to reef fish biomass
 
+    ## RTI_3 LINEAR REGRESSION UNCERTAINTY
+    rti_3_intercept_u = 0
+    if uncertainty_dict["rti_uncert"] != 0:
+        rti_3_intercept_u = np.random.normal(0, 0.163)
+
     return (
         max_coral_juv,
         sheltervolume_parameters,
@@ -238,6 +244,7 @@ def indicator_params(
         rti_juv_slope,
         rti_cots_slope,
         rti_rubble_slope,
+        rti_3_intercept_u,
         intercept1,
         intercept2,
         slope1,
@@ -277,6 +284,14 @@ def load_indicator_data(results_data, scen_ids, nsims, ecol_uncert, curr_eco_sim
         "relative_shelter_volume": _load("relative_shelter_volume"),
     }
 
+    # Load evenness with fallback
+    if "evenness" in results_data.variables:
+        data["coral_evenness"] = _load("evenness")
+    elif "coral_evenness" in results_data.variables:
+        data["coral_evenness"] = _load("coral_evenness")
+    else:
+        data["coral_evenness"] = None
+
     # Load juveniles with fallback
     if "coral_juv_m2" in results_data.variables:
         data["coral_juv_m2"] = _load("coral_juv_m2")
@@ -301,6 +316,9 @@ def load_indicator_data(results_data, scen_ids, nsims, ecol_uncert, curr_eco_sim
         )
 
     # Ensure all have (nsims, nreefs, nyrs) shape
+    if data["coral_evenness"] is None:
+        data["coral_evenness"] = np.ones(data["total_cover"].shape)
+
     for key in data:
         if data[key].shape[0] == 1 and nsims > 1:
             data[key] = np.tile(data[key], (nsims, 1, 1))
@@ -442,7 +460,9 @@ def reef_condition_rme(
     return {
         "total_cover": total_cover,
         "shelter_volume": shelterVolume,
+        "relative_shelter_volume": relative_shelter_volume,
         "coraljuv_relative": coraljuv_relative,
+        "coral_evenness": data["coral_evenness"],
         "COTSrel_complementary": COTSrel_complementary,
         "rubble_complementary": rubble_complementary,
         "RCI": reefcondition,
@@ -473,6 +493,19 @@ def rti_rme(
     all_reeftourism[all_reeftourism < 0.1] = 0.1
 
     return all_reeftourism
+
+
+def rti_3_rme(ecol_indicators, rti_3_intercept_u):
+    # Calculate RTI_3, which is a substitute Reef Tourism Index using only coral-related metrics
+    intcp = 0.47947 + rti_3_intercept_u
+    rti_3 = (
+        intcp
+        + 0.12764 * ecol_indicators["total_cover"]
+        + 0.31946 * ecol_indicators["coral_evenness"]
+        + 0.11676 * ecol_indicators["relative_shelter_volume"]
+        - 0.0036065 * ecol_indicators["coraljuv_relative"]
+    )
+    return np.round(np.clip(rti_3, 0.1, 0.9), 2)
 
 
 def rfi_rme(total_cover, intercept1, slope1, intercept2, slope2):
@@ -583,6 +616,12 @@ def extract_metrics(
             sheltervolume_parameters,
             rci_crit,
             rti_intercept,
+            rti_cov_slope,
+            rti_shelt_slope,
+            rti_juv_slope,
+            rti_cots_slope,
+            rti_rubble_slope,
+            rti_3_intercept_u,
             intercept1,
             intercept2,
             slope1,
@@ -598,6 +637,7 @@ def extract_metrics(
         rti_juv_slope = indicator_param_dict["rti_juv_slope"]
         rti_cots_slope = indicator_param_dict["rti_cots_slope"]
         rti_rubble_slope = indicator_param_dict["rti_rubble_slope"]
+        rti_3_intercept_u = indicator_param_dict["rti_3_intercept_u"]
         intercept1 = indicator_param_dict["intercept1"]
         intercept2 = indicator_param_dict["intercept2"]
         slope1 = indicator_param_dict["slope1"]
@@ -636,6 +676,9 @@ def extract_metrics(
     ecol_indicators["RFI"] = rfi_rme(
         ecol_indicators["total_cover"], intercept1, slope1, intercept2, slope2
     )
+
+    if uncertainty_dict.get("coral_only", 0):
+        ecol_indicators["RTI_3"] = rti_3_rme(ecol_indicators, rti_3_intercept_u)
 
     # save_metrics = np.zeros((nsims, m, len(ecol_indicators)))
     # Extract outputs and convert to long-form format, then save

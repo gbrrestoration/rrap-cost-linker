@@ -243,6 +243,20 @@ def raw_reefcond_3(metrics_dict: dict, metrics_df: pd.DataFrame):
     return np.transpose(metrics_dict["RCI_3"], (1, 0))
 
 
+def raw_rti_3(metrics_dict: dict, metrics_df: pd.DataFrame):
+    """
+    Processes metrics dict into raw RTI_3 for table storage.
+
+    Parameters
+    ----------
+    metrics_dict : dict
+        Array containing key sampled metrics and the RTI_3
+    metrics_df : dataframe
+        Dataframe containing scenario summary dataframe
+    """
+    return np.transpose(metrics_dict["RTI_3"], (1, 0))
+
+
 def raw_rti(metrics_dict: dict, metrics_df: pd.DataFrame):
     """
     Processes metrics dict into raw RTI for table storage.
@@ -520,6 +534,7 @@ def create_economics_metric_files(
                     rti_juv_slope,
                     rti_cots_slope,
                     rti_rubble_slope,
+                    rti_3_intercept_u,
                     intercept1,
                     intercept2,
                     slope1,
@@ -542,6 +557,7 @@ def create_economics_metric_files(
                     "rti_juv_slope": rti_juv_slope,
                     "rti_cots_slope": rti_cots_slope,
                     "rti_rubble_slope": rti_rubble_slope,
+                    "rti_3_intercept_u": rti_3_intercept_u,
                     "intercept1": intercept1,
                     "intercept2": intercept2,
                     "slope1": slope1,

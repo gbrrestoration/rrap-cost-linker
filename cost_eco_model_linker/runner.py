@@ -229,17 +229,19 @@ def evaluate(
     # Set defaults
     if metrics is None:
         if coral_only:
-            print("Using 3-metric RCI and excluding RTI (coral-only mode).")
+            print("Using 3-metric RCI and RTI_3 (coral-only mode).")
 
             # Wrapper to use rci_3 logic but keep 'rci' name for filename mapping
             def rci(metrics_dict, metrics_df):
                 return prd.rci_3(metrics_dict, metrics_df)
 
-            metrics = [rci, prd.rfi]
+            metrics = [rci, prd.raw_rti_3, prd.rfi]
         else:
             metrics = [prd.rci, prd.raw_rti, prd.rfi]
+
     if uncertainty_dict is None:
         uncertainty_dict = default_uncertainty_dict()
+    uncertainty_dict["coral_only"] = 1 if coral_only else 0
 
     if nprocs > 1:
         # Parallel path: split nsims across nprocs workers; each worker gets
@@ -355,11 +357,13 @@ def parallel_evaluate(
     # Set defaults
     if metrics is None:
         if coral_only:
+            print("Using 3-metric RCI and RTI_3 (coral-only mode).")
+
             # Wrapper to use rci_3 logic but keep 'rci' name for filename mapping
             def rci(metrics_dict, metrics_df):
                 return prd.rci_3(metrics_dict, metrics_df)
 
-            metrics = [rci, prd.rfi]
+            metrics = [rci, prd.raw_rti_3, prd.rfi]
         else:
             metrics = [prd.rci, prd.raw_rti, prd.rfi]
 

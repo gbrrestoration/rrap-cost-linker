@@ -47,13 +47,14 @@ def para_sample_econ(
 
     if metrics is None:
         if coral_only:
-            print("Using 3-metric RCI and excluding RTI (coral-only mode).")
-            metrics = [prd.rci_3, prd.rfi]
+            print("Using 3-metric RCI and RTI_3 (coral-only mode).")
+            metrics = [prd.rci_3, prd.raw_rti_3, prd.rfi]
         else:
             metrics = [prd.rci, prd.raw_rti, prd.rfi]
 
     if uncertainty_dict is None:
         uncertainty_dict = prd.default_uncertainty_dict()
+    uncertainty_dict["coral_only"] = 1 if coral_only else 0
 
     # Create metric datafiles for economics modelling and extract filename for intervention key
     # Files are created separately for each core (as a large number of runs can cause memory issues
@@ -106,8 +107,10 @@ def post_process_metrics(
     """
     _metric_dir_map = {
         "rci": stores.rci_dir,
+        "rci_3": stores.rci_dir,
         "rfi": stores.rfi_dir,
         "raw_rti": stores.rti_dir,
+        "raw_rti_3": stores.rti_dir,
     }
 
     cost_dir = stores.cost_dir

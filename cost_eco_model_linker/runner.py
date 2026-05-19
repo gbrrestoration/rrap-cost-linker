@@ -235,7 +235,11 @@ def evaluate(
             def rci(metrics_dict, metrics_df):
                 return prd.rci_3(metrics_dict, metrics_df)
 
-            metrics = [rci, prd.raw_rti_3, prd.rfi]
+            # Wrapper to use rti_3 logic but keep 'raw_rti' name for filename mapping
+            def raw_rti(metrics_dict, metrics_df):
+                return prd.raw_rti_3(metrics_dict, metrics_df)
+
+            metrics = [rci, raw_rti, prd.rfi]
         else:
             metrics = [prd.rci, prd.raw_rti, prd.rfi]
 
@@ -363,7 +367,11 @@ def parallel_evaluate(
             def rci(metrics_dict, metrics_df):
                 return prd.rci_3(metrics_dict, metrics_df)
 
-            metrics = [rci, prd.raw_rti_3, prd.rfi]
+            # Wrapper to use rti_3 logic but keep 'raw_rti' name for filename mapping
+            def raw_rti(metrics_dict, metrics_df):
+                return prd.raw_rti_3(metrics_dict, metrics_df)
+
+            metrics = [rci, raw_rti, prd.rfi]
         else:
             metrics = [prd.rci, prd.raw_rti, prd.rfi]
 

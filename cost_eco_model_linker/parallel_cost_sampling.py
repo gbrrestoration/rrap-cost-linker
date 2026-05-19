@@ -48,7 +48,16 @@ def para_sample_econ(
     if metrics is None:
         if coral_only:
             print("Using 3-metric RCI and RTI_3 (coral-only mode).")
-            metrics = [prd.rci_3, prd.raw_rti_3, prd.rfi]
+
+            # Wrapper to use rci_3 logic but keep 'rci' name for filename mapping
+            def rci(metrics_dict, metrics_df):
+                return prd.rci_3(metrics_dict, metrics_df)
+
+            # Wrapper to use rti_3 logic but keep 'raw_rti' name for filename mapping
+            def raw_rti(metrics_dict, metrics_df):
+                return prd.raw_rti_3(metrics_dict, metrics_df)
+
+            metrics = [rci, raw_rti, prd.rfi]
         else:
             metrics = [prd.rci, prd.raw_rti, prd.rfi]
 

@@ -46,6 +46,7 @@ def default_uncertainty_dict() -> dict:
         "expert_uncert": 1,
         "rti_uncert": 1,
         "rfi_uncert": 1,
+        "coral_only": 0,
     }
 
 
@@ -56,6 +57,7 @@ def indicator_params(
     juv_max_years=None,
     max_coral_juv=None,
     seed: int = None,
+    nsims: int = 1,
 ):
     """
     Calculates key parameters for shelter volume and RCI calculations given uncertainty sampling choices.
@@ -75,6 +77,8 @@ def indicator_params(
             Max juveniles baseline (can be included instead of using hindcasting baseline).
         seed : int, optional
             Random seed for reproducibility.
+        nsims : int, default=1
+            Number of simulations to generate parameters for.
 
     Returns
     -------
@@ -83,7 +87,7 @@ def indicator_params(
         sheltervolume_parameters : np.array
             Parameters for sheltervolume regression models.
         rci_crit : np.array
-            Array of thresholds describing reef condition categories.
+            Array of thresholds describing reef condition categories of size (nsims, 5, 4).
     """
     if seed is not None:
         np.random.seed(seed)
@@ -166,32 +170,27 @@ def indicator_params(
     ):  # If there is no uncertainty from survey, use median results
         G = pd.read_csv(path_join(THIS_DIR, "datasets", "Heneghan_RCI.csv"))
         rci_crit = np.array(G.loc[:, G.columns[[1, 3, 4, 6, 8]]]).T
+        rci_crit = np.tile(rci_crit[np.newaxis, :, :], (nsims, 1, 1))
     else:
         # If there is uncertainty from survey, draw each metric's thresholds randomly from pool of experts
-        G = pd.read_csv(
+        G_df = pd.read_csv(
             path_join(THIS_DIR, "datasets", "ExpertReefCondition_AllResults.csv")
         )
         G = np.array(
-            G.loc[:, G.columns[[2, 3, 5, 6, 7]]]
+            G_df.loc[:, G_df.columns[[2, 3, 5, 6, 7]]]
         )  # Cut off first two columns, convert to array
 
-        num_experts = int(G.shape[0] / 5)  # How many experts
-        experts = random.sample(
-            range(num_experts), 5
-        )  # Random sample of 7 experts, for each of the 5 metrics
-
-        # Populate rci
         G_len = G.shape[0]
+        num_experts = int(G_len / 5)  # 5 conditions per expert
 
-        rci_crit = np.array(
-            [
-                G[experts[0] : G_len : num_experts, 0],
-                G[experts[1] : G_len : num_experts, 1],
-                G[experts[2] : G_len : num_experts, 2],
-                G[experts[3] : G_len : num_experts, 3],
-                G[experts[4] : G_len : num_experts, 4],
-            ]
-        )
+        rci_crit = np.zeros((nsims, 5, 5))
+        for i in range(nsims):
+            experts = random.sample(range(num_experts), 5)
+            rci_crit[i, 0, :] = G[experts[0] : G_len : num_experts, 0]
+            rci_crit[i, 1, :] = G[experts[1] : G_len : num_experts, 1]
+            rci_crit[i, 2, :] = G[experts[2] : G_len : num_experts, 2]
+            rci_crit[i, 3, :] = G[experts[3] : G_len : num_experts, 3]
+            rci_crit[i, 4, :] = G[experts[4] : G_len : num_experts, 4]
 
     ## RTI LINEAR REGRESSION UNCERTAINTY
     rti_intercept = -0.4685314  # Intercept of rci to rti linear equation
@@ -207,26 +206,35 @@ def indicator_params(
 
     if uncertainty_dict["rti_uncert"] != 0:
         rti_intercept += np.random.normal(
-            0, 0.0006761
+            0, 0.0006761, size=nsims
         )  # Intercept of rci to rti linear equation
+    else:
+        rti_intercept = np.full(nsims, rti_intercept)
 
     ## RFI BUILT FROM DIGITISING FIG 4A AND FIG 6B FROM Graham and Nash, 2012 https://doi.org/10.1007/s00338-012-0984-y
 
     ## RFI LINEAR REGRESSION UNCERTAINTY
     if uncertainty_dict["rfi_uncert"] == 0:
-        intercept1 = 1.232  # intercept of coral cover to structural complexity equation
-        intercept2 = -1623.6  # intercept of shelter volume to reef fish biomass
+        intercept1 = np.full(nsims, 1.232)  # intercept of coral cover to structural complexity equation
+        intercept2 = np.full(nsims, -1623.6)  # intercept of shelter volume to reef fish biomass
     else:
         # Sample intercept from 95% prediction interval
         intercept1 = 1.232 + np.random.normal(
-            0, 0.195
+            0, 0.195, size=nsims
         )  # intercept of coral cover to structural complexity equation
         intercept2 = -1623.6 + np.random.normal(
-            0, 533
+            0, 533, size=nsims
         )  # intercept of shelter volume to reef fish biomass
 
     slope1 = 0.007476  # slope of coral cover to structural complexity equation
     slope2 = 1883.3  # slope of shelter volume to reef fish biomass
+
+    ## RTI_3 LINEAR REGRESSION UNCERTAINTY
+    rti_3_intercept_u = 0
+    if uncertainty_dict["rti_uncert"] != 0:
+        rti_3_intercept_u = np.random.normal(0, 0.163, size=nsims)
+    else:
+        rti_3_intercept_u = np.zeros(nsims)
 
     return (
         max_coral_juv,
@@ -238,6 +246,7 @@ def indicator_params(
         rti_juv_slope,
         rti_cots_slope,
         rti_rubble_slope,
+        rti_3_intercept_u,
         intercept1,
         intercept2,
         slope1,
@@ -277,6 +286,14 @@ def load_indicator_data(results_data, scen_ids, nsims, ecol_uncert, curr_eco_sim
         "relative_shelter_volume": _load("relative_shelter_volume"),
     }
 
+    # Load evenness with fallback
+    if "evenness" in results_data.variables:
+        data["coral_evenness"] = _load("evenness")
+    elif "coral_evenness" in results_data.variables:
+        data["coral_evenness"] = _load("coral_evenness")
+    else:
+        data["coral_evenness"] = None
+
     # Load juveniles with fallback
     if "coral_juv_m2" in results_data.variables:
         data["coral_juv_m2"] = _load("coral_juv_m2")
@@ -301,6 +318,9 @@ def load_indicator_data(results_data, scen_ids, nsims, ecol_uncert, curr_eco_sim
         )
 
     # Ensure all have (nsims, nreefs, nyrs) shape
+    if data["coral_evenness"] is None:
+        data["coral_evenness"] = np.ones(data["total_cover"].shape)
+
     for key in data:
         if data[key].shape[0] == 1 and nsims > 1:
             data[key] = np.tile(data[key], (nsims, 1, 1))
@@ -421,11 +441,12 @@ def reef_condition_rme(
 
     # Start loop for crieria vs metric comparisons
     for curr_crit in range(ncrits):
-        rci_mask[:, :, :, 0] = total_cover >= rci_crit[0, curr_crit]
-        rci_mask[:, :, :, 1] = shelterVolume >= rci_crit[1, curr_crit]
-        rci_mask[:, :, :, 2] = coraljuv_relative >= rci_crit[2, curr_crit]
-        rci_mask[:, :, :, 3] = COTSrel_complementary >= rci_crit[3, curr_crit]
-        rci_mask[:, :, :, 4] = rubble_complementary >= rci_crit[4, curr_crit]
+        # rci_crit is (nsims, 5, 4)
+        rci_mask[:, :, :, 0] = total_cover >= rci_crit[:, 0, curr_crit][:, np.newaxis, np.newaxis]
+        rci_mask[:, :, :, 1] = shelterVolume >= rci_crit[:, 1, curr_crit][:, np.newaxis, np.newaxis]
+        rci_mask[:, :, :, 2] = coraljuv_relative >= rci_crit[:, 2, curr_crit][:, np.newaxis, np.newaxis]
+        rci_mask[:, :, :, 3] = COTSrel_complementary >= rci_crit[:, 3, curr_crit][:, np.newaxis, np.newaxis]
+        rci_mask[:, :, :, 4] = rubble_complementary >= rci_crit[:, 4, curr_crit][:, np.newaxis, np.newaxis]
 
         curr_mask = np.sum(rci_mask, axis=3) / n_metrics
         curr_mask[curr_mask < criteria_threshold] = 0
@@ -442,7 +463,9 @@ def reef_condition_rme(
     return {
         "total_cover": total_cover,
         "shelter_volume": shelterVolume,
+        "relative_shelter_volume": relative_shelter_volume,
         "coraljuv_relative": coraljuv_relative,
+        "coral_evenness": data["coral_evenness"],
         "COTSrel_complementary": COTSrel_complementary,
         "rubble_complementary": rubble_complementary,
         "RCI": reefcondition,
@@ -460,8 +483,9 @@ def rti_rme(
 ):
     # Calculate RTI, which is just the RCI made continuous (coefficients calculated previously,
     # by fitting linear regression of discrete RCI to the 6 ecological indicators underpinning it
+    # Intercepts are now (nsims,) arrays
     all_reeftourism = (
-        rti_intercept
+        rti_intercept[:, np.newaxis, np.newaxis]
         + rti_cov_slope * ecol_indicators["total_cover"]
         + rti_shelt_slope * ecol_indicators["shelter_volume"]
         + rti_juv_slope * ecol_indicators["coraljuv_relative"]
@@ -475,9 +499,25 @@ def rti_rme(
     return all_reeftourism
 
 
+def rti_3_rme(ecol_indicators, rti_3_intercept_u):
+    # Calculate RTI_3, which is a substitute Reef Tourism Index using only coral-related metrics
+    intcp = 0.47947 + rti_3_intercept_u
+    rti_3 = (
+        intcp[:, np.newaxis, np.newaxis]
+        + 0.12764 * ecol_indicators["total_cover"]
+        + 0.31946 * ecol_indicators["coral_evenness"]
+        + 0.11676 * ecol_indicators["relative_shelter_volume"]
+        - 0.0036065 * ecol_indicators["coraljuv_relative"]
+    )
+    return np.round(np.clip(rti_3, 0.1, 0.9), 2)
+
+
 def rfi_rme(total_cover, intercept1, slope1, intercept2, slope2):
     # Calculate total fish biomass, kg km2, 0.01 coefficient is to convert from kg ha to kg km2
-    return 0.01 * (intercept2 + slope2 * (intercept1 + slope1 * total_cover * 100))
+    # Intercepts are now (nsims,) arrays
+    complexity = intercept1[:, np.newaxis, np.newaxis] + slope1 * total_cover * 100
+    biomass = intercept2[:, np.newaxis, np.newaxis] + slope2 * complexity
+    return 0.01 * biomass
 
 
 def reef_condition_3_metrics_rme(
@@ -515,9 +555,9 @@ def reef_condition_3_metrics_rme(
     rci_mask = np.zeros((nsims, nreefs, nyrs, n_metrics))
 
     for curr_crit in range(len(crit_val)):
-        rci_mask[:, :, :, 0] = total_cover >= rci_crit[0, curr_crit]
-        rci_mask[:, :, :, 1] = shelterVolume >= rci_crit[1, curr_crit]
-        rci_mask[:, :, :, 2] = coraljuv_relative >= rci_crit[2, curr_crit]
+        rci_mask[:, :, :, 0] = total_cover >= rci_crit[:, 0, curr_crit][:, np.newaxis, np.newaxis]
+        rci_mask[:, :, :, 1] = shelterVolume >= rci_crit[:, 1, curr_crit][:, np.newaxis, np.newaxis]
+        rci_mask[:, :, :, 2] = coraljuv_relative >= rci_crit[:, 2, curr_crit][:, np.newaxis, np.newaxis]
 
         curr_mask = np.sum(rci_mask, axis=3) / n_metrics
         curr_mask = np.where(curr_mask >= criteria_threshold, crit_val[curr_crit], 0)
@@ -583,11 +623,17 @@ def extract_metrics(
             sheltervolume_parameters,
             rci_crit,
             rti_intercept,
+            rti_cov_slope,
+            rti_shelt_slope,
+            rti_juv_slope,
+            rti_cots_slope,
+            rti_rubble_slope,
+            rti_3_intercept_u,
             intercept1,
             intercept2,
             slope1,
             slope2,
-        ) = indicator_params(results_data, scen_ids, uncertainty_dict=uncertainty_dict)
+        ) = indicator_params(results_data, scen_ids, uncertainty_dict=uncertainty_dict, nsims=nsims)
     else:
         maxcoraljuv = indicator_param_dict["maxcoraljuv"]
         sheltervolume_parameters = indicator_param_dict["sheltervolume_parameters"]
@@ -598,6 +644,7 @@ def extract_metrics(
         rti_juv_slope = indicator_param_dict["rti_juv_slope"]
         rti_cots_slope = indicator_param_dict["rti_cots_slope"]
         rti_rubble_slope = indicator_param_dict["rti_rubble_slope"]
+        rti_3_intercept_u = indicator_param_dict["rti_3_intercept_u"]
         intercept1 = indicator_param_dict["intercept1"]
         intercept2 = indicator_param_dict["intercept2"]
         slope1 = indicator_param_dict["slope1"]
@@ -636,6 +683,9 @@ def extract_metrics(
     ecol_indicators["RFI"] = rfi_rme(
         ecol_indicators["total_cover"], intercept1, slope1, intercept2, slope2
     )
+
+    if uncertainty_dict.get("coral_only", 0):
+        ecol_indicators["RTI_3"] = rti_3_rme(ecol_indicators, rti_3_intercept_u)
 
     # save_metrics = np.zeros((nsims, m, len(ecol_indicators)))
     # Extract outputs and convert to long-form format, then save

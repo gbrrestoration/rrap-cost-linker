@@ -74,6 +74,34 @@ def load_result_files(rme_files_path: str):
     return results_data, scens_df, iv_dict
 
 
+def aggregate_replicates(scens_df: pd.DataFrame):
+    """
+    Aggregates yearly scenario data across climate replicates (reps).
+
+    This consolidates the scenario dataframe so that there is only one row per
+    unique (intervention, GCM, type, year, reefset) combination, with data
+    columns averaged across all reps.
+
+    Parameters
+    ----------
+    scens_df : pd.DataFrame
+        Dataframe containing yearly scenario parameters (typically loaded from
+        iv_yearly_scenarios.csv).
+
+    Returns
+    -------
+    aggregated_df : pd.DataFrame
+        Dataframe with data columns averaged across reps.
+    """
+    group_cols = ["intervention id", "GCM name", "type", "year", "reefset"]
+    data_cols = ["number of corals", "corals per m2", "intervention area km2"]
+
+    # Ensure columns exist before attempting to aggregate
+    available_data_cols = [col for col in data_cols if col in scens_df.columns]
+
+    return scens_df.groupby(group_cols, as_index=False)[available_data_cols].mean()
+
+
 def create_base_economics_dataframe(
     regions_data: pd.DataFrame, reef_spatial_data: pd.DataFrame, years: list
 ):
@@ -243,6 +271,20 @@ def raw_reefcond_3(metrics_dict: dict, metrics_df: pd.DataFrame):
     return np.transpose(metrics_dict["RCI_3"], (1, 0))
 
 
+def raw_rti_3(metrics_dict: dict, metrics_df: pd.DataFrame):
+    """
+    Processes metrics dict into raw RTI_3 for table storage.
+
+    Parameters
+    ----------
+    metrics_dict : dict
+        Array containing key sampled metrics and the RTI_3
+    metrics_df : dataframe
+        Dataframe containing scenario summary dataframe
+    """
+    return np.transpose(metrics_dict["RTI_3"], (1, 0))
+
+
 def raw_rti(metrics_dict: dict, metrics_df: pd.DataFrame):
     """
     Processes metrics dict into raw RTI for table storage.
@@ -405,6 +447,21 @@ def create_economics_metric_files(
         unique_iv_scens = np.where(~is_counterfactual)[0]
         unique_cf_scens = np.where(is_counterfactual)[0]
 
+        # Determine which juvenile variable to use
+        if "coral_juv_m2" in results_data.variables:
+            juv_var = "coral_juv_m2"
+        elif "relative_juveniles" in results_data.variables:
+            juv_var = "relative_juveniles"
+        else:
+            raise ValueError(
+                "Neither 'coral_juv_m2' nor 'relative_juveniles' found in results."
+            )
+
+        # Calculate a global juvenile baseline using all scenarios over the first few years.
+        # This ensures that all management scenarios use the exact same denominator for scaling.
+        # We use Year 0 to Year 10 as a safe baseline window.
+        global_max_coral_juv = np.max(results_data[juv_var][:, :, 0:10])
+
         # Create base dataframe structure (without sim columns yet)
         base_data_store, regions_data = create_base_economics_dataframe(
             regions_data, reef_spatial_data, years
@@ -444,21 +501,31 @@ def create_economics_metric_files(
         for iv_idx, iv_id in enumerate(tqdm(intervention_ids, desc="Calculating metrics")):
             # Filter scenarios for this intervention
             scens_df_iv = scens_df[scens_df["intervention id"] == iv_id].copy()
-            n_reps = scens_df_iv["rep"].max()
+            original_n_reps = scens_df_iv["rep"].max()
+
+            # If ecological uncertainty is disabled, aggregate across reps to provide
+            # expected value intervention levels for the cost model (Plan B)
+            if ecol_uncert == 0:
+                scens_df_iv_costs = aggregate_replicates(scens_df_iv)
+                scens_df_iv_costs["rep"] = 1
+                n_reps = 1
+            else:
+                scens_df_iv_costs = scens_df_iv
+                n_reps = original_n_reps
 
             # Get intervention reefs
-            reefset_names = scens_df_iv["reefset"].unique()
+            reefset_names = scens_df_iv_costs["reefset"].unique()
             iv_reefs = sum([iv_dict[reefset_name] for reefset_name in reefset_names], [])
 
             # Calculate relative year (0 on first intervention year)
-            intervention_start = scens_df_iv["year"].min()
+            intervention_start = scens_df_iv_costs["year"].min()
             intervention_start_idx = np.where(years == intervention_start)[0][0]
             data_store = base_data_store.copy()
             data_store["year_relative"] = data_store["year_absolute"] - intervention_start
 
             # Get scenario indices for this intervention and its counterfactual
-            scen_id_start = iv_idx * n_reps
-            scen_id_end = scen_id_start + n_reps
+            scen_id_start = iv_idx * original_n_reps
+            scen_id_end = scen_id_start + original_n_reps
             iv_scens = unique_iv_scens[scen_id_start:scen_id_end]
             if "counterfactual_mapping" in iv_dict:
                 # Map intervention scenarios to counterfactuals using the provided mapping
@@ -475,7 +542,9 @@ def create_economics_metric_files(
                 "type",
                 "reefset",
             ]
-            id_key_df = scens_df_iv[scen_cols].assign(port_name="", distance_to_port_NM=0.0, reef="")
+            id_key_df = scens_df_iv_costs[scen_cols].assign(
+                port_name="", distance_to_port_NM=0.0, reef=""
+            )
 
             # Determine distance to nearest port and representative reef per reefset
             for rs_name in reefset_names:
@@ -502,16 +571,14 @@ def create_economics_metric_files(
             for batch_idx, batch_sel in enumerate(batch_chunks):
                 ds = pd.DataFrame()
 
-                # Derive unique seed per batch and intervention for reproducibility.
-                _batch_seed = (
-                    seed + iv_idx * len(batch_chunks) + batch_idx
-                    if seed is not None
-                    else None
-                )
+                # Derive unique seed per batch for reproducibility, synchronized across interventions.
+                # Use a default seed if none is provided to ensure synchronization across IDs.
+                _seed = seed if seed is not None else 42
+                _batch_seed = _seed + batch_idx
 
                 # Extract metrics for intervention and counterfactual
                 (
-                    maxcoraljuv,
+                    max_coral_juv,
                     sheltervolume_parameters,
                     rci_crit,
                     rti_intercept,
@@ -520,6 +587,7 @@ def create_economics_metric_files(
                     rti_juv_slope,
                     rti_cots_slope,
                     rti_rubble_slope,
+                    rti_3_intercept_u,
                     intercept1,
                     intercept2,
                     slope1,
@@ -528,12 +596,13 @@ def create_economics_metric_files(
                     results_data,
                     iv_scens,
                     uncertainty_dict=uncertainty_dict,
-                    juv_max_years=[0, int(intervention_start_idx - 1)],
+                    max_coral_juv=global_max_coral_juv,
                     seed=_batch_seed,
+                    nsims=len(batch_sel),
                 )
 
                 indicator_params_dict = {
-                    "maxcoraljuv": maxcoraljuv,
+                    "maxcoraljuv": max_coral_juv,
                     "sheltervolume_parameters": sheltervolume_parameters,
                     "rci_crit": rci_crit,
                     "rti_intercept": rti_intercept,
@@ -542,6 +611,7 @@ def create_economics_metric_files(
                     "rti_juv_slope": rti_juv_slope,
                     "rti_cots_slope": rti_cots_slope,
                     "rti_rubble_slope": rti_rubble_slope,
+                    "rti_3_intercept_u": rti_3_intercept_u,
                     "intercept1": intercept1,
                     "intercept2": intercept2,
                     "slope1": slope1,
@@ -564,14 +634,13 @@ def create_economics_metric_files(
                         len(batch_sel),
                         uncertainty_dict=uncertainty_dict,
                         curr_eco_sim_idx=ecol_ids
-                        - n_reps,  # Use same ecological sample for counterfactual as for intervention, adjusting for scenario index shift
+                        - original_n_reps,  # Use same ecological sample for counterfactual as for intervention, adjusting for scenario index shift
                         indicator_param_dict=indicator_params_dict,  # Use same indicator params for counterfactual as for intervention
                     )
 
                     # Adjust ecological IDs to ignore counterfactuals in cost sampling
-                    max_rep = id_key_df["rep"].max()
-                    ecol_ids[ecol_ids >= max_rep] -= max_rep
-                    store_ecol_ids[batch_sel, iv_idx] = ecol_ids
+                    # We map the global NetCDF scenario index back to a local replicate index (0 to original_n_reps-1)
+                    store_ecol_ids[batch_sel, iv_idx] = ecol_ids % original_n_reps
 
                     # Prepare simulation columns for this batch
                     sim_cols = [f"sim_{b + 1}" for b in batch_sel]
@@ -612,7 +681,7 @@ def create_economics_metric_files(
                 number_of_groups=6,
                 start_year=start_year,
                 end_year=end_year,
-                climate_model=scens_df_iv["GCM name"].values,
+                climate_model=scens_df_iv_costs["GCM name"].values,
             ).rename(
                 columns={
                     "number of corals": "number_of_1YO_corals",
@@ -635,6 +704,12 @@ def create_economics_metric_files(
                 store_ecol_ids[nbatches * core_idx : nbatches * (core_idx + 1), :] + 1,
                 columns=[str(id_val) for id_val in intervention_ids],
             ).to_csv(f"{ecol_id_filename}{core_idx}.csv", index=False)
+
+        # Write a single combined file covering all sims across all cores, for use by CREAM
+        pd.DataFrame(
+            store_ecol_ids + 1,
+            columns=[str(id_val) for id_val in intervention_ids],
+        ).to_csv(f"{ecol_id_filename}_combined.csv", index=False)
     finally:
         results_data.close()
 

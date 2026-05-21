@@ -307,34 +307,25 @@ def sample_cost_model(nsims, seed: int = None):
             specs_lm.is_cat,
         )
     else:
-        # Sample production model factors
-        nfactors = np.min([specs_dep.shape[0], specs_prod.shape[0]]) - 2
-        N, K = get_NK(nsims, nfactors, calc_second_order=False)
-        sp_prod.sample_sobol(N, calc_second_order=False, skip_values=N, seed=seed)
+        # Sample production model factors using Latin Hypercube Sampling
+        # This provides exactly `nsims` unique, space-filling samples without the 
+        # identical-row artifacts caused by truncating Saltelli/Sobol matrices.
+        sp_prod.sample_latin(nsims, seed=seed)
         factors_df_prod = pd.DataFrame(
             data=sp_prod.samples, columns=specs_prod.factor_names
         )
 
         # Sample deployment model factors
-        nfactors = np.min([specs_dep.shape[0], specs_prod.shape[0]]) - 2
-        N, K = get_NK(nsims, nfactors, calc_second_order=False)
-        sp_dep.sample_sobol(N, calc_second_order=False, skip_values=N, seed=seed)
+        sp_dep.sample_latin(nsims, seed=seed)
         factors_df_dep = pd.DataFrame(
             data=sp_dep.samples, columns=specs_dep.factor_names
         )
 
         # Sample LM model factors
-        N, K = get_NK(nsims, specs_lm.shape[0], calc_second_order=False)
-        sp_lm.sample_sobol(N, calc_second_order=False, skip_values=N, seed=seed)
-        factors_df_lm = pd.DataFrame(data=sp_lm.samples, columns=specs_lm.factor_names)
-
-        # Subset to just the number of sims as the scenarios beyond `nsims` do not get used
-        # Yes, this means the Sobol' sampling is not necessary.
-        # Based on conversation with R. Crocker, this was simply to get something working
-        # reusing existing code.
-        factors_df_prod = factors_df_prod.iloc[0:nsims, :]
-        factors_df_dep = factors_df_dep.iloc[0:nsims, :]
-        factors_df_lm = factors_df_lm.iloc[0:nsims, :]
+        sp_lm.sample_latin(nsims, seed=seed)
+        factors_df_lm = pd.DataFrame(
+            data=sp_lm.samples, columns=specs_lm.factor_names
+        )
 
         # Convert factor types to suitable format for cost model sampling
         factors_df_dep = convert_factor_types(factors_df_dep, specs_dep.is_cat)
@@ -1188,10 +1179,10 @@ def calculate_costs(
     seed : int, optional
         Random seed for reproducibility.
     """
-    if seed is not None:
-        worker_seed = seed + p_iter_id
-    else:
-        worker_seed = None
+    # Derive unique seed per worker for reproducibility.
+    # Use a default base seed if none is provided.
+    base_seed = seed if seed is not None else 42
+    worker_seed = base_seed + p_iter_id
 
     if active_models is None:
         active_models = {"outplant", "lm"}

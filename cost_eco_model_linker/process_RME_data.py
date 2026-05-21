@@ -447,6 +447,21 @@ def create_economics_metric_files(
         unique_iv_scens = np.where(~is_counterfactual)[0]
         unique_cf_scens = np.where(is_counterfactual)[0]
 
+        # Determine which juvenile variable to use
+        if "coral_juv_m2" in results_data.variables:
+            juv_var = "coral_juv_m2"
+        elif "relative_juveniles" in results_data.variables:
+            juv_var = "relative_juveniles"
+        else:
+            raise ValueError(
+                "Neither 'coral_juv_m2' nor 'relative_juveniles' found in results."
+            )
+
+        # Calculate a global juvenile baseline using all scenarios over the first few years.
+        # This ensures that all management scenarios use the exact same denominator for scaling.
+        # We use Year 0 to Year 10 as a safe baseline window.
+        global_max_coral_juv = np.max(results_data[juv_var][:, :, 0:10])
+
         # Create base dataframe structure (without sim columns yet)
         base_data_store, regions_data = create_base_economics_dataframe(
             regions_data, reef_spatial_data, years
@@ -488,9 +503,9 @@ def create_economics_metric_files(
             scens_df_iv = scens_df[scens_df["intervention id"] == iv_id].copy()
             original_n_reps = scens_df_iv["rep"].max()
 
-            # If ecological uncertainty is enabled, aggregate across reps to provide
+            # If ecological uncertainty is disabled, aggregate across reps to provide
             # expected value intervention levels for the cost model (Plan B)
-            if ecol_uncert == 1:
+            if ecol_uncert == 0:
                 scens_df_iv_costs = aggregate_replicates(scens_df_iv)
                 scens_df_iv_costs["rep"] = 1
                 n_reps = 1
@@ -556,16 +571,14 @@ def create_economics_metric_files(
             for batch_idx, batch_sel in enumerate(batch_chunks):
                 ds = pd.DataFrame()
 
-                # Derive unique seed per batch and intervention for reproducibility.
-                _batch_seed = (
-                    seed + iv_idx * len(batch_chunks) + batch_idx
-                    if seed is not None
-                    else None
-                )
+                # Derive unique seed per batch for reproducibility, synchronized across interventions.
+                # Use a default seed if none is provided to ensure synchronization across IDs.
+                _seed = seed if seed is not None else 42
+                _batch_seed = _seed + batch_idx
 
                 # Extract metrics for intervention and counterfactual
                 (
-                    maxcoraljuv,
+                    max_coral_juv,
                     sheltervolume_parameters,
                     rci_crit,
                     rti_intercept,
@@ -583,12 +596,13 @@ def create_economics_metric_files(
                     results_data,
                     iv_scens,
                     uncertainty_dict=uncertainty_dict,
-                    juv_max_years=[0, int(intervention_start_idx - 1)],
+                    max_coral_juv=global_max_coral_juv,
                     seed=_batch_seed,
+                    nsims=len(batch_sel),
                 )
 
                 indicator_params_dict = {
-                    "maxcoraljuv": maxcoraljuv,
+                    "maxcoraljuv": max_coral_juv,
                     "sheltervolume_parameters": sheltervolume_parameters,
                     "rci_crit": rci_crit,
                     "rti_intercept": rti_intercept,

@@ -1,7 +1,7 @@
 [project]
 name = "rrap-cost-linker"
 version = "0.1.0"
-description = "Add your description here"
+description = "Provides cost estimates for simulated coral intervention deployments, linking ecosystem modelling with cost modelling"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [

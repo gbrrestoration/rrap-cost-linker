@@ -53,7 +53,7 @@ $ uv sync
 ## Quick start
 
 ```python
-import rrap_cl as ceml
+import rrap_cl as cl
 
 # Filepath to RME runs to process
 rme_files_path = "./path_to_RME_outputs"
@@ -66,14 +66,14 @@ output_path = "./results"
 # in RCI calcs)
 nsims = 10
 
-ceml.evaluate(rme_files_path, nsims, deployment_model, production_model, lm_model, output_path)
+cl.evaluate(rme_files_path, nsims, deployment_model, production_model, lm_model, output_path)
 
 # Alternatively, run the analyses in parallel
 nsims = 10
 ncores = 4
 
 if __name__ == "__main__":
-    ceml.evaluate(
+    cl.evaluate(
         rme_files_path,
         nsims,
         deployment_model,
@@ -94,7 +94,7 @@ The first controls the names of output sub-directories.
 In the quickstart example, note the call to:
 
 ```python
-ceml.evaluate(rme_files_path, nsims, deployment_model, production_model, lm_model, output_path)
+cl.evaluate(rme_files_path, nsims, deployment_model, production_model, lm_model, output_path)
 ```
 
 The last argument, `output_path`, indicates where outputs of the analyses will be written

@@ -164,9 +164,9 @@ The multiplier is computed by `cost_calculations.lm_opex_distance_multiplier()`.
 
 The LM model can be used through the following public functions:
 
-- `ceml.evaluate_lm_cost(workbook_path, scenarios_df, **factors)` evaluates the LM model
+- `cl.evaluate_lm_cost(workbook_path, scenarios_df, **factors)` evaluates the LM model
   over a year-by-year coral scenario DataFrame and applies the inventory model.
-- `ceml.run_lm_model(cost_model, nsims)` generates Sobol samples for the LM model and
+- `cl.run_lm_model(cost_model, nsims)` generates Sobol samples for the LM model and
   returns an SALib ProblemSpec with `cost_model_results` populated.
-- `ceml.sweep_lm(lm_model, sweep_param, search_range, lm_params)` evaluates the LM model
+- `cl.sweep_lm(lm_model, sweep_param, search_range, lm_params)` evaluates the LM model
   over a range of values for a single parameter.

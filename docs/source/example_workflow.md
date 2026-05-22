@@ -1,7 +1,7 @@
 # Example workflow
 
 ```python
-import cost_eco_model_linker as ceml
+import rrap_cl as ceml
 
 # Filepath to RME runs to process
 rme_files_path = "./data/eco_linker_example"
@@ -50,7 +50,7 @@ if __name__ == "__main__":
 ## Sensitivity analysis
 
 ```python
-import cost_eco_model_linker as ceml
+import rrap_cl as ceml
 
 prod_cost_model = "./models/3.9.1 CA Production Model.xlsx"
 deploy_cost_model = "./models/3.9.0 CA Deployment Model.xlsx"
@@ -87,7 +87,7 @@ for any factor you want to override; all other factors default to the values cur
 in the spreadsheet. Both return `(capex, opex)`.
 
 ```python
-import cost_eco_model_linker as ceml
+import rrap_cl as ceml
 
 production_model = "./models/3.9.1 CA Production Model.xlsx"
 deployment_model = "./models/3.9.0 CA Deployment Model.xlsx"
@@ -106,7 +106,7 @@ Columns not present default to the values in the spreadsheet.
 
 ```python
 import pandas as pd
-import cost_eco_model_linker as ceml
+import rrap_cl as ceml
 
 production_model = "./models/3.9.1 CA Production Model.xlsx"
 
@@ -140,7 +140,7 @@ models automatically.
 
 ```python
 import numpy as np
-import cost_eco_model_linker as ceml
+import rrap_cl as ceml
 
 production_model = "./models/3.9.1 CA Production Model.xlsx"
 deployment_model = "./models/3.9.0 CA Deployment Model.xlsx"
@@ -329,7 +329,7 @@ specified assessment year. This is useful for comparing the relative cost contri
 each intervention type.
 
 ```python
-import cost_eco_model_linker as ceml
+import rrap_cl as ceml
 
 rme_template_path = "./data/rme_template"
 deployment_model = "./models/3.9.0 CA Deployment Model.xlsx"
@@ -375,7 +375,7 @@ arise from sampling each model independently.
 returns per-model result DataFrames.
 
 ```python
-import cost_eco_model_linker as ceml
+import rrap_cl as ceml
 
 production_model = "./models/3.9.1 CA Production Model.xlsx"
 deployment_model = "./models/3.9.0 CA Deployment Model.xlsx"

@@ -1,4 +1,4 @@
-import cost_eco_model_linker as ceml
+import rrap_cl as ceml
 
 # Filepath to RME runs to process
 rme_files_path = "C:/users/dtan/data/exported_rme_results"

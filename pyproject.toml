@@ -1,5 +1,5 @@
 [project]
-name = "cost_eco_model_linker"
+name = "rrap-cost-linker"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
@@ -39,14 +39,14 @@ lint = [
 ]
 
 [tool.setuptools]
-packages = ["cost_eco_model_linker"]
+packages = ["rrap_cl"]
 
 [project.scripts]
 # Build the HTML documentation
-docs-build = "cost_eco_model_linker.docs:build"
+docs-build = "rrap_cl.docs:build"
 
 # Clean the build directory and then build
-docs-clean = "cost_eco_model_linker.docs:clean"
+docs-clean = "rrap_cl.docs:clean"
 
 # Build and open the docs in your browser (requires sphinx-autobuild)
-docs-dev = "cost_eco_model_linker.docs:dev"
+docs-dev = "rrap_cl.docs:dev"

@@ -30,6 +30,11 @@ parameters and settings that must be harmonised in any intervention scenario. It
 considered a live document given the evolving nature of all models and needs to be updated
 on a regular basis.
 
+In addition to the notes detailed here, the details of the implementation approach to
+structurally link the ecological model outcomes to the cost and economic assessments are
+outlined in [MDS_documentation_ModelIntegration_V2_USED.pdf](MDS documentation_ModelIntegration_V2_USED.pdf)
+
+
 ```{toctree}
 :maxdepth: 1
 :caption: Project Context

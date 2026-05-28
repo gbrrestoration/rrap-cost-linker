@@ -32,7 +32,7 @@ on a regular basis.
 
 In addition to the notes detailed here, the details of the implementation approach to
 structurally link the ecological model outcomes to the cost and economic assessments are
-outlined in {download}`MDS documentation_ModelIntegration_V2_USED.pdf <MDS documentation_ModelIntegration_V2_USED.pdf>`
+outlined in a supplementary document.
 
 
 ```{toctree}
